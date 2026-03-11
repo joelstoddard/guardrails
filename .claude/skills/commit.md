@@ -24,11 +24,34 @@ When the user asks to commit, requests a commit, or says "/commit".
 - If no automated tests exist, verify the change manually (e.g., `zsh -n` for shell scripts, config syntax checks).
 
 ### Commit Message Format
-Use conventional commits: `type(scope): message`
 
-**Types:** feat, fix, refactor, chore, docs, style, test, build, ci, perf
+Follow the [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) specification.
 
-**Message content:**
+**Structure:**
+```
+<type>[optional scope][optional !]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Types:** `feat`, `fix`, `refactor`, `chore`, `docs`, `style`, `test`, `build`, `ci`, `perf`
+
+**SemVer mapping:**
+- `fix` → PATCH release
+- `feat` → MINOR release
+- `BREAKING CHANGE` (any type) → MAJOR release
+
+**Breaking changes** — indicate with either or both:
+- `!` before the colon: `feat(api)!: remove deprecated endpoint`
+- `BREAKING CHANGE:` footer: `BREAKING CHANGE: /v1/users has been removed`
+
+**Body** — free-form, separated from description by a blank line. Use for additional context, motivation, or migration instructions.
+
+**Footers** — one or more `token: value` or `token #value` lines after a blank line (e.g., `Reviewed-by: Name`, `Refs #123`). Multi-word tokens use hyphens (e.g., `Acked-by`).
+
+**Message guidelines (opinionated):**
 - Describe the **why** (motivation/intention), not the **what** (the diff already shows that).
 - Bad: `fix(.zshrc): change -z to -f for brew check`
 - Good: `fix(.zshrc): ensure Homebrew is detected on macOS`
