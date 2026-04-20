@@ -1,7 +1,6 @@
 ---
 name: commit
 description: Create atomic conventional commits. Follow this skill whenever committing code — main agents show a proposed commit for user approval, sub-agents commit as they go and surface a summary in their return value.
-disable-model-invocation: true
 allowed-tools: Bash(git *)
 ---
 
