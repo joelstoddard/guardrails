@@ -38,7 +38,18 @@ Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0
 - Bad: `fix(auth, session): ...`
 - Good: split into `fix(auth): ...` and `fix(session): ...`
 
-**Breaking changes:** use `!` before colon and/or `BREAKING CHANGE:` footer.
+**SemVer mapping:**
+- `fix` → PATCH release
+- `feat` → MINOR release
+- `BREAKING CHANGE` (any type) → MAJOR release
+
+**Breaking changes** — indicate with either or both:
+- `!` before the colon: `feat(api)!: remove deprecated endpoint`
+- `BREAKING CHANGE:` footer: `BREAKING CHANGE: /v1/users has been removed`
+
+**Body** — free-form, separated from description by a blank line. Use for additional context, motivation, or migration instructions.
+
+**Footers** — one or more `token: value` or `token #value` lines after a blank line (e.g., `Reviewed-by: Name`, `Refs #123`). Multi-word tokens use hyphens (e.g., `Acked-by`).
 
 **Message guidelines:**
 - Describe the *why*, not the *what* — the diff shows what changed
