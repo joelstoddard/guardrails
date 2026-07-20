@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Block `git commit` while HEAD is the repo's default branch. Fail-open.
 command -v jq >/dev/null 2>&1 || exit 0
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SELF_DIR/../../lib/git-cmd.sh"
 input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 
-case "$cmd" in *"git commit"*) ;; *) exit 0 ;; esac
+_guardrails_invokes_git "$cmd" commit || exit 0
 [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
 
 repo="$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null)" || exit 0

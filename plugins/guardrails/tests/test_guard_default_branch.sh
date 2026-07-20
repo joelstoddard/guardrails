@@ -26,4 +26,14 @@ run_hook "$S" "$(json "$r" "git commit -m x")"
 assert_rc 0 "escape hatch allows"
 unset ALLOW_DEFAULT_COMMIT
 
+# Regression: "git commit" appearing inside an argument must NOT block on the default branch
+r3="$(make_repo main)"
+run_hook "$S" "$(json "$r3" "gh pr create --base main --body 'body mentions git commit here'")"
+assert_rc 0 "git commit inside an argument not blocked"
+
+# Regression: a chained real commit on the default branch IS still blocked
+r4="$(make_repo main)"
+run_hook "$S" "$(json "$r4" "git add -A && git commit -m x")"
+assert_rc 2 "chained commit on default branch blocked"
+
 finish "guard-default-branch"
