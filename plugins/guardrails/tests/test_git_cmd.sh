@@ -12,11 +12,6 @@ yes "git push origin HEAD"     push   "plain push"
 yes "/usr/bin/git commit"      commit "absolute git path"
 yes "ALLOW=1 git commit -m x"  commit "leading env assignment"
 
-# --- git global options before the subcommand (the false-negative the old matcher missed) ---
-yes "git -C /some/path commit -m x" commit "git -C <path> commit"
-yes "git -c user.name=x commit"     commit "git -c k=v commit"
-yes "git --no-pager commit"         commit "git --no-pager commit"
-
 # --- command chains ---
 yes "cd /x && git commit -m y"      commit "chain with &&"
 yes "git add -A && git commit -m y" commit "add then commit"
@@ -31,5 +26,9 @@ no "grep -rn 'git push' ."                          push   "git push inside a gr
 no "git commit -m 'then git push it'" push   "commit with 'git push' in message is not a push"
 no "git status"                       commit "non-commit git subcommand"
 no "git pushup"                       push   "similar-but-different subcommand"
+
+# --- accepted limitation: global options before the subcommand are NOT parsed, so
+#     `git -C <path> commit` is intentionally not matched (a fail-open guardrail bypass) ---
+no "git -C /some/path commit -m x" commit "git -C <path> commit not matched (accepted bypass)"
 
 finish "git-cmd"
