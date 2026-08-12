@@ -10,6 +10,13 @@ cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 _guardrails_invokes_git "$cmd" commit || exit 0
 [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
 
+# Judge the repo git will actually act on, not the one the shell happens to sit in.
+# Working one-worktree-per-ticket, the shell sits in the primary checkout (usually on the
+# default branch) while the commit is aimed elsewhere — via `cd <worktree> &&` or `-C`.
+# Resolving from .cwd alone reads the primary checkout's branch and refuses a commit that
+# was never going to land there.
+cwd="$(_guardrails_git_effective_cwd "$cmd" commit "${cwd:-.}")"
+
 repo="$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null)" || exit 0
 cur="$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null)" || exit 0
 
