@@ -96,6 +96,22 @@ blocks 'ALLOW_PUBLISH_AS_ME=1 gh pr comment 1 --body x' "inline hatch, gh"
 blocks 'ALLOW_PUBLISH_AS_ME=1 npm publish'              "inline hatch, npm"
 
 # ---------------------------------------------------------------------------
+# Shell operators inside quotes are data. Splitting on them blindly does not merely
+# over-split a real command, it fabricates one that was never run — a grep pattern
+# containing a pipe was read as an invocation and blocked.
+# ---------------------------------------------------------------------------
+allows "grep -nE 'gh api|gh pr create|--draft' SKILL.md" "pipe inside a grep pattern"
+allows 'rg "comment|publish|send" src/'                   "pipes inside a double-quoted pattern"
+allows "awk '{gsub(/a|b/, x)}' file"                      "pipe inside an awk program"
+allows 'git commit -m "handle a && b; c | d"'             "operators inside a commit message"
+allows "grep -E 'npm publish|cargo publish' notes.md"     "two publish verbs inside a pattern"
+
+# ...while real operators outside quotes must still split.
+blocks 'true | gh pr comment 1 --body x'    "real pipe still splits"
+blocks 'echo x && gh pr comment 1 --body y' "real && still splits"
+blocks 'echo x; npm publish'                "real semicolon still splits"
+
+# ---------------------------------------------------------------------------
 # No false positives: a word in an argument is not an invocation.
 # ---------------------------------------------------------------------------
 allows 'git commit -m "wire up gh pr comment"'  "publish verb in a commit message"

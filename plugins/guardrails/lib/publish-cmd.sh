@@ -72,6 +72,27 @@ _guardrails_has_remote_target() {
   return 1
 }
 
+# Split on shell operators that are OUTSIDE quotes. Splitting blindly does not just
+# over-split, it fabricates commands: the pipes in `grep -nE 'a|gh pr create|b'` made
+# a `pr create` invocation appear out of a search pattern, and the guard blocked it.
+_guardrails_split_segments() {
+  printf '%s' "$1" | awk '
+    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34) }
+    {
+      q = ""; out = ""; n = length($0)
+      for (i = 1; i <= n; i++) {
+        c = substr($0, i, 1)
+        if (q != "") { out = out c; if (c == q) q = ""; continue }
+        if (c == sq || c == dq) { q = c; out = out c; continue }
+        if ((c == "&" && substr($0, i + 1, 1) == "&") ||
+            (c == "|" && substr($0, i + 1, 1) == "|")) { out = out "\n"; i++; continue }
+        if (c == "|" || c == ";") { out = out "\n"; continue }
+        out = out c
+      }
+      print out
+    }'
+}
+
 _guardrails_publishes_as_user() {
   local cmdline="$1" depth="${2:-0}"
   [ "$depth" -gt 4 ] && return 1
@@ -173,6 +194,6 @@ _guardrails_publishes_as_user() {
           return 0 ;;
       esac
     done
-  done < <(printf '%s\n' "$cmdline" | awk '{gsub(/&&|\|\||;|\|/, "\n")}1')
+  done < <(_guardrails_split_segments "$cmdline")
   return 1
 }
