@@ -22,6 +22,17 @@ no "gh pr create --body 'mentions git commit here'" commit "git commit inside an
 no "echo git commit"                                commit "git commit as echo text"
 no "grep -rn 'git push' ."                          push   "git push inside a grep pattern"
 
+# --- operators inside quotes are data, not shell syntax ---
+# Splitting on them blindly fabricates a command that was never run.
+no "grep -E 'a|git commit|b' file"   commit "pipe inside a single-quoted pattern"
+no 'rg "x|git push" src/'            push   "pipe inside a double-quoted pattern"
+no "grep -E 'p;git commit' file"     commit "semicolon inside a pattern"
+no "echo 'a && git push'"            push   "&& inside a quoted string"
+
+# ...while real operators outside quotes must still split.
+yes "true | git commit -m x"         commit "real pipe still splits"
+yes "echo x && git push"             push   "real && still splits"
+
 # --- subcommand must match: a commit is not a push and vice-versa ---
 no "git commit -m 'then git push it'" push   "commit with 'git push' in message is not a push"
 no "git status"                       commit "non-commit git subcommand"
@@ -63,5 +74,11 @@ cwd "cd /a && git -C sub commit" commit /start /a/sub      "cd then relative -C"
 
 # a cd for a different subcommand must not be attributed to ours
 cwd "cd /a && git push"          commit /a     /a          "cd applies, but no matching commit"
+
+# A `cd` fabricated out of a quoted pattern must not redirect the guard. This is the
+# sharp end of blind splitting: guard-default-branch would resolve a path that does not
+# exist, fail to read a branch from it, and let a commit on the default branch through.
+cwd "grep -E 'x|cd /evil' f && git commit -m y" commit /start /start "fabricated cd from a pattern ignored"
+cwd "echo 'cd /evil; git commit' && git commit" commit /start /start "fabricated cd and commit both ignored"
 
 finish "git-cmd"
