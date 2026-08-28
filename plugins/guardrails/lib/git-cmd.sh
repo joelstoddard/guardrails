@@ -7,6 +7,9 @@
 #        _guardrails_git_effective_cwd "<cmdline>" <subcommand> <cwd> → prints the cwd git
 #                                                                       will actually run in.
 
+_GUARDRAILS_GIT_CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$_GUARDRAILS_GIT_CMD_DIR/shell-split.sh"
+
 # Git global options that consume a following, separate argument.
 _guardrails_git_opt_takes_value() {
   case "$1" in
@@ -53,7 +56,7 @@ _guardrails_invokes_git() {
         [ "${toks[$i]:-}" = "$want" ] && return 0
         ;;
     esac
-  done < <(printf '%s\n' "$cmdline" | awk '{gsub(/&&|\|\||;|\|/, "\n")}1')
+  done < <(_guardrails_split_segments "$cmdline")
   return 1
 }
 
@@ -103,6 +106,6 @@ _guardrails_git_effective_cwd() {
         fi
         ;;
     esac
-  done < <(printf '%s\n' "$cmdline" | awk '{gsub(/&&|\|\||;|\|/, "\n")}1')
+  done < <(_guardrails_split_segments "$cmdline")
   printf '%s' "$cur"
 }

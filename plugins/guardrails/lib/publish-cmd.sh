@@ -11,6 +11,9 @@
 # Usage: _guardrails_publishes_as_user "<cmdline>" → rc 0 and a reason on stdout if it
 #                                                    publishes, rc 1 otherwise.
 
+_GUARDRAILS_PUBLISH_CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$_GUARDRAILS_PUBLISH_CMD_DIR/shell-split.sh"
+
 # Verbs that mean "make this visible to other people" wherever they appear as a
 # subcommand. Matched exactly, so `publish-docs` and `notes` do not trip them.
 _GUARDRAILS_PUBLISH_VERBS=' comment publish post send send-email reply review announce notify message msg tweet toot dm broadcast note '
@@ -70,27 +73,6 @@ _guardrails_has_remote_target() {
     esac
   done < <(printf '%s' "$seg" | grep -oE '(https?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?|https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*' | sed 's/^[[:space:]]*//')
   return 1
-}
-
-# Split on shell operators that are OUTSIDE quotes. Splitting blindly does not just
-# over-split, it fabricates commands: the pipes in `grep -nE 'a|gh pr create|b'` made
-# a `pr create` invocation appear out of a search pattern, and the guard blocked it.
-_guardrails_split_segments() {
-  printf '%s' "$1" | awk '
-    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34) }
-    {
-      q = ""; out = ""; n = length($0)
-      for (i = 1; i <= n; i++) {
-        c = substr($0, i, 1)
-        if (q != "") { out = out c; if (c == q) q = ""; continue }
-        if (c == sq || c == dq) { q = c; out = out c; continue }
-        if ((c == "&" && substr($0, i + 1, 1) == "&") ||
-            (c == "|" && substr($0, i + 1, 1) == "|")) { out = out "\n"; i++; continue }
-        if (c == "|" || c == ";") { out = out "\n"; continue }
-        out = out c
-      }
-      print out
-    }'
 }
 
 _guardrails_publishes_as_user() {
