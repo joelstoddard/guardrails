@@ -9,8 +9,8 @@ allowed-tools: Bash(git *), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr c
 - Branch: !`git branch --show-current`
 - Status: !`git status --short`
 - Default branch: !`gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main`
-- Commits ahead: !`git log --oneline $(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main)..HEAD 2>/dev/null || echo "(cannot compute — base ref missing)"`
-- Existing PR: !`gh pr list --head "$(git branch --show-current)" --state open --json number,url,isDraft 2>/dev/null`
+- Commits ahead: !`git log --oneline origin/HEAD..HEAD 2>/dev/null || echo "(cannot compute — origin/HEAD unset)"`
+- Existing PR: !`gh pr view --json number,url,isDraft,state 2>/dev/null || echo "(no PR for this branch)"`
 - gh auth: !`gh auth status 2>&1 | head -1`
 
 ## Rules

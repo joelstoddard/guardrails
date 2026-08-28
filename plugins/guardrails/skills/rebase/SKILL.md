@@ -7,8 +7,14 @@ allowed-tools: Bash(git *), Bash(gh repo *), Bash(gh pr *)
 ## Current state
 
 - Branch: !`git branch --show-current`
-- Base (resolved): !`git config "branch.$(git branch --show-current).stackBase" 2>/dev/null || gh pr view --json baseRefName -q .baseRefName 2>/dev/null || gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main`
-- Commits ahead of base: !`base=$(git config "branch.$(git branch --show-current).stackBase" 2>/dev/null || gh pr view --json baseRefName -q .baseRefName 2>/dev/null || gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main); git log "${base}..HEAD" --oneline 2>/dev/null`
+- Stack base (if configured): !`git config --get-regexp '^branch\..*\.stackBase$' 2>/dev/null || echo "(none configured)"`
+- PR base: !`gh pr view --json baseRefName -q .baseRefName 2>/dev/null || echo "(no PR for this branch)"`
+- Default branch: !`git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main`
+- Commits ahead of default: !`git log --oneline origin/HEAD..HEAD 2>/dev/null || echo "(cannot compute — origin/HEAD unset)"`
+
+Resolve the base yourself, in this order: the `stackBase` entry for the branch named
+above if one is listed, else the PR base, else the default branch. If that resolved base
+is not the default branch, recompute the commit range against it before rebasing.
 - Status: !`git status --short`
 
 ## Rules
