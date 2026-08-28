@@ -1,21 +1,7 @@
 #!/usr/bin/env bash
-# git-cmd.sh — decide whether a shell command line runs `git <subcommand>` as its command,
-# rather than merely mentioning "git <subcommand>" in an argument (a commit message, a grep
-# pattern, a PR body). That string-only match is what made a benign `gh pr create` whose
-# body said "git commit" trip the guard.
-#
-# Deliberately minimal, in keeping with dumb tripwire hooks: for each chained simple command
-# (split on && || ; | and newlines), skip leading VAR=value assignments, require the command
-# word to be git, then skip git's global options before matching the subcommand.
-#
-# Global options are parsed because `git -C <path> commit` is a real commit and callers need
-# to see it. A guard that ignores it is not merely bypassable — it is wrong in the other
-# direction too: a hook resolving the repo from the shell's cwd would judge it against the
-# wrong branch entirely. _guardrails_git_effective_cwd exists so callers can resolve the repo
-# git will actually act on, reached via either `cd <path> &&` or `-C <path>`.
-#
-# Known limitation, consistent with the tripwire framing: tokens are split on whitespace with
-# no quote handling, so `git -C '/path with spaces' commit` is not parsed correctly. Fail-open.
+# git-cmd.sh — decide whether a shell command line runs `git <subcommand>` as its
+# command, rather than merely mentioning it in an argument. Substring matching was
+# wrong in both directions; see docs/git-command-parsing.md.
 #
 # Usage: _guardrails_invokes_git      "<cmdline>" <subcommand>        → rc 0 if run, else 1.
 #        _guardrails_git_effective_cwd "<cmdline>" <subcommand> <cwd> → prints the cwd git
@@ -72,13 +58,8 @@ _guardrails_invokes_git() {
 }
 
 # Print the working directory in effect when `git <subcommand>` runs, starting from <cwd>.
-#
-# Both ways of reaching another repo have to be honoured, because a hook that resolves the
-# repo from the shell's cwd otherwise judges the wrong branch entirely:
-#   cd <path> && git commit     — the payload cwd never changes, so this is the form that
-#                                 actually bites when working one-worktree-per-ticket
-#   git -C <path> commit        — cumulative, each -C relative to the previous
-# Segments are walked in order so the two compose.
+# Honours both `cd <path> &&` and cumulative `git -C <path>`, walked in order so they
+# compose. Why this matters: docs/git-command-parsing.md.
 #
 # Usage: _guardrails_git_effective_cwd "<command line>" <subcommand> "<starting cwd>"
 _guardrails_git_effective_cwd() {
