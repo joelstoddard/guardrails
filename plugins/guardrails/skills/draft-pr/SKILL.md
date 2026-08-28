@@ -1,8 +1,7 @@
 ---
 name: draft-pr
 description: Create a draft pull request with a standardized What/Why/How body and conventional-commit title. Follow this skill whenever opening a pull request — the draft PR is the human review checkpoint, so the body format is fixed, the title is conventional-commit, and the PR is always marked draft. Main agents only; sub-agents return their work to the main agent to PR.
-disable-model-invocation: true
-allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh auth *), Bash(gh repo *), Bash(gh api *)
+allowed-tools: Bash(git *), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr create --draft:*), Bash(gh auth status:*), Bash(gh repo view:*)
 ---
 
 ## Current state
