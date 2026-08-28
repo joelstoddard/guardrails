@@ -1,6 +1,6 @@
 {
   "name": "guardrails",
-  "version": "0.2.0",
-  "description": "Universal guardrails: block commits on the default branch, gate tests on push, warn on lint, keep inline comments short.",
+  "version": "0.3.0",
+  "description": "Universal guardrails: block publishing as the user, block commits on the default branch, gate tests on push, warn on lint, keep inline comments short.",
   "author": { "name": "Joel Stoddard Turvey" }
 }

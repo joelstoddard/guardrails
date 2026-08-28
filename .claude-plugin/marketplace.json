@@ -1,11 +1,11 @@
 {
   "name": "personal",
   "owner": { "name": "Joel Stoddard Turvey" },
-  "metadata": { "version": "0.2.0", "description": "Personal universal Claude Code guardrails." },
+  "metadata": { "version": "0.3.0", "description": "Personal universal Claude Code guardrails." },
   "plugins": [
     {
       "name": "guardrails",
-      "description": "Universal guardrails: block commits on the default branch, gate tests on push, warn on lint, keep inline comments short.",
+      "description": "Universal guardrails: block publishing as the user, block commits on the default branch, gate tests on push, warn on lint, keep inline comments short.",
       "source": "./plugins/guardrails"
     }
   ]
