@@ -7,10 +7,13 @@ allowed-tools: Bash(git *), Bash(gh pr *), Bash(gh api *), Bash(gh repo *)
 ## Current state
 
 - Branch: !`git branch --show-current`
-- Stack base (config): !`git config "branch.$(git branch --show-current).stackBase" 2>/dev/null || echo "(unset)"`
-- Default branch: !`gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main`
-- Commits on this branch: !`git log --oneline $(git config "branch.$(git branch --show-current).stackBase" 2>/dev/null || gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main)..HEAD 2>/dev/null`
-- Existing PR: !`gh pr list --head "$(git branch --show-current)" --state open --json number,url,baseRefName 2>/dev/null`
+- Stack base (if configured): !`git config --get-regexp '^branch\..*\.stackBase$' 2>/dev/null || echo "(none configured)"`
+- Default branch: !`git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main`
+- Commits vs default: !`git log --oneline origin/HEAD..HEAD 2>/dev/null || echo "(cannot compute — origin/HEAD unset)"`
+- Existing PR: !`gh pr view --json number,url,baseRefName,state 2>/dev/null || echo "(no PR for this branch)"`
+
+If a `stackBase` is listed for the branch named above, that is this branch's base, not
+the default branch — recompute the commit range against it before splitting the stack.
 
 ## When to use
 
