@@ -43,13 +43,15 @@ Use the resolved base everywhere the previous version of this skill said `main` 
 
 ## Workflow
 
-1. **Resolve the base.** Compute it once at the start and reuse. In shell:
-   ```
-   base=$(git config "branch.$(git branch --show-current).stackBase" \
-          || gh pr view --json baseRefName -q .baseRefName 2>/dev/null \
-          || gh repo view --json defaultBranchRef -q .defaultBranchRef.name \
-          || echo main)
-   ```
+1. **Resolve the base.** Current state above already lists every ingredient. Read them
+   in this order and take the first that applies — do not recompute them in shell, as
+   the substitution that would require is refused inside a worktree:
+
+   1. **Stack base** — if the listed `branch.<name>.stackBase` entry matches the branch
+      named above, its value is the base.
+   2. **PR base** — otherwise, if a PR base is shown, use it.
+   3. **Default branch** — otherwise use the default branch shown.
+
    Show the resolved base to the user before proceeding if it is anything other than the repo default — a stack parent is a non-obvious target and worth confirming.
 
 2. **Confirm no uncommitted changes** — stash or commit first if needed.

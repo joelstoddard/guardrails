@@ -1,6 +1,6 @@
 {
   "name": "guardrails",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Universal guardrails and the git workflow skills they protect: block publishing as the user, block commits on the default branch, gate tests on push, warn on lint, keep inline comments short, and drive commit / rebase / stacked-diffs / draft-pr / review / use-venv.",
   "author": { "name": "Joel Stoddard Turvey" }
 }

@@ -74,7 +74,7 @@ Stop and report if any check fails:
 - Working tree is clean (`git status --porcelain` empty). If dirty, point the user to the `commit` skill.
 - At least one commit ahead of the base. Prefer `origin/<default>` when that ref exists, otherwise local `<default>`. Check with `git rev-list --count <base>..HEAD`.
 - `gh` CLI is authenticated (`gh auth status` succeeds).
-- No open PR already exists for this branch (`gh pr list --head "$(git branch --show-current)" --state open --json number` returns `[]`).
+- No open PR already exists for this branch — the **Existing PR** line in Current state above already answers this. If it names a PR, stop and surface its URL.
 
 ### 2. Gather content
 
@@ -102,7 +102,7 @@ Wait for explicit approval. If the user requests changes, revise and re-present.
 
 In order:
 
-1. `git push -u origin "$(git branch --show-current)"` — sets upstream if unset, no force.
+1. `git push -u origin HEAD` — pushes the current branch and sets upstream if unset, no force. `HEAD` avoids naming the branch, which would need command substitution.
 2. `gh pr create --draft --base <default-branch> --title <title> --body <body>`.
 3. Return the PR URL as the final output.
 
