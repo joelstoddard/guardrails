@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # git-cmd.sh — decide whether a shell command line runs `git <subcommand>` as its
 # command, rather than merely mentioning it in an argument. Substring matching was
-# wrong in both directions; see docs/git-command-parsing.md.
+# wrong in both directions; see docs/design/git-command-parsing.md.
 #
 # Usage: _guardrails_invokes_git      "<cmdline>" <subcommand>        → rc 0 if run, else 1.
 #        _guardrails_git_effective_cwd "<cmdline>" <subcommand> <cwd> → prints the cwd git
@@ -62,7 +62,7 @@ _guardrails_invokes_git() {
 
 # Print the working directory in effect when `git <subcommand>` runs, starting from <cwd>.
 # Honours both `cd <path> &&` and cumulative `git -C <path>`, walked in order so they
-# compose. Why this matters: docs/git-command-parsing.md.
+# compose. Why this matters: docs/design/git-command-parsing.md.
 #
 # Usage: _guardrails_git_effective_cwd "<command line>" <subcommand> "<starting cwd>"
 _guardrails_git_effective_cwd() {
