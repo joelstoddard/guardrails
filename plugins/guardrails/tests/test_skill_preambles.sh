@@ -8,18 +8,19 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 SKILLS="$DIR/../skills"
 
+# Checks the whole file, not just preamble lines: an instruction in the prose telling an
+# agent to run a command is refused exactly the same way a preamble command is. The
+# first pass of this test only scanned preamble lines and missed eight such sites.
 for f in "$SKILLS"/*/SKILL.md; do
   name="$(basename "$(dirname "$f")")"
   n=0
   while IFS= read -r line; do
     n=$((n + 1))
     case "$line" in
-      *'!`'*) ;;
-      *) continue ;;
-    esac
-    case "$line" in
       *'$('*)
-        echo "  FAIL [$name:$n]: preamble uses command substitution — refused in a worktree"
+        where="prose"
+        case "$line" in *'!`'*) where="preamble" ;; esac
+        echo "  FAIL [$name:$n]: $where uses command substitution — refused in a worktree"
         echo "         $(printf '%s' "$line" | cut -c1-90)"
         FAILS=1 ;;
     esac
