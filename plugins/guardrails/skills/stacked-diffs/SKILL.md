@@ -86,8 +86,11 @@ Use when the current branch has grown too large and needs to be split.
 
 1. **Read the commits.** List what is on the branch:
    ```
-   git log --oneline --reverse $(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)..HEAD
+   git log --oneline --reverse origin/HEAD..HEAD
    ```
+   `origin/HEAD` resolves to the remote default branch without substitution. If a stack
+   base is listed in Current state for this branch, use that ref in place of
+   `origin/HEAD` — the slice starts from the parent, not from the default branch.
 2. **Propose a slicing to the user.** Group the commits into logical slices — one slice per reviewable concern. Present the grouping:
    ```
    Slice 1 (feat/thing-01-schema):    <commit-a>, <commit-b>
@@ -137,13 +140,13 @@ Use when the current branch already has its PR open and you are starting the nex
 
 Use when a lower PR picked up review feedback and its branch head moved. Everything above it must be rebased onto the new tip.
 
-1. **Identify the stack order** starting from the changed branch, walking children via `stackBase`:
+1. **Identify the stack order** starting from the changed branch, walking children via `stackBase`. One command lists every child-to-parent edge:
    ```
-   for b in $(git for-each-ref --format='%(refname:short)' refs/heads/); do
-     parent=$(git config "branch.$b.stackBase" 2>/dev/null) || continue
-     echo "$b -> $parent"
-   done
+   git config --get-regexp '^branch\..*\.stackBase$'
    ```
+   Each line is `branch.<child>.stackBase <parent>`. Build the ordering from those pairs
+   yourself rather than looping in shell — a loop needs substitution, which is refused
+   inside a worktree.
 2. **Walk up the stack, rebasing each child onto its parent's new tip:**
    ```
    git switch feat/thing-02-api
@@ -181,15 +184,20 @@ Use after a PR in the stack merges to `main` (or its parent branch). The child P
 
 ## Quick reference
 
+`<parent>` and `<branch>` are placeholders — substitute the literal ref you resolved
+from Current state. Do not compute them inline with command substitution: a
+worktree-isolated session refuses commands whose arguments are produced that way, and
+this skill runs in a worktree.
+
 | Goal | Command |
 |------|---------|
 | Inspect stack parent | `git config branch.<name>.stackBase` |
 | Set stack parent | `git config branch.<name>.stackBase <parent>` |
-| See commits on this slice | `git log --oneline $(git config branch.$(git branch --show-current).stackBase)..HEAD` |
-| Find children of a branch | `git for-each-ref --format='%(refname:short)' refs/heads/ \| while read b; do [ "$(git config branch.$b.stackBase 2>/dev/null)" = "<parent>" ] && echo "$b"; done` |
-| Rebase onto parent's new tip | `git rebase $(git config branch.$(git branch --show-current).stackBase)` |
+| See commits on this slice | `git log --oneline <parent>..HEAD` |
+| List every child-to-parent edge | `git config --get-regexp '^branch\..*\.stackBase$'` |
+| Rebase onto parent's new tip | `git rebase <parent>` |
 | Push after rebase | `git push --force-with-lease origin <branch>` |
-| Open stacked PR | `gh pr create --draft --base $(git config branch.$(git branch --show-current).stackBase) --title ... --body ...` |
+| Open stacked PR | `gh pr create --draft --base <parent> --title ... --body ...` |
 | Retarget PR base after parent merged | `gh pr edit <pr> --base main && git config branch.<name>.stackBase main` |
 
 ## Failure modes
