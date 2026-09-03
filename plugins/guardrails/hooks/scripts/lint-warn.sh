@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Warn (never block) when the repo's AGENTS.md lint command fails at commit. Fail-open.
+# Warn (never block) when the lint command from the repo's agent doc fails. Fail-open.
 command -v jq >/dev/null 2>&1 || exit 0
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/../../lib/repo-cmd.sh"
@@ -16,6 +16,6 @@ lintcmd="$(repo_cmd "$repo" lint)" || exit 0
 if ( cd "$repo" && eval "$lintcmd" ) >/dev/null 2>&1; then
   exit 0
 fi
-jq -n --arg c "⚠️ Lint failed (\`$lintcmd\` from AGENTS.md). Committing anyway — fix before pushing." \
+jq -n --arg c "⚠️ Lint failed (\`$lintcmd\` from the repo agent doc). Committing anyway — fix before pushing." \
   '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}'
 exit 0
