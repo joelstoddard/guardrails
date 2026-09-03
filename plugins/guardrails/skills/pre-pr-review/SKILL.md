@@ -1,5 +1,5 @@
 ---
-name: review
+name: pre-pr-review
 description: Work a pre-push self-review checklist against the current diff, covering functionality, security, permissions, readability and test coverage. Use when the user asks to review changes, requests a pre-push review, or says "/review" — before pushing anything to a shared remote.
 ---
 
