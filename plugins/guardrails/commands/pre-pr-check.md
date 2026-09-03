@@ -1,20 +1,22 @@
 ---
-description: Run the repo's AGENTS.md-documented lint + tests plus a security sweep, continue through failures, print one READY/NOT-READY summary.
+description: Run the lint + tests documented in the repo's agent doc, plus a security sweep, continue through failures, print one READY/NOT-READY summary.
 ---
 
 # Pre-PR check
 
-Run the current repo's checks on demand. Commands come from the repo's `AGENTS.md`
-"Commands" section (the single source of truth); this command does not assume a toolchain.
+Run the current repo's checks on demand. Commands come from the "Commands" section of
+the repo's `AGENTS.md`, or `CLAUDE.md` where a repo uses that name; this command does
+not assume a toolchain.
 
 ## Steps
 
-1. Resolve the repo root (`git rev-parse --show-toplevel`) and read its `AGENTS.md`.
+1. Resolve the repo root (`git rev-parse --show-toplevel`) and read its `AGENTS.md`,
+   falling back to `CLAUDE.md`. `AGENTS.md` wins where a repo has both.
 2. Find the **Test** and **Lint** commands in the "Commands" section. If either is **not
    documented**, spawn a sub-agent to answer "how is this repo tested / linted?" — it
    inspects the repo's real signals (package.json scripts, Makefile/justfile targets,
    pyproject/tox, CI workflows) and proposes the command. Use its answer for this run and
-   offer to record it in AGENTS.md (following the repo's existing patterns — do not invent
+   offer to record it in that agent doc (following the repo's existing patterns — do not invent
    a format). This lives here, not in the hooks: a synchronous `PreToolUse` hook can't
    spawn a sub-agent, but this on-demand command runs in an agent context and can.
 3. Run **Lint**, then **Test**. Do NOT stop at the first failure — run both so the user

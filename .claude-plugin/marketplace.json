@@ -1,7 +1,7 @@
 {
   "name": "personal",
   "owner": { "name": "Joel Stoddard Turvey" },
-  "metadata": { "version": "0.5.0", "description": "Personal universal Claude Code guardrails." },
+  "metadata": { "version": "0.6.0", "description": "Personal universal Claude Code guardrails." },
   "plugins": [
     {
       "name": "guardrails",
