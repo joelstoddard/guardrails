@@ -12,7 +12,7 @@ _guardrails_invokes_git "$cmd" commit || exit 0
 
 # Judge the repo git will actually act on, not the one the shell happens to sit in —
 # under worktree-per-ticket they differ, and resolving from .cwd refuses commits that
-# were never going to land there. See docs/git-command-parsing.md.
+# were never going to land there. See docs/design/git-command-parsing.md.
 cwd="$(_guardrails_git_effective_cwd "$cmd" commit "${cwd:-.}")"
 
 repo="$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null)" || exit 0

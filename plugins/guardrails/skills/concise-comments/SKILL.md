@@ -1,58 +1,76 @@
 ---
 name: concise-comments
-description: "Use when writing or editing comments in source code, when a comment is running past three lines, when explaining non-obvious design context, tradeoffs, constraints or workarounds in code, or when reviewing code that carries long explanatory comment blocks. Trigger on 'document this decision', 'explain why this is here', 'make sure the next person understands', 'comment this properly'."
+description: "Use when writing or editing comments in source code, when a comment is running past two sentences, when explaining non-obvious design context, tradeoffs, constraints or workarounds in code, or when reviewing code that carries long explanatory comment blocks or changelog-style notes. Trigger on 'document this decision', 'explain why this is here', 'make sure the next person understands', 'comment this properly'."
 ---
 
 # Concise Comments
 
-The source file carries the pointer. A docs file carries the explanation.
+The source file carries the pointer. A design doc carries the explanation.
 
 ## When to use
 - Writing or editing any comment, in any language.
-- A comment you are drafting has run past three lines.
+- A comment you are drafting has run past two sentences.
 - Reviewing code that carries long explanatory comment blocks.
 
-## The three shapes
+## The four rules
 
-Every comment is one of exactly three shapes. Sort first, then write.
+Every comment obeys all four. Check them before you write the comment.
 
-1. **Zero lines** — it restates what the code already says. Delete it. If the code
-   needed the comment to be readable, rename the thing instead.
-2. **One to three lines** — a non-obvious *why* that fits. State it once.
-3. **A pointer** — a non-obvious *why* that does not fit: three lines at most,
-   naming the concept and citing a doc path, plus the doc file holding the full
-   explanation.
+1. **Why, not what.** A comment gives the reason the code is written this way.
+   The code already shows what it does. If a reader cannot see what the code
+   does, rename the thing instead of adding a comment.
+2. **ASD-STE100.** Write every comment in Simplified Technical English.
+3. **Not state.** A comment is not a changelog and not a work log. It records no
+   part of the process that produced the code. Cite an issue or a design doc
+   instead.
+4. **Two sentences at most.** Longer context goes into a file in `docs/design/`.
 
-There is no fourth shape. A block of prose in a source file is shape 3, unfinished.
+## ASD-STE100 in practice
 
-## What the cap applies to
+Apply these rules from the standard:
+
+- Write one idea in each sentence. Keep a sentence to 20 words or fewer.
+- Use the active voice. Use the present tense.
+- Use one word for one meaning, and the same word for that meaning each time.
+- Use the simplest verb form. Do not use a phrasal verb if one verb is enough.
+- Do not use metaphors, idioms, jokes or hyperbole.
+- Write out an abbreviation at its first use, or link to the term.
+
+Bad: `# Bumped this a bit because the queue was getting hammered in prod.`
+Good: `# The queue drops messages above 500 events per second.`
+
+## What the rules apply to
 
 Keyed on content, not on comment syntax:
 
 - **Interface description** — what a function does, its parameters, return value,
   errors raised, a usage example. Belongs in the docstring, JSDoc/TSDoc, Rust
-  `///`, or Go doc comment, at whatever length it needs. The cap does not reach it.
+  `///`, or Go doc comment, at whatever length it needs. Rule 4 does not reach
+  it. Rules 1 to 3 still do.
 - **Design rationale** — why these numbers, what constraint forced them, what
-  breaks if someone changes them. Takes one of the three shapes **wherever it is
-  written, module docstring included.** Relocating rationale into a docstring is
-  not extraction.
+  breaks if someone changes them. Obeys all four rules **wherever it is written,
+  module docstring included.** Relocating rationale into a docstring is not
+  extraction.
 
 Licence and SPDX headers and generated files are out of scope entirely.
 
 ## Protocol
 
 1. **Sort it.** Could a competent reader derive this from the code in front of
-   them? That is shape 1 — delete it. Otherwise it is real rationale: count the
-   lines it needs.
-2. **Three or fewer — write it in place.** Done.
-3. **More than three — pick the doc location.** Use the repo's existing docs
-   directory or docs site if it has one; otherwise create `docs/` at the repo root.
-   Name the file after the concept (`docs/retry-semantics.md`), not the function.
+   them? Delete the comment. Does it describe the process that produced the code
+   ("changed from", "as discussed", "after the refactor")? Delete it, or replace
+   it with an issue link. Otherwise it is real rationale: count the sentences it
+   needs.
+2. **Two sentences or fewer — write it in place.** Done.
+3. **More than two — write a design doc.** Use `docs/design/<concept>.md` at the
+   repo root, unless the repo documents a different location for design docs.
+   Name the file after the concept (`docs/design/retry-semantics.md`), not the
+   function.
 4. **Write the doc.** Cover the problem, the constraint that forced the design
    (real numbers, real systems), what was rejected and why, and the failure mode if
    someone changes it — plus everything the comment itself would have said.
-5. **Leave the pointer.** Up to three lines: name the concept, give the one
-   sentence needed at the call site, cite the relative path.
+5. **Leave the pointer.** Up to two sentences: name the concept, give the one
+   fact needed at the call site, cite the relative path.
 6. **Report the doc path** in your summary so it surfaces in review.
 
 ## Example
@@ -70,19 +88,19 @@ MAX_ATTEMPTS = 3
 After:
 
 ```python
-# Sized against a circuit breaker shared by all 40 workers, not against what
-# one worker tolerates. Raising this trips the breaker fleet-wide.
-# See docs/retry-semantics.md
+# All 40 ingest workers share one circuit breaker. A larger value opens that
+# breaker for every worker.
+# See docs/design/retry-semantics.md
 MAX_ATTEMPTS = 3
 ```
 
-...plus `docs/retry-semantics.md` carrying the breaker thresholds, the fan-out
-arithmetic behind the cap, why full jitter rather than equal jitter, and what to
-change instead when more resilience is needed.
+...plus `docs/design/retry-semantics.md` carrying the breaker thresholds, the
+fan-out arithmetic behind the cap, why full jitter rather than equal jitter, and
+what to change instead when more resilience is needed.
 
 ## Notes
 - A comment above a constant or at the top of a file is inline commentary. The
-  three shapes apply there — it is where over-long blocks land most often.
+  four rules apply there — it is where over-long blocks land most often.
 - The doc says everything the comment said, plus the four items in step 4. If the
   explanation got shorter, it was truncated rather than extracted.
-- A pointer cites a relative path a reader can open.
+- A pointer cites a relative path a reader can open, or an issue ID.
