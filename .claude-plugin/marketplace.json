@@ -1,11 +1,11 @@
 {
   "name": "personal",
   "owner": { "name": "Joel Stoddard Turvey" },
-  "metadata": { "version": "0.6.0", "description": "Personal universal Claude Code guardrails." },
+  "metadata": { "version": "0.7.0", "description": "Personal universal Claude Code guardrails." },
   "plugins": [
     {
       "name": "guardrails",
-      "description": "Universal guardrails and the git workflow skills they protect: block publishing as the user, block commits on the default branch, gate tests on push, warn on lint, keep inline comments short, and drive commit / rebase / stacked-diffs / draft-pr / review / use-venv.",
+      "description": "Universal guardrails and the workflow skills they protect: block publishing as the user, block commits on the default branch, gate tests on push, warn on lint, report merged worktrees, keep inline comments short, and drive commit / rebase / stacked-diffs / draft-pr / ci-watch / review / biases / project-memory / self-improvement / use-venv.",
       "source": "./plugins/guardrails"
     }
   ]
