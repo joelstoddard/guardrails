@@ -53,6 +53,13 @@ Report findings; do not fix them in this pass. A secret already in pushed
 history needs a rewrite, not a follow-up commit — and silently "fixing" a
 finding hides the decision the user should be making.
 
+### Grade what this diff caused
+A diff-tier category presupposes the repo already has the thing. Where it does
+not — no changelog at all, no coverage gate to weaken, no CI to pin actions in
+— the diff tier is **N/A** with that absence named, and the gap belongs to the
+project tier. Grading a pre-existing absence as a diff-tier Missing blocks a PR
+on something it neither caused nor can reasonably fix.
+
 ### State the exception, don't infer it
 A category is **N/A** only when a named exception applies. Say which one.
 "Probably fine here" is not an exception; that is a gap you have talked
@@ -128,10 +135,15 @@ Overall: READY / NOT READY
 Gaps: n · Unknown: n · N/A: n
 ```
 
-**NOT READY** when any gate fails, or any graded category is **Missing**.
-Partial and unknown are reported but do not block — a Partial is a real gap
-worth a follow-up, and blocking on unknown would punish the user for a missing
-token scope.
+**NOT READY** when a gate fails, or a **diff-tier** category is **Missing**.
+
+Everything else is reported without blocking:
+
+- **NOT DOCUMENTED** is a finding, not a gate failure. A repo with no lint
+  tooling reports it on every run, and no single PR can fix that.
+- **Partial** is a real gap worth a follow-up, not a reason to hold the PR.
+- **unknown** never blocks. Blocking would punish the user for a token scope.
+- **Project-tier Missing** never blocks. It predates this diff.
 
 Under `--full`, report the project tier in its own block so it is visibly not
 about this diff.
