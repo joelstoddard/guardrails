@@ -1,7 +1,7 @@
 ---
 name: draft-pr
 description: Create a draft pull request with a standardized What/Why/How body and conventional-commit title. Follow this skill whenever opening a pull request — the draft PR is the human review checkpoint, so the body format is fixed, the title is conventional-commit, and the PR is always marked draft. Main agents only; sub-agents return their work to the main agent to PR.
-allowed-tools: Bash(git *), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr create --draft:*), Bash(gh auth status:*), Bash(gh repo view:*)
+allowed-tools: Bash(git *), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr create --draft:*), Bash(gh auth status:*), Bash(gh repo view:*), Agent
 ---
 
 ## Current state
@@ -86,17 +86,13 @@ Stop and report if any check fails:
 
 If Why or How cannot be derived from conversation, ask the user. Do not fabricate.
 
-### 3. Present for approval
+### 3. Report the plan
 
-Show the user:
+State, without waiting: the title, the base branch, draft status, and whether
+the push creates or updates the remote branch. Then proceed.
 
-- Proposed title.
-- Proposed body (rendered).
-- Base branch (the detected default).
-- Draft status: `true` (always).
-- Push plan: whether `git push -u origin <branch>` will create the remote branch or update an existing one.
-
-Wait for explicit approval. If the user requests changes, revise and re-present. Do not create the PR until approved.
+The draft state is the review gate — the user reviews the PR itself, not a
+preview of it. Asking twice is what this skill is removing.
 
 ### 4. Execute
 
@@ -105,6 +101,10 @@ In order:
 1. `git push -u origin HEAD` — pushes the current branch and sets upstream if unset, no force. `HEAD` avoids naming the branch, which would need command substitution.
 2. `gh pr create --draft --base <default-branch> --title <title> --body <body>`.
 3. Return the PR URL as the final output.
+4. Spawn a background agent to invoke the `ci-watch` skill against the new PR,
+   so failing checks are repaired without another prompt. The agent runs
+   detached; do not wait for it. Report the PR URL immediately and note that
+   the watcher is running.
 
 If step 1 fails, stop — do not attempt step 2.
 
@@ -132,15 +132,15 @@ If step 1 fails, stop — do not attempt step 2.
 | Open PR already exists for branch | Refuse. Surface the existing PR URL. |
 | `gh` not authenticated | Refuse. Tell user to run `gh auth login`. |
 | Missing Why/How context | Ask the user. Do not fabricate. |
-| User rejects title or body | Revise and re-present. Do not create PR until approved. |
 | `git push` fails | Surface the error. Do not attempt `gh pr create`. |
+| CI still red after the watcher's three rounds | Surface the watcher's report. Do not retry. |
 
 ## Red flags — stop and re-check
 
 - About to run `gh pr create` without `--draft`.
-- About to run `gh pr create` before the user has approved the body.
 - About to force-push or use `--no-verify`.
 - About to create a second PR when one already exists.
 - About to invent a "Why" or "How" because conversation context is thin.
+- About to mark the PR ready for review, or to let the watcher do so.
 
 All of these mean: stop, surface the issue to the user, and wait.
