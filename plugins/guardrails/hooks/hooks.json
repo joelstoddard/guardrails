@@ -14,7 +14,8 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-merge-cleanup.sh", "timeout": 20 }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-merge-cleanup.sh", "timeout": 20 },
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/lessons-nudge.sh", "timeout": 10 }
         ]
       }
     ]
