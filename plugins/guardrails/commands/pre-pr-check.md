@@ -1,5 +1,5 @@
 ---
-description: Run the lint + tests documented in the repo's agent doc, plus a security sweep, continue through failures, print one READY/NOT-READY summary.
+description: Run the lint + tests documented in the repo's agent doc, plus a security and comment sweep, continue through failures, print one READY/NOT-READY summary.
 ---
 
 # Pre-PR check
@@ -31,18 +31,28 @@ not assume a toolchain.
 
    Report every hit with its `file:line`. Do NOT auto-remove — surface it for a decision
    (a leak already in pushed history needs a rewrite/scrub, not just a new commit).
-5. Print one summary:
+5. **Comment sweep.** Invoke the `guardrails:concise-comments` skill and apply its four
+   rules to every comment the diff adds or changes. Rewrite in place the comments that
+   break a rule. Where real rationale needs more than two sentences, follow the skill's
+   protocol: write the design doc and leave the pointer. Report each rewrite as
+   `file:line` and give each design doc path. The rewrites stay uncommitted, so they need
+   a commit before the push.
+6. Print one summary:
 
    | Step     | Status |
    |----------|--------|
    | Lint     | <PASS / FAIL: n findings / NOT DOCUMENTED> |
    | Test     | <PASS / FAIL: n failures / NOT DOCUMENTED> |
    | Security | <CLEAN / REVIEW: n items> |
+   | Comments | <CLEAN / n rewritten> |
 
-   **Overall: READY** (all documented checks pass and the security sweep is clean) **/ NOT
-   READY** (any failure, or a security item to review).
+   **Overall: READY** (all documented checks pass, the security sweep is clean, and no
+   comment rewrite is waiting for a commit) **/ NOT READY** (any failure, a security item
+   to review, or an uncommitted comment rewrite).
 
 ## Notes
 
 - This is the heavy, on-demand check. The commit/push hooks stay light: commits are only
   blocked on the default branch; pushes are blocked on failing tests.
+- The comment sweep is a backstop. The `comment-warn` hook already warns at the moment an
+  edit writes an over-long comment; this catches what was written outside that hook.
