@@ -7,13 +7,9 @@
 # Extract a labelled inline-code command, e.g.  "- **Test:** `make test`"  or
 # "Lint: `ruff check .`". Case-insensitive; first match wins. Portable (BSD grep).
 #
-# The remainder after the label must be EXACTLY one inline-code span. A label
-# line that runs on into prose is a description, not a command: a CI job summary
-# under "- **tests**:" may mention a branch or a label in backticks before ever
-# naming the command, and lifting the first span out of it yields something that
-# is not a program. That then fails to run, and a gate built on this reads the
-# failure as "your tests are broken" — blocking every push for a documentation
-# shape. Matching nothing is the safe outcome, because callers fail open.
+# The remainder after the label must be EXACTLY one inline-code span, because a
+# run-on prose line yields a string that is not a program.
+# See docs/design/agent-doc-command-extraction.md
 _guardrails_labelled() { # $1=file $2=keyword
   local line norm
   while IFS= read -r line; do
