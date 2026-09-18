@@ -17,7 +17,7 @@
 
 _guardrails_split_segments() {
   printf '%s' "$1" | awk '
-    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); hd = "" }
+    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); hd = ""; d = 0 }
     {
       if (hd != "") {
         t = $0
@@ -28,6 +28,13 @@ _guardrails_split_segments() {
       q = ""; out = ""; ar = 0; n = length($0)
       for (i = 1; i <= n; i++) {
         c = substr($0, i, 1)
+
+        # An enclosing quote does not reach inside $( ), where quoting restarts and
+        # a <<WORD is a real opener. Depth outlives the line because the closing )
+        # of a `-m "$(cat <<EOF ...)"` body lands on a later one.
+        if (q != sq && c == "$" && substr($0, i + 1, 1) == "(" && substr($0, i + 2, 1) != "(") {
+          st[++d] = q; q = ""; out = out "$("; i++; continue
+        }
         if (q != "") { out = out c; if (c == q) q = ""; continue }
         if (c == sq || c == dq) { q = c; out = out c; continue }
 
@@ -35,6 +42,7 @@ _guardrails_split_segments() {
         # Miscounting only suppresses heredoc detection, which is the safe way to err.
         if (c == "(" && substr($0, i + 1, 1) == "(") { ar++; out = out "(("; i++; continue }
         if (c == ")" && substr($0, i + 1, 1) == ")" && ar > 0) { ar--; out = out "))"; i++; continue }
+        if (c == ")" && d > 0) { q = st[d--]; out = out c; continue }
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
         if (c == "<" && substr($0, i + 1, 1) == "<" && substr($0, i + 2, 1) != "<" && ar == 0) {

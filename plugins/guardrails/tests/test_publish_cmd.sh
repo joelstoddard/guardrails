@@ -150,4 +150,14 @@ blocks "$(printf 'echo $((1 << 4))\ngh pr comment 12 --body hi')" \
 blocks 'grep -c "x" f <<< "gh pr comment 1"; gh pr comment 2 --body hi' \
   "here-string is not a heredoc"
 
+# A heredoc opened inside $( ) is still a heredoc. The enclosing double quote
+# does not reach into a command substitution, and `-m "$(cat <<EOF ...)"` is how
+# a multi-paragraph commit message arrives.
+allows "$(printf 'git commit -m "$(cat <<%sEOF%s\nnamespace comment trimmed to two sentences\nEOF\n)"' "'" "'")" \
+  "heredoc inside a command substitution"
+allows "$(printf 'git commit -m "$(cat <<%sEOF%s\nShortened the wording so it fits.\nEOF\n)"' "'" "'")" \
+  "nested heredoc, innocent prose"
+blocks "$(printf 'git commit -m "$(cat <<%sEOF%s\nharmless prose\nEOF\n)" && gh pr comment 12 --body hi' "'" "'")" \
+  "command after a nested heredoc closes"
+
 finish "publish-cmd"
