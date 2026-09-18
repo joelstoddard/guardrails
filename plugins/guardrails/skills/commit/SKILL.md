@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Create atomic conventional commits. Follow this skill whenever committing code — main agents show a proposed commit for user approval, sub-agents commit as they go and surface a summary in their return value.
+description: Create atomic conventional commits. Follow this skill whenever committing code — commit without asking, never push, and sub-agents commit as they go and surface a summary in their return value.
 allowed-tools: Bash(git *)
 ---
 
@@ -62,12 +62,18 @@ Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0
 
 ### Main agent (direct user interaction)
 
+Commit without asking. The commit is not the irreversible step — pushing is,
+and this skill never pushes.
+
 1. Identify the smallest atomic unit of change to commit.
-2. Run tests/validation for that change.
-3. Present to the user: files to stage, proposed commit message, what was validated.
-4. Wait for explicit approval before running `git commit`.
-5. Stage only approved files and commit.
-6. If more changes remain, repeat from step 1.
+2. Run tests/validation for that change. If they fail, fix before committing.
+3. Stage exactly that unit and commit.
+4. Report what was committed: hash, message, files, and what was validated.
+5. If more changes remain, repeat from step 1.
+
+Stop and ask only when the change itself is ambiguous — an unrelated edit you
+did not make is in the working tree, or the diff cannot be split into atomic
+units without a judgement call the user should make.
 
 ### Sub-agent (dispatched via Agent tool)
 
