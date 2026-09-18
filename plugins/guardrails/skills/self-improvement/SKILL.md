@@ -44,7 +44,7 @@ This skill is for lessons about the **skills themselves**. A lesson about how *t
 
 Silently check whether the journal already carries this lesson for this skill — Read the file and compare the `skill` and `trigger` fields. If it does, skip — one entry per distinct lesson, not one per occurrence. This check produces no output either way.
 
-Otherwise append one line **using the Write/Edit tools, never a shell heredoc**: the plugin's own publish guard inspects heredoc bodies and refuses any carrying an ordinary word like "review", "comment" or "post" near the start of the text — which describes most lessons about a plugin whose skills are named `pre-pr-review`, `concise-comments` and `draft-pr`. Append by Editing the journal's last line into itself plus the new line; if the file does not exist yet, Write it with that single line.
+Otherwise append one line **using the Write/Edit tools, never a shell heredoc**. A lesson is a JSON object full of quotes a shell body would have to escape, and the plugin's publish guard drops only the heredoc bodies it can parse — it errs toward scanning when it cannot read the opener, and lesson text mentioning "review", "comment" or "post" is then refused as publishing. That describes most lessons about a plugin whose skills are named `pre-pr-review`, `concise-comments` and `draft-pr`. Append by Editing the journal's last line into itself plus the new line; if the file does not exist yet, Write it with that single line.
 
 ```json
 {"date":"2026-09-08","skill":"...","trigger":"...","mistake":"...","fix":"...","promoted":false}
