@@ -2,11 +2,10 @@
 # publish-cmd.sh — decide whether a shell command line publishes content that would
 # appear authored by the user.
 #
-# Deliberately vendor-neutral. Enumerating platforms (github, slack, linear…) fails
-# the moment a new tool is adopted, and the rule being enforced is not "not these
-# services" but "nothing posts as me". So this matches on the *shape* of an
-# invocation instead: a publish verb in subcommand position of any tool, an HTTP
-# write aimed at any remote host, or a mail transport.
+# A list of platforms goes stale when a new tool is adopted, and the rule is
+# "nothing posts as me", not "not these services". So this matches the shape of an
+# invocation: a publish verb in subcommand position, an HTTP write to a remote
+# host, or a mail transport.
 #
 # Usage: _guardrails_publishes_as_user "<cmdline>" → rc 0 and a reason on stdout if it
 #                                                    publishes, rc 1 otherwise.
@@ -152,9 +151,8 @@ _guardrails_publishes_as_user() {
       esac
       n=$((n + 1))
     done
-    # Opening a review request is fine unasked; opening a *ready* one is not, because
-    # it notifies reviewers. Draft first, promotion by hand. Scan the whole segment so
-    # the flag's position does not matter.
+    # A ready review request notifies reviewers, so only a draft is safe unasked.
+    # Scan the whole segment, because the flag's position can change.
     case "${lead[1]:-}/${lead[2]:-}" in
       pr/create | mr/create | merge-request/create)
         # Spelled out in full only: -d is --draft in one forge CLI and --description

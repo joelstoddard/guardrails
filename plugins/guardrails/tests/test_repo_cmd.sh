@@ -39,11 +39,8 @@ printf '# a\n- **Lint:** `only-lint-here`\n' > "$r2d/AGENTS.md"
 printf '# c\n- **Test:** `make test-unit`\n' > "$r2d/CLAUDE.md"
 assert_eq "$(repo_cmd "$r2d" test)" "make test-unit" "falls through when AGENTS.md lacks the label"
 
-# A label line that runs on into prose is a description, not a command. Real
-# case: netboxlabs/netbox-changes documents its CI job under "- **tests**:" and
-# mentions NetBox's `main` branch before naming the command it runs. Taking the
-# first code span yields `main`, which is not a program, so the gate "fails" and
-# blocks every push.
+# A label line that runs on into prose is a description, not a command.
+# See docs/design/agent-doc-command-extraction.md
 r3="$(make_repo main)"
 cat > "$r3/AGENTS.md" <<'EOF'
 # AGENTS.md — sample
