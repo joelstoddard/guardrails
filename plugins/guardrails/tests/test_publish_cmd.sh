@@ -128,4 +128,26 @@ allows 'npm install'                            "npm install"
 allows 'npm run build'                          "npm run build"
 allows 'git status'                             "unrelated command"
 
+# ---------------------------------------------------------------------------
+# Heredoc bodies are data, not commands. Writing a file whose prose starts a
+# line with a publish verb in subcommand position must not trip the guard — a
+# PR body describing `gh pr comment` is the obvious case, and the splitter used
+# to read every body line as its own command.
+# ---------------------------------------------------------------------------
+allows "$(printf 'cat > body.md <<%sEOF%s\nReading inline review comments needs the API.\nEOF' "'" "'")" \
+  "quoted heredoc, prose with a publish verb"
+allows "$(printf 'cat > body.md <<EOF\nlinear comment ENG-1 is documented here\nEOF')" \
+  "unquoted heredoc, prose naming a publish command"
+allows "$(printf 'cat > b.md <<-EOF\n\tsome-tool post --text x\n\tEOF')" \
+  "tab-indented heredoc"
+
+# ...but anything outside the body is still scanned. Mistaking something else
+# for a heredoc opener would silently stop the scan, so those cases are pinned.
+blocks "$(printf 'cat > body.md <<%sEOF%s\nharmless prose\nEOF\ngh pr comment 12 --body hi' "'" "'")" \
+  "command after a closed heredoc"
+blocks "$(printf 'echo $((1 << 4))\ngh pr comment 12 --body hi')" \
+  "arithmetic shift is not a heredoc opener"
+blocks 'grep -c "x" f <<< "gh pr comment 1"; gh pr comment 2 --body hi' \
+  "here-string is not a heredoc"
+
 finish "publish-cmd"

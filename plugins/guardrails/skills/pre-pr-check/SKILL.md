@@ -1,7 +1,7 @@
 ---
 name: pre-pr-check
-description: Run the repo's documented lint and tests, sweep the diff for secrets, and grade this change against the compliance checklist. Follow this skill before pushing anything to a shared remote or opening a pull request. Pass --full to add the project-level categories that are near-static between PRs.
-allowed-tools: Bash, Read, Grep, Glob, Agent
+description: Run the repo's documented lint and tests, sweep the diff for secrets and over-long comments, and grade this change against the compliance checklist. Follow this skill before pushing anything to a shared remote or opening a pull request. Pass --full to add the project-level categories that are near-static between PRs.
+allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Agent, Skill
 ---
 
 ## Current state
@@ -14,7 +14,9 @@ allowed-tools: Bash, Read, Grep, Glob, Agent
 - Changed files: !`git diff --name-only origin/HEAD...HEAD 2>/dev/null || echo "(cannot resolve origin/HEAD — resolve the base first)"`
 - Agent doc: !`ls AGENTS.md CLAUDE.md 2>/dev/null || echo "(neither found at repo root)"`
 
-`allowed-tools` grants unrestricted `Bash` deliberately: the lint and test
+`Edit` and `Write` are for the comment sweep's in-place rewrites and the design
+docs it may need; `Skill` invokes `concise-comments`. `allowed-tools` grants
+unrestricted `Bash` deliberately: the lint and test
 commands come from the repo's own agent doc and cannot be enumerated in
 advance. Every other grant is the minimum the workflow uses.
 
@@ -102,6 +104,17 @@ practice in the repo: a home path or an author email that an existing tracked
 file already carries is not a new disclosure. Say so rather than flagging it
 fresh each run.
 
+Then the **comment sweep**. Invoke the `concise-comments` skill and apply its
+rules to every comment the diff adds or changes, rewriting in place the ones
+that break a rule. Where real rationale needs more room than a comment allows,
+follow that skill's protocol: write the design doc and leave the pointer.
+Report each rewrite as `file:line`, and give each design doc path.
+
+Those rewrites land in the working tree uncommitted, so they need a commit
+before the push — an uncommitted rewrite is **NOT READY**. The sweep is a
+backstop: the `comment-warn` hook already warns as an edit writes an over-long
+comment, and this catches what was written outside it.
+
 ### 4. Grade the categories
 
 Load `references/compliance-checklist.md` now.
@@ -122,6 +135,7 @@ a repo that publishes no container image gets one N/A line, not a sub-report.
 | Lint     | PASS / FAIL: n findings / NOT DOCUMENTED |
 | Test     | PASS / FAIL: n failures / NOT DOCUMENTED |
 | Security | CLEAN / REVIEW: n items |
+| Comments | CLEAN / n rewritten, awaiting commit |
 
 Graded — this diff:
   §n  <category>   Missing   — <what is absent>
@@ -135,7 +149,8 @@ Overall: READY / NOT READY
 Gaps: n · Unknown: n · N/A: n
 ```
 
-**NOT READY** when a gate fails, or a **diff-tier** category is **Missing**.
+**NOT READY** when a gate fails, when a comment rewrite is still uncommitted,
+or when a **diff-tier** category is **Missing**.
 
 Everything else is reported without blocking:
 
