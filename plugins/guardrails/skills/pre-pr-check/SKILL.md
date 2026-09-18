@@ -12,7 +12,7 @@ allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Agent, Skill
 - PR base: !`gh pr view --json baseRefName -q .baseRefName 2>/dev/null || echo "(no PR for this branch)"`
 - Default branch: !`gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main`
 - Changed files: !`git diff --name-only origin/HEAD...HEAD 2>/dev/null || echo "(cannot resolve origin/HEAD — resolve the base first)"`
-- Agent doc: !`ls AGENTS.md CLAUDE.md 2>/dev/null || echo "(neither found at repo root)"`
+- Agent doc: !`git ls-files ':/AGENTS.md' ':/CLAUDE.md' | grep . || echo "(neither found at repo root)"`
 
 `Edit` and `Write` are for the comment sweep's in-place rewrites and the design
 docs it may need; `Skill` invokes `concise-comments`. `allowed-tools` grants
