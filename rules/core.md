@@ -39,6 +39,7 @@ Every section is tagged with a tier. Tiers decide WHEN a rule applies, NOT WHETH
 ### Thresholds and project facts
 * ALWAYS look for agreed values (severity thresholds, coverage floor, mutation score, performance budgets, SLOs, tolerances, conformance levels, volume projections) in project configuration BEFORE acting.
 * IF they are not defined, ask. NEVER invent them.
+* In a PERSONAL project, IF a threshold is not defined, record it as a finding AND proceed. Ask ONLY WHEN the decision depends on the number.
 
 ### Personal and work context
 * A project under `~/work` is WORK. Every other project is PERSONAL.
