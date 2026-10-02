@@ -24,16 +24,16 @@ kept throughout.
 
 ## Decisions
 
-| Decision | Choice | Why |
-|---|---|---|
-| Where personas live | `~/.claude/agents/`, from this repo's `.claude/agents/` | User scope reaches every repo. A plugin would namespace them and drop `hooks:` / `permissionMode:` frontmatter |
-| Split mechanism | Rules for file-type domains, agents for judgment, skills for documents, hooks and permissions for enforcement | Each rule goes to the cheapest mechanism that applies it reliably |
-| Conflicts with existing guidance | Simplicity wins | Rewrite the conflicting rules to fire only at a real seam |
-| Delegation | Substantial domain work only | "ALWAYS delegate" globally sends every README tweak through a subagent round-trip; small edits get the path-scoped rules anyway |
-| Work variants | A private work plugin, not this repo | This repo is public (see `docs/design/claude-settings-split.md`); employer process stays in employer-owned git |
-| Work/personal detection | Under `~/work` = work | The private work plugin already detects work trees this way |
-| Personal tracker | GitHub issues in the repo the finding belongs to | The personal Notion has no integration; GitHub is the automatable one. `TODO.md` is migrated to issues |
-| Work tracker | The work plugin's ticket skill | Work expects every item as a ticket |
+| Decision                         | Choice                                                                                                        | Why                                                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Where personas live              | `~/.claude/agents/`, from this repo's `.claude/agents/`                                                       | User scope reaches every repo. A plugin would namespace them and drop `hooks:` / `permissionMode:` frontmatter                  |
+| Split mechanism                  | Rules for file-type domains, agents for judgment, skills for documents, hooks and permissions for enforcement | Each rule goes to the cheapest mechanism that applies it reliably                                                               |
+| Conflicts with existing guidance | Simplicity wins                                                                                               | Rewrite the conflicting rules to fire only at a real seam                                                                       |
+| Delegation                       | Substantial domain work only                                                                                  | "ALWAYS delegate" globally sends every README tweak through a subagent round-trip; small edits get the path-scoped rules anyway |
+| Work variants                    | A private work plugin, not this repo                                                                          | This repo is public (see `docs/design/claude-settings-split.md`); employer process stays in employer-owned git                  |
+| Work/personal detection          | Under `~/work` = work                                                                                         | The private work plugin already detects work trees this way                                                                     |
+| Personal tracker                 | GitHub issues in the repo the finding belongs to                                                              | The personal Notion has no integration; GitHub is the automatable one. `TODO.md` is migrated to issues                          |
+| Work tracker                     | The work plugin's ticket skill                                                                                | Work expects every item as a ticket                                                                                             |
 
 ## Layout
 
@@ -61,14 +61,14 @@ kept throughout.
 
 Path globs, matched relative to the project root:
 
-| Rule | `paths:` |
-|---|---|
-| `testing.md` | `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/spec/**`, `**/*_test.*`, `**/*.test.*`, `**/*.spec.*`, `**/test_*.py`, `**/conftest.py` |
-| `gherkin.md` | `**/*.feature` |
-| `migrations.md` | `**/migrations/**`, `**/migrate/**`, `**/alembic/**`, `**/*.sql` |
-| `api-contracts.md` | `**/*.proto`, `**/openapi*.{yaml,yml,json}`, `**/swagger*.{yaml,yml,json}`, `**/*.graphql`, `**/asyncapi*.{yaml,yml}` |
-| `delivery.md` | `.github/workflows/**`, `.gitlab-ci.yml`, `Jenkinsfile`, `.circleci/**`, `**/*.tf`, `**/*.tfvars`, `**/*.hcl`, `**/Chart.yaml`, `**/helm/**`, `**/k8s/**`, `**/kustomization.yaml`, `**/Dockerfile*`, `**/*compose*.{yml,yaml}` |
-| `docs.md` | `docs/**`, `**/README*`, `**/CHANGELOG*` |
+| Rule               | `paths:`                                                                                                                                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `testing.md`       | `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/spec/**`, `**/*_test.*`, `**/*.test.*`, `**/*.spec.*`, `**/test_*.py`, `**/conftest.py`                                                                                     |
+| `gherkin.md`       | `**/*.feature`                                                                                                                                                                                                                  |
+| `migrations.md`    | `**/migrations/**`, `**/migrate/**`, `**/alembic/**`, `**/*.sql`                                                                                                                                                                |
+| `api-contracts.md` | `**/*.proto`, `**/openapi*.{yaml,yml,json}`, `**/swagger*.{yaml,yml,json}`, `**/*.graphql`, `**/asyncapi*.{yaml,yml}`                                                                                                           |
+| `delivery.md`      | `.github/workflows/**`, `.gitlab-ci.yml`, `Jenkinsfile`, `.circleci/**`, `**/*.tf`, `**/*.tfvars`, `**/*.hcl`, `**/Chart.yaml`, `**/helm/**`, `**/k8s/**`, `**/kustomization.yaml`, `**/Dockerfile*`, `**/*compose*.{yml,yaml}` |
+| `docs.md`          | `docs/**`, `**/README*`, `**/CHANGELOG*`                                                                                                                                                                                        |
 
 Installation:
 
@@ -102,25 +102,25 @@ across the rules above.
 
 ## Content mapping
 
-| Source | Destination | Change |
-|---|---|---|
-| AGENTS.md: How to read | `core.md` | Kept |
-| AGENTS.md: Agent Conduct | `core.md`; Delegation → `delegation.md` | Kept |
-| AGENTS.md: Design, Implementation | `core.md` | Simplicity rewrites below |
-| AGENTS.md: Testing charter, gates, TDD, static-analysis suppression | `core.md` | They fire on source edits, so they cannot be test-path scoped. Gates become "every gate the project HAS configured" |
-| AGENTS.md: Unit, Regression, Mutation, Coverage, Test hygiene | `testing.md` | Mutation and coverage become the project's configured floor. Missing tooling is a finding, NOT something to add unasked |
-| AGENTS.md: Shift left | `core.md` | Local lint/test-before-push is dropped; the guardrails test gate enforces it |
-| AGENTS.md: Security baseline | `core.md` | Path reference fixed to the `security-engineer` agent |
-| AGENTS.md: Version Control | `core.md` | Cut to "commit messages explain WHY". The commit skill, deny list and default-branch guard enforce the rest |
-| AGENTS.md: Collaboration | `core.md` | Kept, plus the personal-context ownership line |
-| AGENTS.md: Personas table | removed | Agent `description` fields already drive selection |
-| zip CLAUDE.md: Orchestrator, Persona subagent | `delegation.md` | Delegation for substantial work. "Read the persona file IN FULL" applies only WHEN no path-scoped rule loaded for that domain |
-| architect: Contract, Behaviour | `api-contracts.md` | Rest stays in the agent |
-| data-engineer: Schema change, Migration testing | `migrations.md` | Rest stays |
-| qa-engineer: Gherkin | `gherkin.md` | Rest stays |
-| release-engineer: CI/CD, IaC, Twelve Factor | `delivery.md` | Fix Forward and Cost stay |
-| technical-writer: Principles | `docs.md` | Decision documents → `rfc` / `adr` / `mistakes` skills; operational documents stay |
-| sre | stays | Broadcast → `guardrails:mistakes`. Full post-mortem → the `post-mortem` skill the session context names; none in personal context |
+| Source                                                              | Destination                             | Change                                                                                                                            |
+| ------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| AGENTS.md: How to read                                              | `core.md`                               | Kept                                                                                                                              |
+| AGENTS.md: Agent Conduct                                            | `core.md`; Delegation → `delegation.md` | Kept                                                                                                                              |
+| AGENTS.md: Design, Implementation                                   | `core.md`                               | Simplicity rewrites below                                                                                                         |
+| AGENTS.md: Testing charter, gates, TDD, static-analysis suppression | `core.md`                               | They fire on source edits, so they cannot be test-path scoped. Gates become "every gate the project HAS configured"               |
+| AGENTS.md: Unit, Regression, Mutation, Coverage, Test hygiene       | `testing.md`                            | Mutation and coverage become the project's configured floor. Missing tooling is a finding, NOT something to add unasked           |
+| AGENTS.md: Shift left                                               | `core.md`                               | Local lint/test-before-push is dropped; the guardrails test gate enforces it                                                      |
+| AGENTS.md: Security baseline                                        | `core.md`                               | Path reference fixed to the `security-engineer` agent                                                                             |
+| AGENTS.md: Version Control                                          | `core.md`                               | Cut to "commit messages explain WHY". The commit skill, deny list and default-branch guard enforce the rest                       |
+| AGENTS.md: Collaboration                                            | `core.md`                               | Kept, plus the personal-context ownership line                                                                                    |
+| AGENTS.md: Personas table                                           | removed                                 | Agent `description` fields already drive selection                                                                                |
+| zip CLAUDE.md: Orchestrator, Persona subagent                       | `delegation.md`                         | Delegation for substantial work. "Read the persona file IN FULL" applies only WHEN no path-scoped rule loaded for that domain     |
+| architect: Contract, Behaviour                                      | `api-contracts.md`                      | Rest stays in the agent                                                                                                           |
+| data-engineer: Schema change, Migration testing                     | `migrations.md`                         | Rest stays                                                                                                                        |
+| qa-engineer: Gherkin                                                | `gherkin.md`                            | Rest stays                                                                                                                        |
+| release-engineer: CI/CD, IaC, Twelve Factor                         | `delivery.md`                           | Fix Forward and Cost stay                                                                                                         |
+| technical-writer: Principles                                        | `docs.md`                               | Decision documents → `rfc` / `adr` / `mistakes` skills; operational documents stay                                                |
+| sre                                                                 | stays                                   | Broadcast → `guardrails:mistakes`. Full post-mortem → the `post-mortem` skill the session context names; none in personal context |
 
 Simplicity rewrites:
 
@@ -188,12 +188,12 @@ scope", one list item each, each carrying its reference.
 
 ## Hooks
 
-| Script | Event, matcher | Behaviour | Failure mode |
-|---|---|---|---|
-| `persona-report.sh` | `SubagentStop`, `architect\|data-engineer\|qa-engineer\|release-engineer\|sre\|security-engineer\|technical-writer` | Blocks a final message lacking `## Result: DONE\|PARTIAL\|BLOCKED` or any of the six `###` headings; the reason carries the format | Allows when `stop_hook_active`. Fail-open without `jq` |
-| `findings-nudge.sh` | `PostToolUse`, the Agent tool | When the report's findings section has items, adds context: "N findings, track them before you finish" | Silent with no findings |
-| `findings-gate.sh` | `Stop` | Blocks once if any item in a findings section of the final message lacks `#N`, `ABC-N`, an issue URL or `(declined)` | Allows when `stop_hook_active`. `ponytail:` ceiling: findings under another heading pass |
-| `suppression-warn.sh` | `PostToolUse`, `Edit\|Write\|MultiEdit` | Warns, never blocks, on added `.skip(`, `xit(`, `@pytest.mark.skip`, `t.Skip(`, `# noqa`, `eslint-disable`, `@ts-ignore`, `type: ignore`, `as any`, `nolint` | Same shape as `comment-warn.sh`; markdown ignored |
+| Script                | Event, matcher                                                                                                      | Behaviour                                                                                                                                                    | Failure mode                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `persona-report.sh`   | `SubagentStop`, `architect\|data-engineer\|qa-engineer\|release-engineer\|sre\|security-engineer\|technical-writer` | Blocks a final message lacking `## Result: DONE\|PARTIAL\|BLOCKED` or any of the six `###` headings; the reason carries the format                           | Allows when `stop_hook_active`. Fail-open without `jq`                                   |
+| `findings-nudge.sh`   | `PostToolUse`, the Agent tool                                                                                       | When the report's findings section has items, adds context: "N findings, track them before you finish"                                                       | Silent with no findings                                                                  |
+| `findings-gate.sh`    | `Stop`                                                                                                              | Blocks once if any item in a findings section of the final message lacks `#N`, `ABC-N`, an issue URL or `(declined)`                                         | Allows when `stop_hook_active`. `ponytail:` ceiling: findings under another heading pass |
+| `suppression-warn.sh` | `PostToolUse`, `Edit\|Write\|MultiEdit`                                                                             | Warns, never blocks, on added `.skip(`, `xit(`, `@pytest.mark.skip`, `t.Skip(`, `# noqa`, `eslint-disable`, `@ts-ignore`, `type: ignore`, `as any`, `nolint` | Same shape as `comment-warn.sh`; markdown ignored                                        |
 
 The three findings scripts share `lib/findings.sh`, which extracts the items of a findings
 section.
@@ -243,6 +243,7 @@ command:
   - every rule's frontmatter parses.
 
   This is the check that would have caught the draft's dangling references.
+
 - **Work plugin.** Its own `tests/test_work_context.sh`: context under `~/work`, silent
   elsewhere.
 
