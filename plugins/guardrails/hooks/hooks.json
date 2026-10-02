@@ -32,6 +32,12 @@
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/findings-capture.sh", "timeout": 10 }
         ]
+      },
+      {
+        "matcher": "architect|data-engineer|qa-engineer|release-engineer|sre|security-engineer|technical-writer",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/persona-report.sh", "timeout": 10 }
+        ]
       }
     ],
     "SessionStart": [
