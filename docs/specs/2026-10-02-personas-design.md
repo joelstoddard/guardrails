@@ -55,7 +55,7 @@ kept throughout.
   skills/rfc/           personal RFC → docs/specs/YYYY-MM-DD-<topic>-design.md
   skills/adr/           personal ADR → docs/design/<concept>.md
   skills/track-findings/ file each finding in the session's tracker
-  hooks/scripts/{persona-report,findings-nudge,findings-gate,suppression-warn}.sh
+  hooks/scripts/{persona-report,findings-capture,findings-gate,suppression-warn}.sh
   lib/findings.sh
 ```
 
@@ -76,7 +76,7 @@ Installation:
   each whole directory. No `.stow-local-ignore` change. `scripts/verify.py` gains both
   paths in its linked list.
 - **Home Manager (PR #85, unmerged).** It needs two `mkOutOfStoreSymlink` lines in
-  `home/claude.nix`, one per directory. They belong on that branch, so PR 1 lists them
+  `home/claude.nix`, one per directory. They belong on that branch, so PR 3 lists them
   in its description rather than adding a cross-branch dependency.
 - **Double load in this repo.** Here `.claude/rules/` and `.claude/agents/` are also
   project scope. Live check 3 confirms whether Claude Code dedupes by real path, as it
@@ -111,8 +111,8 @@ across the rules above.
 | AGENTS.md: Unit, Regression, Mutation, Coverage, Test hygiene       | `testing.md`                            | Mutation and coverage become the project's configured floor. Missing tooling is a finding, NOT something to add unasked           |
 | AGENTS.md: Shift left                                               | `core.md`                               | Local lint/test-before-push is dropped; the guardrails test gate enforces it                                                      |
 | AGENTS.md: Security baseline                                        | `core.md`                               | Path reference fixed to the `security-engineer` agent                                                                             |
-| AGENTS.md: Version Control                                          | `core.md`                               | Cut to "commit messages explain WHY". The commit skill, deny list and default-branch guard enforce the rest                       |
-| AGENTS.md: Collaboration                                            | `core.md`                               | Kept, plus the personal-context ownership line                                                                                    |
+| AGENTS.md: Version Control                                          | `core.md`                               | Cut to "commit messages explain WHY" and "NEVER commit secrets, generated artefacts, OR large binaries"; nothing else enforces the latter. The commit skill, deny list and default-branch guard enforce the rest |
+| AGENTS.md: Collaboration                                            | `core.md`                               | Kept, plus the personal-context ownership line. PR descriptions go through `guardrails:draft-pr`, replacing "the user opens AND sends them" |
 | AGENTS.md: Personas table                                           | removed                                 | Agent `description` fields already drive selection                                                                                |
 | zip CLAUDE.md: Orchestrator, Persona subagent                       | `delegation.md`                         | Delegation for substantial work. "Read the persona file IN FULL" applies only WHEN no path-scoped rule loaded for that domain     |
 | architect: Contract, Behaviour                                      | `api-contracts.md`                      | Rest stays in the agent                                                                                                           |
@@ -133,6 +133,8 @@ Simplicity rewrites:
   third-party calls at the edges. Wrap ONLY WHEN a test OR a second implementation needs it."
 - "IF a constraint does not exist, ALWAYS add it BEFORE changing behaviour" → "ALWAYS leave
   the ONE smallest check that fails if the logic breaks. Propose larger gates as findings."
+- TDD → applies to non-trivial logic (a branch, a loop, a parser, a money OR security path).
+  Trivial one-liners need no test.
 
 Personal-context ownership (`core.md`): "Outside `~/work`, the user owns every service,
 alert, API and debt item. Do NOT ask who owns it." Without it every "IF the owner is
@@ -143,6 +145,8 @@ Every agent:
 - Its header points at `core.md` and `delegation.md`.
 - Its `tools:` gains `Skill`, so it can use the document skills.
 - It keeps "IF you cannot see the core principles, STOP AND return BLOCKED" as a tripwire.
+- It reads its domain rule file IN FULL before starting. Otherwise a persona that never
+  reads a matching file never sees the rules that moved out of it.
 
 ## Skills
 
@@ -159,8 +163,9 @@ It names the audience and hands the draft over. It never sends it. Lessons route
 `guardrails:project-memory` (repo) or `guardrails:self-improvement` (skill).
 
 **`rfc` / `adr`.** Personal variants that write to the repo's existing conventions:
-`docs/specs/YYYY-MM-DD-<topic>-design.md` and `docs/design/<concept>.md`. An accepted ADR
-is superseded, NEVER edited.
+`docs/specs/YYYY-MM-DD-<topic>-design.md` and `docs/design/<concept>.md`. A personal ADR
+is updated in place AND the stale version deleted, per the user's convention. Work ADRs
+are superseded, NEVER edited.
 
 **`track-findings`.** For each finding:
 
@@ -174,29 +179,35 @@ It uses the tracker the session context names, or GitHub issues by default. It f
 the repo the finding belongs to. IF the user cannot write to that repo, it asks which
 repo to use.
 
+In a repo the user owns personally (`isInOrganization` false AND admin), it files at the
+permission prompt. Anywhere else, including every work tracker, it asks in chat first AND
+marks the finding `(asked)` until the user answers. The user decided this on 2026-10-02,
+because other developers may not want AI-filed issues.
+
 No skill may use `$(` anywhere in its file; the guardrails preamble test enforces this,
 because a worktree-isolated session refuses command substitution.
 
 ## Tracking findings
 
 Rule (`core.md`): "NEVER leave a finding only in chat. BEFORE ending your turn, ALWAYS
-file every finding outside scope with `guardrails:track-findings`, OR mark it `(declined)`
-WHEN the user says no." Findings appear under a heading containing "Findings outside
-scope", one list item each, each carrying its reference.
+file every finding outside scope with `guardrails:track-findings`, mark it `(asked)` while
+the user decides, OR mark it `(declined)` WHEN the user says no." Findings appear under a
+heading containing "Findings outside scope", one list item each, each line ending with its
+reference.
 
-`findings-nudge` and `findings-gate` (below) enforce it deterministically.
+`findings-capture` and `findings-gate` (below) enforce it deterministically.
 
 ## Hooks
 
 | Script                | Event, matcher                                                                                                      | Behaviour                                                                                                                                                    | Failure mode                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | `persona-report.sh`   | `SubagentStop`, `architect\|data-engineer\|qa-engineer\|release-engineer\|sre\|security-engineer\|technical-writer` | Blocks a final message lacking `## Result: DONE\|PARTIAL\|BLOCKED` or any of the six `###` headings; the reason carries the format                           | Allows when `stop_hook_active`. Fail-open without `jq`                                   |
-| `findings-nudge.sh`   | `PostToolUse`, the Agent tool                                                                                       | When the report's findings section has items, adds context: "N findings, track them before you finish"                                                       | Silent with no findings                                                                  |
-| `findings-gate.sh`    | `Stop`                                                                                                              | Blocks once if any item in a findings section of the final message lacks `#N`, `ABC-N`, an issue URL or `(declined)`                                         | Allows when `stop_hook_active`. `ponytail:` ceiling: findings under another heading pass |
-| `suppression-warn.sh` | `PostToolUse`, `Edit\|Write\|MultiEdit`                                                                             | Warns, never blocks, on added `.skip(`, `xit(`, `@pytest.mark.skip`, `t.Skip(`, `# noqa`, `eslint-disable`, `@ts-ignore`, `type: ignore`, `as any`, `nolint` | Same shape as `comment-warn.sh`; markdown ignored                                        |
+| `findings-capture.sh` | `SubagentStop`, all agents                                                                                          | Appends the report's findings to a per-session pending file that `findings-gate` surfaces at the next `Stop`                                                 | A background subagent's report never reaches a main-session hook (live check 5). Unsafe session ids are ignored |
+| `findings-gate.sh`    | `Stop`                                                                                                              | Blocks once if any item in a findings section of the final message does not end with an issue URL, `#N`, `owner/repo#N`, `(asked)` or `(declined)`, AND lists pending subagent findings, consuming them | Allows when `stop_hook_active`. `ponytail:` ceiling: findings under another heading pass |
+| `suppression-warn.sh` | `PostToolUse`, `Edit\|Write\|MultiEdit`                                                                             | Warns, never blocks, on added `it\|test\|describe\|context\|suite.skip(`, `xit(`, `@pytest.mark.skip`, `t.Skip(`, `# noqa`, `eslint-disable`, `@ts-ignore`, `type: ignore`, `as any`, `nolint` | Same shape as `comment-warn.sh`; markdown ignored                                        |
 
-The three findings scripts share `lib/findings.sh`, which extracts the items of a findings
-section.
+The findings scripts share `lib/findings.sh`, which extracts the items of a findings
+section and names the per-session pending file.
 
 ## Work layer
 
@@ -220,8 +231,9 @@ The public layer never names the work plugin. It reads whatever the session cont
 - Ask is added for `terraform apply`, `tofu apply`, `kubectl apply`, `kubectl delete`,
   `helm install`, `helm upgrade`, `helm uninstall`, `pulumi up` and `git tag`. These are
   the deterministic form of the personas' "NEVER apply / deploy / tag without approval".
-- The gitignored `autoMode.hard_deny` prose gains a matching carve-out for an issue or
-  ticket approved at an ask prompt. This is a local edit, never committed.
+- The gitignored `autoMode.hard_deny` prose gains a matching carve-out. It covers only repos
+  the user owns personally, AND requires asking in chat first anywhere else. This is a local
+  edit, never committed.
 
 ## Verification
 
@@ -232,9 +244,12 @@ command:
   `helper.sh`.
   - `test_persona_report.sh`: valid report passes; missing `## Result`, missing heading
     and bad status are blocked; `stop_hook_active` passes.
-  - `test_findings.sh`: the parser handles bullets, numbered items and "None"; the gate
-    blocks an untracked item and passes `#12`, `ABC-123`, a URL and `(declined)`; the
-    nudge counts items.
+  - `test_findings.sh`: the parser handles bullets, numbered items, "None" and fenced
+    examples. An end-of-line `#12`, issue URL, `(asked)` and `(declined)` count as tracked;
+    a mid-line `#85` does not.
+  - `test_findings_hooks.sh`: the gate blocks an untracked item once. Capture keeps a
+    subagent's findings per session, and the gate surfaces them once and consumes them.
+    An unsafe session id is ignored.
   - `test_suppression_warn.sh`: each pattern warns, markdown is ignored, nothing blocks.
 - **Consistency.** `test/unit/test_personas.py` (Python `unittest`, like its neighbours):
   - every `guardrails:` skill named in an agent or rule exists;
@@ -259,15 +274,25 @@ the worktree, removed afterwards, and their results go in the PR:
 IF check 1 fails, personas preload the core rules through `skills:` instead. That switch
 is the user's call.
 
+Results, 2026-10-02: checks 1–3 pass, and `last_assistant_message` is on both `Stop` and
+`SubagentStop`. Check 4 changed the design. The Agent tool's `PostToolUse` response is the
+async launch record, not the report, even with `background: false`, so findings are
+captured at `SubagentStop` instead. `SubagentStop`'s `session_id` is the parent's. Rules
+load once: 24,337 context tokens with no rule, 25,929 with it at project scope, 25,928
+with it at both scopes.
+
 ## Delivery
 
 A stack of draft PRs:
 
-1. Rules, agents, `verify.py`, `test_personas.py`.
+1. Permissions.
 2. guardrails skills and hooks, `0.11.0`.
-3. Permissions.
+3. Rules, agents, `verify.py`, `test_personas.py`.
 4. `TODO.md` → GitHub issues, one approval each; then remove `TODO.md`, its
    `.stow-local-ignore` entry and the `~/TODO.md` symlink.
+
+The findings gate needs `gh issue create` askable before it can demand issues, and the
+rules name skills the plugin adds. That fixes the order.
 
 The work plugin gets local commits; it has no remote.
 
