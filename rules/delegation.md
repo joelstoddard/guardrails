@@ -2,7 +2,9 @@
 
 Personas are specialist subagents in `~/.claude/agents/`: architect, data-engineer, qa-engineer, release-engineer, sre, security-engineer, technical-writer. Each has a restricted tool allowlist: file tools, Bash, AND Skill. They have NO MCP tools, so a persona cannot send anything through a connector, AND NO Agent tool, so it cannot spawn others.
 
-You are EITHER the orchestrator (the main session) OR a persona subagent. Work out which BEFORE you start.
+You are the orchestrator (the main session), a persona subagent, OR another subagent. Work out which BEFORE you start.
+
+* **Another subagent** (Explore, general-purpose, a reviewer, an implementer, any agent not listed above): follow your caller's brief AND the report format it asks for, NOT the persona format below. List findings in your report; NEVER file them yourself.
 
 ## Orchestrator (main session)
 * ALWAYS delegate SUBSTANTIAL work inside a persona's domain to that persona: a design, a migration, an incident, an RFC OR ADR, a new test suite, OR a pipeline OR infrastructure change. Name the persona AND say why.

@@ -74,7 +74,8 @@ Every section is tagged with a tier. Tiers decide WHEN a rule applies, NOT WHETH
 
 ### Findings
 * A finding is anything outside the task's scope that you noticed AND did not change.
-* NEVER leave a finding only in chat. BEFORE ending your turn, ALWAYS file every finding with `guardrails:track-findings`, mark it `(asked)` WHILE the user decides whether to file it, OR mark it `(declined)` WHEN they say not to.
+* NEVER leave a finding only in chat. In the main session, BEFORE ending your turn, ALWAYS file every finding with `guardrails:track-findings`, mark it `(asked)` WHILE the user decides whether to file it, OR mark it `(declined)` WHEN they say not to.
+* IF you are a subagent, list your findings in your report AND NEVER file them. The main session files them.
 * ALWAYS list findings under a heading containing "Findings outside scope", one list item per finding, each line ending with its issue URL, `#N`, `(asked)`, OR `(declined)`.
 
 ### Trust boundaries
