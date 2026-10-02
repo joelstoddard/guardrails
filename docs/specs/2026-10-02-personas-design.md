@@ -83,6 +83,20 @@ Installation:
   appears to for `.claude/CLAUDE.md`.
 - guardrails bumps to `0.11.0`, in `plugin.json` and the marketplace `metadata.version`.
 
+Platform behaviour this relies on (code.claude.com/docs/en/memory and /sub-agents):
+
+- **Same-name agents.** The project copy wins over `~/.claude/agents/`, so a repo can
+  shadow a persona.
+- **Rules merge.** User and project rules merge, and "Claude may follow either one" on
+  conflict. A project rule that contradicts `core.md` is ambiguous, not an override.
+- **Broken frontmatter.** It is ignored silently and the rule loads unscoped.
+  `test_personas.py` guards this.
+- **Symlinks.** User-scope files are trusted, so symlinked `~/.claude/rules/` and
+  `~/.claude/agents/` load in the CLI. Cowork desktop sessions skip a symlinked
+  `~/.claude/rules/` or `~/.claude/CLAUDE.md`.
+- **First creation.** A running session does not see a newly created `~/.claude/agents/`
+  until restart.
+
 The zip's `CLAUDE.md` and `AGENTS.md` are not carried as files. Their content is spread
 across the rules above.
 
