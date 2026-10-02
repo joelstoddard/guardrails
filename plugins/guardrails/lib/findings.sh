@@ -30,3 +30,10 @@ _guardrails_findings() {
 _guardrails_untracked() {
   _guardrails_findings "$1" | grep -vE -- "$_GUARDRAILS_TRACKED_RE"
 }
+
+# _guardrails_findings_file <session_id> → where SubagentStop keeps findings for the Stop gate.
+# Fails on an id that is not a plain token, so a crafted id cannot point outside the dir.
+_guardrails_findings_file() {
+  case "$1" in "" | *[!A-Za-z0-9_-]*) return 1 ;; esac
+  printf '%s/claude-guardrails/findings/%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}" "$1"
+}
