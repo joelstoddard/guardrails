@@ -45,6 +45,20 @@ assert_eq "1" "$(printf '%s' "$OUT" | grep -o 'Retries are unbounded' | grep -c 
 run_hook "$GATE" "$(stop 'All done.')"
 assert_eq "" "$OUT" "consumed findings do not block again"
 
+run_hook "$CAPTURE" "$(sub "$report")"
+run_hook "$GATE" "$(stop 'Filed both.
+### Findings outside scope
+- Retries are unbounded https://github.com/o/r/issues/7
+- TTL unset (asked)')"
+assert_eq "" "$OUT" "a pending finding the final message already tracks does not block"
+[ -e "$PENDING" ] && { echo "  FAIL [tracked pending findings are still consumed]"; FAILS=1; }
+
+run_hook "$CAPTURE" "$(sub "$report")"
+run_hook "$GATE" "$(stop '### Findings outside scope
+- Retries are unbounded https://github.com/o/r/issues/7')"
+assert_out "[sre] TTL unset" "only the pending finding left untracked is listed"
+assert_eq "0" "$(printf '%s' "$OUT" | grep -c 'Retries are unbounded')" "the tracked one is not"
+
 run_hook "$CAPTURE" "$(sub "$report" '../escape')"
 [ -e "$XDG_STATE_HOME/claude-guardrails/escape" ] && { echo "  FAIL [unsafe session id is ignored]"; FAILS=1; }
 

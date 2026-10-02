@@ -8,9 +8,13 @@ input="$(cat)"
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ] && exit 0
 msg="$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)"
 
+tracked="$(_guardrails_findings "$msg" | grep -E -- "$_GUARDRAILS_TRACKED_RE")"
 pending=""
 if file="$(_guardrails_findings_file "$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)")" && [ -f "$file" ]; then
-  pending="$(awk '!seen[$0]++' "$file")"
+  # A subagent's finding the final message already carries with a reference is done.
+  pending="$(awk '!seen[$0]++' "$file" | while IFS= read -r p; do
+    printf '%s\n' "$tracked" | grep -qF -- "${p#\[*\] }" || printf '%s\n' "$p"
+  done)"
   rm -f "$file"
 fi
 # ponytail: reads only a "Findings outside scope" heading; findings written under another heading pass.
