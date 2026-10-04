@@ -1,6 +1,6 @@
 # Extracting a command from an agent doc
 
-`.claude/marketplace/plugins/guardrails/lib/repo-cmd.sh` answers one question for
+`plugins/building/lib/repo-cmd.sh` answers one question for
 the guardrail hooks: which command does this repo use to run its tests, or its
 linter? The answer comes from a labelled line in the repo's `AGENTS.md`, with
 `CLAUDE.md` as the fallback:

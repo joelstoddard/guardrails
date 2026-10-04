@@ -1,5 +1,9 @@
 # Personas: global specialist subagents, split into rules, skills and hooks
 
+> Layout superseded: the personas now ship as the `personas` plugin in this repo, not
+> as files linked into `~/.claude/agents/`. The dotfiles spec
+> `docs/specs/2026-10-04-guardrails-repo-split-design.md` records the move.
+
 ## Problem
 
 A first draft of seven specialist personas (architect, data-engineer, qa-engineer,
@@ -26,7 +30,7 @@ kept throughout.
 
 | Decision                         | Choice                                                                                                        | Why                                                                                                                             |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Where personas live              | `~/.claude/agents/`, from this repo's `.claude/agents/`                                                       | User scope reaches every repo. A plugin would namespace them and drop `hooks:` / `permissionMode:` frontmatter                  |
+| Where personas live              | The `personas` plugin (`plugins/personas/agents/`)                                                            | Reachable from every repo once installed; agents are namespaced as `personas:<name>`. They use only `tools` and `model` frontmatter, so nothing a plugin drops |
 | Split mechanism                  | Rules for file-type domains, agents for judgment, skills for documents, hooks and permissions for enforcement | Each rule goes to the cheapest mechanism that applies it reliably                                                               |
 | Conflicts with existing guidance | Simplicity wins                                                                                               | Rewrite the conflicting rules to fire only at a real seam                                                                       |
 | Delegation                       | Substantial domain work only                                                                                  | "ALWAYS delegate" globally sends every README tweak through a subagent round-trip; small edits get the path-scoped rules anyway |
@@ -76,7 +80,7 @@ Installation:
   each whole directory. No `.stow-local-ignore` change. `scripts/verify.py` gains both
   paths in its linked list.
 - **Home Manager (PR #85, unmerged).** It needs two `mkOutOfStoreSymlink` lines in
-  `home/claude.nix`, one per directory. They belong on that branch, so PR 3 lists them
+  [`home/claude.nix`](https://github.com/joelstoddard/dotfiles/blob/main/home/claude.nix), one per directory. They belong on that branch, so PR 3 lists them
   in its description rather than adding a cross-branch dependency.
 - **Double load in this repo.** Here `.claude/rules/` and `.claude/agents/` are also
   project scope. Live check 3 confirms whether Claude Code dedupes by real path, as it
@@ -251,7 +255,7 @@ command:
     subagent's findings per session, and the gate surfaces them once and consumes them.
     An unsafe session id is ignored.
   - `test_suppression_warn.sh`: each pattern warns, markdown is ignored, nothing blocks.
-- **Consistency.** `test/unit/test_personas.py` (Python `unittest`, like its neighbours):
+- **Consistency.** `tests/test_agents.py`, ported from the dotfiles' `test/unit/test_personas.py` (Python `unittest`, like its neighbours):
   - every `guardrails:` skill named in an agent or rule exists;
   - the `SubagentStop` matcher and the agent files list the same personas;
   - every agent has `name`, `description` and `tools`;

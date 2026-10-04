@@ -1,11 +1,11 @@
 # Auto-allowing read-only `gh api` calls
 
-Paths below are relative to `.claude/marketplace/plugins/guardrails/` unless they
-start with `.claude/` or `docs/`.
+Paths below are relative to `plugins/building/` unless they
+start with `tests/` or `docs/`, which sit at the repo root.
 
 ## The problem
 
-`Bash(gh api:*)` sits in the `ask` tier of `.claude/user-settings.json`. Permission
+`Bash(gh api:*)` sits in the `ask` tier of [the dotfiles' `.claude/user-settings.json`](https://github.com/joelstoddard/dotfiles/blob/main/.claude/user-settings.json). Permission
 rules match a command prefix, and the prefix `gh api` looks the same for a GET and
 for a POST, so every `gh api` call prompts. In auto mode that prompt is the one
 thing the classifier cannot clear, so a session reading PR review comments stalls

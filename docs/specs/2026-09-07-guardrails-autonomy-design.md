@@ -238,7 +238,7 @@ mechanisms on two branches, both are updated:
 | Branch | File | Mechanism |
 |---|---|---|
 | `feat/guardrails-autonomy` | `.config/git/ignore` | stow, current installer |
-| `feat/nix-home-manager-flake` (PR #85) | `home/git.nix`, `ignores` list | Home Manager |
+| `feat/nix-home-manager-flake` (PR #85) | [`home/git.nix`](https://github.com/joelstoddard/dotfiles/blob/main/home/git.nix), `ignores` list | Home Manager |
 
 The nix branch is where the live `~/.config/git/ignore` symlink currently
 resolves, so without the second change the ignore has no effect today; without
@@ -269,7 +269,7 @@ commit the directory.
 ```
 
 Plus one commit on `feat/nix-home-manager-flake` adding the same ignore entry to
-`home/git.nix`.
+[`home/git.nix`](https://github.com/joelstoddard/dotfiles/blob/main/home/git.nix).
 
 ## Testing
 
