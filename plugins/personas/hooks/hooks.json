@@ -2,7 +2,7 @@
   "hooks": {
     "SubagentStop": [
       {
-        "matcher": "architect|data-engineer|qa-engineer|release-engineer|sre|security-engineer|technical-writer",
+        "matcher": "personas:architect|personas:data-engineer|personas:qa-engineer|personas:release-engineer|personas:sre|personas:security-engineer|personas:technical-writer",
         "hooks": [
           {
             "type": "command",
