@@ -6,27 +6,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/guard-publish.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/guard-publish.sh\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/allow-gh-api-read.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/allow-gh-api-read.sh\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/guard-default-branch.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/guard-default-branch.sh\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/lint-warn.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/lint-warn.sh\"",
             "timeout": 60
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/test-gate.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/test-gate.sh\"",
             "timeout": 600
           }
         ]
@@ -38,12 +38,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/comment-warn.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/comment-warn.sh\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/suppression-warn.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/suppression-warn.sh\"",
             "timeout": 10
           }
         ]
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-merge-cleanup.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-merge-cleanup.sh\"",
             "timeout": 20
           }
         ]
