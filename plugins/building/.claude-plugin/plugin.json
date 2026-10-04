@@ -1,5 +1,5 @@
 {
   "name": "building",
-  "description": "Guardrails and workflow skills for building a change: block publishing as the user, auto-allow read-only gh api, block commits on the default branch, gate tests on push, warn on lint, suppressions and long comments, report merged worktrees, and drive commit / rebase / stacked-diffs / draft-pr / ci-watch / pre-pr-check / pre-pr-review / concise-comments / biases / use-venv.",
+  "description": "Guardrails and workflow skills for building a change: block publishing as the user, auto-allow read-only gh api, block commits on the default branch, gate tests on push, warn on lint, suppressions and long comments, report merged worktrees, and drive commit / rebase / stacked-diffs / draft-pr / ci-watch / pre-pr-check / concise-comments / biases / use-venv.",
   "author": { "name": "Joel Stoddard Turvey" }
 }
