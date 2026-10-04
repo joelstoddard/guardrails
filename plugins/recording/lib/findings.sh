@@ -5,7 +5,9 @@
 #        _guardrails_untracked "<text>" → the findings whose line does not end with a reference
 
 # A reference counts only at the end of the item, so a mid-sentence "PR #85" is not one.
-_GUARDRAILS_TRACKED_RE='(github\.com/[^[:space:]]+/issues/[0-9]+|linear\.app/[^[:space:]]+/issue/[A-Za-z0-9-]+[^[:space:]]*|(^|[^A-Za-z0-9&])#[0-9]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+|\((declined|asked)\))[]).>]*[[:space:]]*$'
+# Matched against lowercased text, as is the PR reference, which marks a pull request, not an issue.
+_GUARDRAILS_TRACKED_RE='(github\.com/[^[:space:]]+/issues/[0-9]+|linear\.app/[^[:space:]]+/issue/[a-z0-9-]+[^[:space:]]*|(^|[^a-z0-9&])#[0-9]+|[a-z0-9_.-]+/[a-z0-9_.-]+#[0-9]+|\((declined|asked)\))[]).>]*[[:space:]]*$'
+_GUARDRAILS_PR_RE='pr[[:space:]]+([a-z0-9_.-]+/[a-z0-9_.-]+)?#[0-9]+[]).>]*[[:space:]]*$'
 
 # _guardrails_unfence <text> → the text without its closed code fences. A fence closes only on the
 # same character, at least as long; an unclosed fence stays as text, so nothing after it is hidden.
@@ -55,8 +57,17 @@ _guardrails_findings() {
     END { flush() }'
 }
 
+# _guardrails_split tracked|untracked → of the findings on stdin, the ones that are (or are not) tracked.
+# ENVIRON, not awk -v, carries the patterns, because -v would expand their backslashes.
+_guardrails_split() {
+  W="$1" T="$_GUARDRAILS_TRACKED_RE" P="$_GUARDRAILS_PR_RE" awk '{
+    l = tolower($0); t = (l ~ ENVIRON["T"] && l !~ ENVIRON["P"])
+    if (t == (ENVIRON["W"] == "tracked")) print
+  }'
+}
+
 _guardrails_untracked() {
-  _guardrails_findings "$1" | grep -vE -- "$_GUARDRAILS_TRACKED_RE"
+  _guardrails_findings "$1" | _guardrails_split untracked
 }
 
 # _guardrails_findings_file <session_id> → where SubagentStop keeps findings for the Stop gate.

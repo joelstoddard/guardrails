@@ -94,10 +94,16 @@ tracked='### Findings outside scope
 - Shared repo, waiting on the user (asked)
 - PR #85 needs two lines in home/claude.nix
 - Strings use UTF-8
-- Ends with #1 priority bug'
+- Ends with #1 priority bug
+- Fixed already in PR #85
+- Fixed already in PR o/r#86.
+- Waiting on the user (Asked)
+- Not wanted (DECLINED)'
 OUT="$(_guardrails_untracked "$tracked")"
 assert_eq "PR #85 needs two lines in home/claude.nix
 Strings use UTF-8
-Ends with #1 priority bug" "$OUT" "only an end-of-line reference tracks; mid-line #N is untracked"
+Ends with #1 priority bug
+Fixed already in PR #85
+Fixed already in PR o/r#86." "$OUT" "only an end-of-line issue reference or marker tracks: not mid-line #N, not a PR, any case"
 
 finish "findings"

@@ -8,7 +8,7 @@ input="$(cat)"
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ] && exit 0
 msg="$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)"
 
-tracked="$(_guardrails_findings "$msg" | grep -E -- "$_GUARDRAILS_TRACKED_RE")"
+tracked="$(_guardrails_findings "$msg" | _guardrails_split tracked)"
 pending=""
 if file="$(_guardrails_findings_file "$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)")" && [ -f "$file" ]; then
   # A subagent's finding the final message already carries with a reference is done.
