@@ -42,8 +42,10 @@ class Agents(unittest.TestCase):
             if any("persona-report.sh" in h["command"] for h in entry["hooks"])
         ]
         self.assertEqual(len(matchers), 1)
-        names = {alt.split(":")[-1] for alt in matchers[0].split("|")}
-        self.assertEqual(names, {p.stem for p in agents()})
+        alternatives = matchers[0].split("|")
+        # Plugin agents report as personas:<name>; a bare name never matches, so the hook would go silent.
+        self.assertTrue(all(alt.startswith("personas:") for alt in alternatives), matchers[0])
+        self.assertEqual({alt.split(":", 1)[1] for alt in alternatives}, {p.stem for p in agents()})
 
 
 if __name__ == "__main__":
