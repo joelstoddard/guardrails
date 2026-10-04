@@ -114,7 +114,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 * NEVER leave knowledge only in your context window. Write it down where the next reader will look.
 * ALWAYS ask WHEN blocked or uncertain, NOT after building the wrong thing.
 * ALWAYS track technical debt explicitly, as an issue in the session's tracker, with an owner AND a cost of delay. NEVER hide it. IF the owner is unknown, ask; NEVER invent one.
-* ALWAYS deprecate with a timeline, a migration path, AND a removal date. NEVER remove without notice.
+* ALWAYS deprecate a published interface (an API, CLI flag, config key, OR file format that others depend on) with a timeline, a migration path, AND a removal date. NEVER remove one without notice. Code your own change made unused is NOT a published interface; remove it.
 * ALWAYS pay down the debt you touch, WITHIN the scope of the task.
 * ALWAYS respond to review feedback by fixing the cause, NOT by arguing the check away.
 * ALWAYS define ownership. EVERY service, API, AND alert MUST have a named owning team. IF it is unknown, ask; NEVER invent one.
