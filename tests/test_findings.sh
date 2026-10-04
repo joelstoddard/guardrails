@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-. "$DIR/../lib/findings.sh"
+. "$DIR/../plugins/recording/lib/findings.sh"
 
 report='## Result: DONE
 ### Changes

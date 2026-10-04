@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-GATE="$DIR/../hooks/scripts/findings-gate.sh"
-CAPTURE="$DIR/../hooks/scripts/findings-capture.sh"
+GATE="$DIR/../plugins/recording/hooks/scripts/findings-gate.sh"
+CAPTURE="$DIR/../plugins/recording/hooks/scripts/findings-capture.sh"
 export XDG_STATE_HOME="$(mktemp -d)"
 PENDING="$XDG_STATE_HOME/claude-guardrails/findings/s1"
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-S="$DIR/../hooks/scripts/allow-gh-api-read.sh"
+S="$DIR/../plugins/building/hooks/scripts/allow-gh-api-read.sh"
 
 json() { jq -nc --arg c "$1" '{tool_input:{command:$c}}'; }
 # allows <cmdline> <label> — the hook must answer with an allow decision.

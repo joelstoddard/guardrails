@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-. "$DIR/../lib/publish-cmd.sh"
+. "$DIR/../plugins/building/lib/publish-cmd.sh"
 
 # blocks <cmdline> <label> — expects the command to be judged as publishing
 blocks() {

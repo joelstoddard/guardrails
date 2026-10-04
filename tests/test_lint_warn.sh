@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-S="$DIR/../hooks/scripts/lint-warn.sh"
+S="$DIR/../plugins/building/hooks/scripts/lint-warn.sh"
 json() { printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$1" "$2"; }
 
 # Failing lint on commit → NEVER blocks (rc 0) but emits a warning on stdout

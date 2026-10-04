@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-S="$DIR/../hooks/scripts/guard-publish.sh"
+S="$DIR/../plugins/building/hooks/scripts/guard-publish.sh"
 
 json() { printf '{"tool_input":{"command":"%s"}}' "$1"; }
 

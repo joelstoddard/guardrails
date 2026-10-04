@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-. "$DIR/../lib/git-cmd.sh"
+. "$DIR/../plugins/building/lib/git-cmd.sh"
 
 yes() { _guardrails_invokes_git "$1" "$2"; RC=$?; assert_rc 0 "$3"; }
 no()  { _guardrails_invokes_git "$1" "$2"; RC=$?; assert_rc 1 "$3"; }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-S="$DIR/../hooks/scripts/test-gate.sh"
+S="$DIR/../plugins/building/hooks/scripts/test-gate.sh"
 json() { printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$1" "$2"; }
 
 # Repo with a passing test command → push allowed

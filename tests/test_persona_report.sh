@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-S="$DIR/../hooks/scripts/persona-report.sh"
+S="$DIR/../plugins/personas/hooks/scripts/persona-report.sh"
 
 stop() { jq -n --arg m "$1" --argjson a "${2:-false}" '{agent_type:"architect", last_assistant_message:$m, stop_hook_active:$a}'; }
 

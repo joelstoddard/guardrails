@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-HOOK="$DIR/../hooks/scripts/lessons-nudge.sh"
+HOOK="$DIR/../plugins/recording/hooks/scripts/lessons-nudge.sh"
 
 old="$(date -v-30d +%F 2>/dev/null || date -d '30 days ago' +%F)"
 new="$(date -v-1d  +%F 2>/dev/null || date -d '1 day ago'   +%F)"

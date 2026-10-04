@@ -4,11 +4,10 @@
 # and || stay permitted.
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-SKILLS="$DIR/../skills"
 
 # Checks the whole file, not just preamble lines: prose that tells an agent to run a
 # command is refused the same way a preamble command is.
-for f in "$SKILLS"/*/SKILL.md; do
+for f in "$DIR"/../plugins/*/skills/*/SKILL.md; do
   name="$(basename "$(dirname "$f")")"
   n=0
   while IFS= read -r line; do

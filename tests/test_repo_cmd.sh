@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-. "$DIR/../lib/repo-cmd.sh"
+. "$DIR/../plugins/building/lib/repo-cmd.sh"
 
 # Repo whose AGENTS.md documents test + lint as labelled inline-code lines
 r="$(make_repo main)"

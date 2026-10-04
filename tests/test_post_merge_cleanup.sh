@@ -6,7 +6,7 @@
 # does not refuse them, so a merged worktree full of plans was deletable.
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-HOOK="$DIR/../hooks/scripts/post-merge-cleanup.sh"
+HOOK="$DIR/../plugins/building/hooks/scripts/post-merge-cleanup.sh"
 
 refute_out() { case "$OUT" in *"$1"*) echo "  FAIL [$2]: stdout should not contain '$1' (got: $OUT)"; FAILS=1;; esac; }
 assert_dir() { [ -d "$1" ] || { echo "  FAIL [$2]: $1 no longer exists"; FAILS=1; }; }

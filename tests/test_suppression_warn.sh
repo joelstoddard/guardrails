@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
-S="$DIR/../hooks/scripts/suppression-warn.sh"
+S="$DIR/../plugins/building/hooks/scripts/suppression-warn.sh"
 TMP="$(mktemp -d)"
 
 write() {
