@@ -48,7 +48,7 @@ while IFS=$'\t' read -r count snippet; do
   n="$(grep -nF -m1 -- "$snippet" "$file" 2>/dev/null | cut -d: -f1)"
   msg="$msg"$'\n'"  ${file}${n:+:$n} — $count sentences: ${snippet:0:60}"
 done <<< "$hits"
-msg="$msg"$'\n'"Invoke the guardrails:concise-comments skill: cut it to two sentences, or move the rationale to docs/design/ and leave a pointer."
+msg="$msg"$'\n'"Invoke the building:concise-comments skill: cut it to two sentences, or move the rationale to docs/design/ and leave a pointer."
 msg="$msg"$'\n'"Rule 4 does not reach an interface description: a module header, or a function's parameters and usage. Leave those as they are."
 
 jq -n --arg c "$msg" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}'

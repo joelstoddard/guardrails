@@ -26,5 +26,5 @@ oldest_epoch="$(date -j -f %F "$oldest" +%s 2>/dev/null || date -d "$oldest" +%s
 [ -n "$oldest_epoch" ] || exit 0
 days=$(( (now - oldest_epoch) / 86400 ))
 
-echo "$count lesson(s) pending promotion (oldest $days days). Run /guardrails:self-improvement apply."
+echo "$count lesson(s) pending promotion (oldest $days days). Run /recording:self-improvement apply."
 exit 0

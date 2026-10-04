@@ -4,7 +4,7 @@ description: Record repo-local lessons and location breadcrumbs so the next cont
 allowed-tools: Read, Write, Glob, Grep
 ---
 
-This skill is for lessons about **this repo**. A lesson about a skill's own guidance belongs in `guardrails:self-improvement` instead.
+This skill is for lessons about **this repo**. A lesson about a skill's own guidance belongs in `recording:self-improvement` instead.
 
 ## Storage
 

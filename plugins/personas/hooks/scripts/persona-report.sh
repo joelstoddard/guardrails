@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hold a persona at SubagentStop until its final message carries the report format from
-# ~/.claude/rules/delegation.md. Fail-open on missing jq.
+# the persona protocol in the personas plugin's rules. Fail-open on missing jq.
 command -v jq >/dev/null 2>&1 || exit 0
 input="$(cat)"
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ] && exit 0
@@ -17,6 +17,6 @@ for h in "Changes" "Checks run" "Rules not satisfied or skipped" "Findings outsi
 done
 [ -n "$missing" ] || exit 0
 
-reason="Your report is missing:$missing"$'\n'"End with the report format in ~/.claude/rules/delegation.md, every heading present (write None. under an empty one)."
+reason="Your report is missing:$missing"$'\n'"End with the report format in the persona protocol, every heading present (write None. under an empty one)."
 jq -n --arg r "$reason" '{decision:"block",reason:$r}'
 exit 0

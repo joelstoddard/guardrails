@@ -17,7 +17,7 @@ The file is JSON Lines: one entry per line, fields in this order:
 | Field | Meaning |
 |---|---|
 | `date` | `YYYY-MM-DD`. The nudge hook string-compares this against a cutoff and also converts it to epoch — any other format breaks both. |
-| `skill` | The skill's plugin-qualified name, e.g. `guardrails:commit`. |
+| `skill` | The skill's plugin-qualified name, e.g. `building:commit`. |
 | `trigger` | The situation that should fire the improved guidance, phrased as a situation, not a conclusion — it's what a future agent pattern-matches against. |
 | `mistake` | What went wrong. |
 | `fix` | The guidance that should have applied. |
@@ -30,7 +30,7 @@ The hook's read (`fromjson? // empty`) only skips lines that fail to *parse*. A 
 Canonical shape:
 
 ```json
-{"date":"2026-09-08","skill":"guardrails:commit","trigger":"user asked to squash a diff spanning two scopes","mistake":"committed both scopes together","fix":"split by scope before committing when a diff touches two concerns","promoted":false}
+{"date":"2026-09-08","skill":"building:commit","trigger":"user asked to squash a diff spanning two scopes","mistake":"committed both scopes together","fix":"split by scope before committing when a diff touches two concerns","promoted":false}
 ```
 
 ## Record (default)
@@ -40,11 +40,11 @@ Fires on:
 - a skill's instructions producing a wrong result
 - noticing a case a skill doesn't cover
 
-This skill is for lessons about the **skills themselves**. A lesson about how *this repo* works belongs in `guardrails:project-memory` instead.
+This skill is for lessons about the **skills themselves**. A lesson about how *this repo* works belongs in `recording:project-memory` instead.
 
 Silently check whether the journal already carries this lesson for this skill — Read the file and compare the `skill` and `trigger` fields. If it does, skip — one entry per distinct lesson, not one per occurrence. This check produces no output either way.
 
-Otherwise append one line **using the Write/Edit tools, never a shell heredoc**. A lesson is a JSON object full of quotes a shell body would have to escape, and the plugin's publish guard drops only the heredoc bodies it can parse — it errs toward scanning when it cannot read the opener, and lesson text mentioning "review", "comment" or "post" is then refused as publishing. That describes most lessons about a plugin whose skills are named `pre-pr-review`, `concise-comments` and `draft-pr`. Append by Editing the journal's last line into itself plus the new line; if the file does not exist yet, Write it with that single line.
+Otherwise append one line **using the Write/Edit tools, never a shell heredoc**. A lesson is a JSON object full of quotes a shell body would have to escape, and the building plugin's publish guard drops only the heredoc bodies it can parse — it errs toward scanning when it cannot read the opener, and lesson text mentioning "review", "comment" or "post" is then refused as publishing. That describes most lessons about a plugin whose skills are named `pre-pr-review`, `concise-comments` and `draft-pr`. Append by Editing the journal's last line into itself plus the new line; if the file does not exist yet, Write it with that single line.
 
 ```json
 {"date":"2026-09-08","skill":"...","trigger":"...","mistake":"...","fix":"...","promoted":false}
@@ -59,17 +59,17 @@ Never record:
 
 ## Apply
 
-Invoked as `/guardrails:self-improvement apply`. This is the only path that changes a skill file, and it always goes through review — nothing here is silent.
+Invoked as `/recording:self-improvement apply`. This is the only path that changes a skill file, and it always goes through review — nothing here is silent.
 
 1. Read the journal. Keep entries where `promoted` is not `true`:
    ```
    jq -c 'select(.promoted != true)' "$journal"
    ```
-2. Group the kept entries by `skill`. Drop any whose lesson the skill file already states — re-stating an existing rule isn't a promotion.
-3. Create a worktree via `superpowers:using-git-worktrees`. Do this before touching any skill file — editing one from the main checkout trips the plugin's own default-branch commit guard, so the edit would be blocked anyway.
+2. Group the kept entries by `skill`. Entries recorded before the plugin split name `guardrails:<skill>`; group each under `building:<skill>` or `recording:<skill>`, whichever plugin has that skill. Drop any whose lesson the skill file already states — re-stating an existing rule isn't a promotion.
+3. Create a worktree of the guardrails source checkout (`~/personal/guardrails`; the loaded skills are a read-only cache copy) via `superpowers:using-git-worktrees`. Do this before touching any skill file — editing one from the main checkout trips the building plugin's default-branch commit guard, so the edit would be blocked anyway.
 4. For each skill, fold its lessons into the existing file section by section. Prefer strengthening a rule that's already there — sharpening its wording, adding the missed case to its list — over appending a new rule or section. A skill that only grows becomes a skill nobody reads.
-5. Run the plugin's test suite from its root (`tests/run.sh`). The preamble test must still pass — a fold that introduces a stray character sequence in a code example fails it.
-6. Commit per skill via `guardrails:commit`, then open a draft PR via `guardrails:draft-pr`.
+5. Run the test suite from the root of the guardrails checkout (`tests/run.sh`). The preamble test must still pass — a fold that introduces a stray character sequence in a code example fails it.
+6. Commit per skill via `building:commit`, then open a draft PR via `building:draft-pr`.
 7. Mark each promoted entry `"promoted": true` in the journal — flip that one field on its line, don't delete the line. The journal is the record of what the agent has learned; a promoted entry is history, not clutter.
 
 ## Rules

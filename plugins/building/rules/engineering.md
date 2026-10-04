@@ -38,7 +38,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 * ALWAYS prefer pure functions and immutability. ALWAYS keep side effects (clock, randomness, network, filesystem, environment) at the edges. Inject them ONLY WHEN a test must control them.
 * NEVER commit commented-out code, dead code, OR unreferenced TODOs.
 * NEVER leave placeholder, stubbed, OR "not implemented" code behind a claim of completion.
-* ALWAYS use stacked diffs (`guardrails:stacked-diffs`) for large bodies of coherent changes.
+* ALWAYS use stacked diffs (`building:stacked-diffs`) for large bodies of coherent changes.
 
 ---
 
@@ -100,7 +100,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 
 * ALWAYS write commit messages that explain WHY, NOT just what.
 * NEVER commit secrets, generated artefacts, OR large binaries.
-* The `guardrails:commit` skill, the permission deny list, AND the default-branch guard enforce the rest.
+* The `building:commit` skill, the permission deny list, AND the default-branch guard enforce the rest.
 
 ---
 
@@ -109,7 +109,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 
 * ALWAYS leave code better than you found it, WITHIN the scope of the task. Surface everything else as a finding.
 * ALWAYS keep changes small enough to be reviewed properly.
-* ALWAYS draft the WHY in pull request descriptions. PRs open as drafts through `guardrails:draft-pr`; promoting one to ready is the user's call.
+* ALWAYS draft the WHY in pull request descriptions. PRs open as drafts through `building:draft-pr`; promoting one to ready is the user's call.
 * ALWAYS review the change, NOT the author.
 * NEVER leave knowledge only in your context window. Write it down where the next reader will look.
 * ALWAYS ask WHEN blocked or uncertain, NOT after building the wrong thing.

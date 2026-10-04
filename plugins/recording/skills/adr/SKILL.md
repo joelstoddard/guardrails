@@ -23,7 +23,7 @@ In a personal project an ADR is a design doc: `docs/design/<concept>.md`, named 
    ## Failure mode if you change this
    ```
 
-4. **Cite it** from the code with a one-line comment, `See docs/design/<concept>.md`, at the place that depends on it (`guardrails:concise-comments`).
+4. **Cite it** from the code with a one-line comment, `See docs/design/<concept>.md`, at the place that depends on it (`building:concise-comments`).
 
 ## Rules
 

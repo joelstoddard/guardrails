@@ -38,7 +38,7 @@ This is a self-evaluation framework. Before any changes are pushed to GitHub, yo
 ### Style & Quality
 - Have these changes been linted?
 - Have debugging artefacts been removed? (`print`/`console.log` statements, commented out code blocks, etc.)
-- Are the comments concise? Invoke the `guardrails:concise-comments` skill and apply its four rules to every comment the diff adds or changes.
+- Are the comments concise? Invoke the `building:concise-comments` skill and apply its four rules to every comment the diff adds or changes.
 - Do the changes use existing patterns, or establish new ones? Are new patterns justified?
 - Is the diff reasonably sized?
 - Does this need documenting?
