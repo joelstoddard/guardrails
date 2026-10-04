@@ -41,6 +41,50 @@ Done.'
 OUT="$(_guardrails_findings "$fenced")"
 assert_eq "" "$OUT" "fenced block ignored"
 
+OUT="$(_guardrails_findings '**Findings outside scope**:
+- colon after the bold')"
+assert_eq "colon after the bold" "$OUT" "bold heading with the colon outside"
+
+OUT="$(_guardrails_findings '### Findings outside scope
+  - indented one
+  - indented two
+    with detail')"
+assert_eq "indented one
+indented two with detail" "$OUT" "indented items: the first item's indent is the top level"
+
+OUT="$(_guardrails_findings '### Findings outside scope
+- top item
+  - nested detail')"
+assert_eq "top item - nested detail" "$OUT" "a nested bullet continues its item"
+
+four='````markdown
+```
+### Findings outside scope
+- example inside
+```
+````
+### Findings outside scope
+- real one'
+OUT="$(_guardrails_findings "$four")"
+assert_eq "real one" "$OUT" "a 4-backtick fence holds a 3-backtick fence"
+
+unclosed='### Findings outside scope
+- one
+```
+- two'
+OUT="$(_guardrails_findings "$unclosed")"
+assert_eq "one
+two" "$OUT" "an unclosed fence hides nothing: the parser fails closed"
+
+for empty in 'None found.' 'No findings.' 'Nothing to report.' '*None*' '(none)' 'None — all in scope.' 'N/A' 'nothing'; do
+  OUT="$(_guardrails_findings "### Findings outside scope
+- $empty")"
+  assert_eq "" "$OUT" "empty list phrased '$empty'"
+done
+OUT="$(_guardrails_findings '### Findings outside scope
+- None of the retries are bounded')"
+assert_eq "None of the retries are bounded" "$OUT" "a finding that starts with None is still a finding"
+
 tracked='### Findings outside scope
 - Cache expiry https://github.com/o/r/issues/12
 - Retry bound #13
