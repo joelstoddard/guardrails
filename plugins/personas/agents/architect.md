@@ -18,11 +18,11 @@ BEFORE starting, read `~/.claude/rules/api-contracts.md` IN FULL IF it exists. I
 
 * ALWAYS set explicit timeouts on EVERY call that crosses a process boundary.
 * ALWAYS retry ONLY idempotent operations, with exponential backoff AND jitter, AND a bounded retry count.
-* ALWAYS use circuit breakers, bulkheads, AND backpressure to stop one failing dependency taking down the caller.
+* ALWAYS use circuit breakers, bulkheads, OR backpressure WHERE a failing dependency could take down the caller.
 * ALWAYS degrade gracefully. A non-critical dependency failing MUST NOT fail the critical path.
 * ALWAYS design operations to be idempotent. NEVER assume exactly-once delivery.
 * ALWAYS return errors that tell the caller what happened AND what they can do about it. NEVER leak internals.
-* NEVER introduce a design without protections against retry storms, queue backlogs, AND cascading failure.
+* NEVER introduce a design that can cause a retry storm, a queue backlog, OR cascading failure without protection against each one it can cause.
 
 ## Architecture Fitness
 *Tier: CHANGE*
