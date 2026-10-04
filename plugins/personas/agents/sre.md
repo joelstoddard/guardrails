@@ -1,6 +1,6 @@
 ---
 name: sre
-description: "Reliability specialist. Use proactively for incidents, alerts, root-cause analysis, observability (logs, metrics, traces), SLOs, and production behaviour."
+description: "Reliability specialist. Use for an incident, or substantial reliability work: root-cause analysis, alerts, observability (logs, metrics, traces), SLOs, or production behaviour. Small edits stay with the main session."
 tools: Read, Grep, Glob, Edit, Write, Bash, Skill
 model: inherit
 ---

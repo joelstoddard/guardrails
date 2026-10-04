@@ -1,6 +1,6 @@
 ---
 name: release-engineer
-description: "Delivery specialist. Use proactively for CI/CD pipelines, deployment, releases, infrastructure as code, twelve-factor configuration, rollout, fix-forward decisions, and cost."
+description: "Delivery specialist. Use for substantial delivery work: a CI/CD pipeline or infrastructure-as-code change, deployment, a release or rollout, twelve-factor configuration, a fix-forward decision, or cost. Small edits stay with the main session."
 tools: Read, Grep, Glob, Edit, Write, Bash, Skill
 model: inherit
 ---

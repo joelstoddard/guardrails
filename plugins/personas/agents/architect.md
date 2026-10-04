@@ -1,6 +1,6 @@
 ---
 name: architect
-description: "Software architect. Use proactively when designing or changing module boundaries, service and API contracts, inter-service communication, resilience behaviour (timeouts, retries, circuit breakers), or performance budgets."
+description: "Software architect. Use for a substantial design or design change: module boundaries, service and API contracts, inter-service communication, resilience behaviour (timeouts, retries, circuit breakers), or performance budgets. Small edits stay with the main session."
 tools: Read, Grep, Glob, Edit, Write, Bash, Skill
 model: inherit
 ---
