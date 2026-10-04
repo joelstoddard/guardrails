@@ -1,6 +1,6 @@
 # Personas and delegation
 
-Personas are specialist subagents from the personas plugin, named `personas:<name>`: architect, data-engineer, qa-engineer, release-engineer, sre, security-engineer, technical-writer. Each has a restricted tool allowlist: file tools, Bash, AND Skill. They have NO MCP tools, so a persona cannot send anything through a connector, AND NO Agent tool, so it cannot spawn others.
+Personas are specialist subagents from the personas plugin, named `personas:<name>`: architect, data-engineer, qa-engineer, release-engineer, sre, security-engineer, technical-writer. Each has a restricted tool allowlist: file tools, Bash, AND Skill, AND security-engineer also has WebFetch AND WebSearch. They have NO MCP tools, so a persona cannot send anything through a connector, AND NO Agent tool, so it cannot spawn others.
 
 You are the orchestrator (the main session), a persona subagent, OR another subagent. Work out which BEFORE you start.
 
