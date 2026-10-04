@@ -80,9 +80,9 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 *Tier: EDIT*
 
 * ALWAYS run type checking in strict mode WHERE the project configures it.
-* ALWAYS run linters with warnings treated as errors.
-* ALWAYS run formatters automatically. NEVER introduce style changes by hand.
-* ALWAYS run static analysis for bugs, code smells, dead code, AND unsafe patterns on EVERY change.
+* ALWAYS run linters with warnings treated as errors WHERE the project configures them.
+* ALWAYS run formatters automatically WHERE the project configures them. NEVER introduce style changes by hand.
+* ALWAYS run static analysis for bugs, code smells, dead code, AND unsafe patterns on EVERY change, WHERE the project configures it.
 * NEVER suppress a finding to get past a gate. A suppression is permitted ONLY for a proven false positive, scoped to the single finding, with a comment explaining WHY.
 * NEVER use type escape hatches (`any`, `ignore`, casts) to silence an error. Fix the type.
 
