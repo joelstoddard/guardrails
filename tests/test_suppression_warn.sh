@@ -3,6 +3,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 S="$DIR/../plugins/building/hooks/scripts/suppression-warn.sh"
 TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 
 write() {
   printf '%s' "$2" > "$TMP/$1"
