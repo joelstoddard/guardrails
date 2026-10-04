@@ -43,7 +43,7 @@ class Agents(unittest.TestCase):
         ]
         self.assertEqual(len(matchers), 1)
         alternatives = matchers[0].split("|")
-        # Plugin agents report as personas:<name>; a bare name never matches, so the hook would go silent.
+        # Plugin agents report as personas:<name>. A bare name never matches, so the hook does not run.
         self.assertTrue(all(alt.startswith("personas:") for alt in alternatives), matchers[0])
         self.assertEqual({alt.split(":", 1)[1] for alt in alternatives}, {p.stem for p in agents()})
 
