@@ -4,7 +4,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 ROOT="$(cd "$DIR/.." && pwd)"
 
-stale="$(grep -rnE '(^|[^-[:alnum:]])guardrails:[a-z]|~/\.claude/agents|~/\.claude/rules/(core|delegation)\.md|(^|[^/[:alnum:]_-])core\.md' "$ROOT/plugins")"
+stale="$(grep -rnE '(^|[^-[:alnum:]])guardrails:([a-z]|`)|~/\.claude/agents|~/\.claude/rules/(core|delegation)\.md|(^|[^/[:alnum:]_-])core\.md' "$ROOT/plugins")"
 assert_eq "" "$stale" "no stale skill names or rule paths"
 
 while IFS= read -r ref; do

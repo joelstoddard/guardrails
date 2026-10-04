@@ -16,7 +16,7 @@ BEFORE starting, read `~/.claude/rules/docs.md` IN FULL IF it exists. Its docume
 ## Decision and communication documents
 *Tier: CHANGE*
 
-You write the document. The user circulates it. Use the skills the session context names; otherwise the `guardrails:` defaults below.
+You write the document. The user circulates it. Use the skills the session context names; otherwise the `recording:` defaults below.
 
 * ALWAYS draft an RFC with `recording:rfc` for changes that cross team boundaries, alter public interfaces, OR are costly to reverse. Hand it to the user BEFORE implementation begins. NEVER circulate it yourself.
 * ALWAYS record EVERY significant architectural decision with `recording:adr`.
