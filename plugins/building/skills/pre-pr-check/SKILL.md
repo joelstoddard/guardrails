@@ -1,6 +1,6 @@
 ---
 name: pre-pr-check
-description: Run the repo's documented lint and tests, sweep the diff for secrets and over-long comments, and grade this change against the compliance checklist. Follow this skill before pushing anything to a shared remote or opening a pull request. Pass --full to add the project-level categories that are near-static between PRs.
+description: Run the repo's documented lint and tests, sweep the diff for secrets and over-long comments, grade this change against the compliance checklist, and weigh its impact and risk. Follow this skill before pushing anything to a shared remote or opening a pull request, and whenever the user asks to review changes or for a pre-push review. Pass --full to add the project-level categories that are near-static between PRs.
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Agent, Skill
 ---
 
@@ -127,7 +127,25 @@ N/A must name its exception.
 Skip conditional categories in one line when their condition does not hold —
 a repo that publishes no container image gets one N/A line, not a sub-report.
 
-### 5. Report once
+### 5. Weigh the change
+
+Answer each question for this diff in one or two sentences. This is judgement,
+not a gate: no machine checks it, so answer honestly, and say so when unsure.
+
+- Does it do what was asked, and nothing else?
+- Is any debugging leftover in it: a print or log line, commented-out code?
+- Does it change a permission, or need one it does not have?
+- What else does it affect, beyond the files it touches?
+- Who needs to know about it?
+- Which edge cases does it meet, and do the tests cover them?
+- How could it go wrong in use, and what would prevent that?
+- How would you undo it? Name the step, or say it cannot be undone.
+- How will anyone notice if it misbehaves after it ships?
+
+An answer that shows a problem is a concern. Report it; do not fix it in this
+pass.
+
+### 6. Report once
 
 ```
 | Gate     | Status |
@@ -145,12 +163,19 @@ Graded — this diff:
 Unknown — could not verify:
   §n  <category>   <why, and what would be needed>
 
+Weighed:
+  <question>   <one or two sentences>
+  Concerns: <each concern, or none>
+
 Overall: READY / NOT READY
 Gaps: n · Unknown: n · N/A: n
 ```
 
 **NOT READY** when a gate fails, when a comment rewrite is still uncommitted,
 or when a **diff-tier** category is **Missing**.
+
+A concern from step 5 does not make the change NOT READY. Do not recommend the
+push until the user has seen and acknowledged each one.
 
 Everything else is reported without blocking:
 
@@ -163,7 +188,7 @@ Everything else is reported without blocking:
 Under `--full`, report the project tier in its own block so it is visibly not
 about this diff.
 
-### 6. Offer to file, do not file
+### 7. Offer to file, do not file
 
 Where gaps merit tracking, offer one issue per gap category — never one
 aggregate compliance issue, which gets triaged as a single unit and therefore
