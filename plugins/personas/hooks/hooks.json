@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": "personas:architect|personas:data-engineer|personas:qa-engineer|personas:release-engineer|personas:sre|personas:security-engineer|personas:technical-writer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/persona-report.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 10,
+            "command": "jq -Rs --arg root \"${CLAUDE_PLUGIN_ROOT}\" 'gsub(\"\\\\$\\\\{CLAUDE_PLUGIN_ROOT\\\\}\"; $root) | {hookSpecificOutput:{hookEventName:\"SessionStart\",additionalContext:.}}' \"${CLAUDE_PLUGIN_ROOT}/rules/delegation.md\""
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 10,
+            "command": "jq -Rs --arg root \"${CLAUDE_PLUGIN_ROOT}\" 'gsub(\"\\\\$\\\\{CLAUDE_PLUGIN_ROOT\\\\}\"; $root) | {hookSpecificOutput:{hookEventName:\"SubagentStart\",additionalContext:.}}' \"${CLAUDE_PLUGIN_ROOT}/rules/delegation.md\""
+          }
+        ]
+      }
+    ]
+  }
+}

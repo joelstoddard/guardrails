@@ -1,0 +1,6 @@
+{
+  "name": "personas",
+  "description": "Seven specialist subagents (architect, data-engineer, qa-engineer, release-engineer, sre, security-engineer, technical-writer), their delegation rules, and a hook that holds their reports to format.",
+  "author": { "name": "Joel Stoddard Turvey" },
+  "dependencies": ["building", "recording"]
+}

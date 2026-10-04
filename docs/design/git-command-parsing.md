@@ -1,6 +1,6 @@
 # Detecting whether a command line runs `git <subcommand>`
 
-`.claude/marketplace/plugins/guardrails/lib/git-cmd.sh` answers one question for
+`plugins/building/lib/git-cmd.sh` answers one question for
 the guardrail hooks: does this shell command line actually *run* `git commit` (or
 `push`, or …), and if so, which repository will it act on?
 
