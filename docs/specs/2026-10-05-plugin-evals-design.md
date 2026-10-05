@@ -49,9 +49,13 @@ AGENTS.md                   a Commands line for the evals, marked as costing rea
 ## Run environment
 
 - **Bash** is granted to every case, so the `PreToolUse` guards can fire. It runs under the
-  OS sandbox: writes stay in the run's workspace, and there is no network. No case can push
-  to GitHub or post anything for real. The plugin's hooks run outside the sandbox, as they
-  do in a normal session.
+  OS sandbox: writes stay in the run's workspace, and there is no network. The plugin's
+  hooks run outside the sandbox, as they do in a normal session.
+- **Nothing reaches GitHub**, in layers. The sandbox's lack of network is the main one. Then:
+  the commit cases have no remote; draft-pr's remote is a local bare repo; and
+  publish-refused's remote names an owner longer than GitHub's 39-character login limit, so
+  a call that escaped would still name a repo that cannot exist. The run's empty home is not
+  a layer to count on: gh may keep its token in the macOS keychain.
 - **Git state** comes from each case's `scaffold.sh`, run with `--scaffold`. Each builds a
   repo in the workspace with a repo-local `user.name` and `user.email`, since the run's
   home directory has no git config.
