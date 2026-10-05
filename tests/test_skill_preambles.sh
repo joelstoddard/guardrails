@@ -8,6 +8,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Checks the whole file, not just preamble lines: prose that tells an agent to run a
 # command is refused the same way a preamble command is.
 for f in "$DIR"/../plugins/*/skills/*/SKILL.md; do
+  # An unmatched glob stays literal, so an empty or moved skills tree would otherwise pass.
+  [ -e "$f" ] || { echo "  FAIL: no skills found under plugins/*/skills/"; FAILS=1; break; }
   name="$(basename "$(dirname "$f")")"
   n=0
   while IFS= read -r line; do
