@@ -66,6 +66,14 @@ _guardrails_split() {
   }'
 }
 
+# _guardrails_handback <transcript> → the report a subagent handed back, IF its last assistant turn is a
+# SubagentHandback call; last_assistant_message then holds nothing or earlier text. See issue #2.
+_guardrails_handback() {
+  [ -f "$1" ] || return 0
+  tail -n 200 "$1" | jq -rs '[.[] | select(.type == "assistant")] | last | .message.content // []
+    | map(select(.type == "tool_use" and .name == "SubagentHandback")) | last | .input.message // empty' 2>/dev/null
+}
+
 _guardrails_untracked() {
   _guardrails_findings "$1" | _guardrails_split untracked
 }
