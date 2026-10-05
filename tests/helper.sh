@@ -6,17 +6,24 @@ FAILS=0
 # The environment form ranks with -c, above every config file.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false
 
+# Tests make temp paths with scratch_dir and scratch_file, under one dir removed when the test exits.
+# A test's own EXIT trap would replace this one, so tests set none.
+_HELPER_TMP="$(mktemp -d)" || exit 1
+trap 'rm -rf "$_HELPER_TMP"' EXIT
+scratch_dir()  { mktemp -d "$_HELPER_TMP/d.XXXXXX"; }
+scratch_file() { mktemp "$_HELPER_TMP/f.XXXXXX"; }
+
 # run_hook <script-path> <json-on-stdin>  → sets OUT, ERR, RC
 run_hook() {
   local script="$1" json="$2" errfile
-  errfile="$(mktemp)"
+  errfile="$(scratch_file)"
   OUT="$(printf '%s' "$json" | bash "$script" 2>"$errfile")"; RC=$?
   ERR="$(cat "$errfile")"; rm -f "$errfile"
 }
 
 # make_repo <default-branch>  → prints path to a fresh temp git repo on that branch
 make_repo() {
-  local d; d="$(mktemp -d)"
+  local d; d="$(scratch_dir)"
   git -C "$d" init -q -b "$1"
   git -C "$d" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
   printf '%s\n' "$d"

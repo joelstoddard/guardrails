@@ -2,7 +2,7 @@
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 S="$DIR/../plugins/building/hooks/scripts/comment-warn.sh"
-TMP="$(mktemp -d)"
+TMP="$(scratch_dir)"
 
 # write <name> <content> → prints a PostToolUse payload for a Write of that file
 write() {
