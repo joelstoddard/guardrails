@@ -33,7 +33,7 @@ assert_rc 0 "capture never blocks"
 assert_eq "" "$OUT" "capture is silent"
 assert_eq "[sre] Retries are unbounded
 [sre] TTL unset" "$(cat "$PENDING/a1")" "capture keeps the subagent's findings for the session"
-assert_eq "-rw-------" "$(ls -l "$PENDING/a1" | cut -c1-10)" "pending findings are readable only by the user"
+assert_eq "$PENDING/a1" "$(find "$PENDING/a1" -perm 600)" "pending findings are readable only by the user"
 
 run_hook "$CAPTURE" "$(sub "$(report 'Retries have no upper bound' 'TTL unset')")"
 assert_eq "[sre] Retries have no upper bound
