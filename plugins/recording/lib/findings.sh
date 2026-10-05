@@ -70,9 +70,13 @@ _guardrails_untracked() {
   _guardrails_findings "$1" | _guardrails_split untracked
 }
 
-# _guardrails_findings_file <session_id> → where SubagentStop keeps findings for the Stop gate.
-# Fails on an id that is not a plain token, so a crafted id cannot point outside the dir.
-_guardrails_findings_file() {
+# _guardrails_token <id> → succeeds only for a plain token, so a crafted id cannot point outside a dir.
+_guardrails_token() {
   case "$1" in "" | *[!A-Za-z0-9_-]*) return 1 ;; esac
-  printf '%s/claude-guardrails/findings/%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}" "$1"
+}
+
+# _guardrails_pending_dir <session_id> → where SubagentStop keeps findings for the Stop gate, one file per subagent.
+_guardrails_pending_dir() {
+  _guardrails_token "$1" || return 1
+  printf '%s/claude-guardrails/pending/%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}" "$1"
 }
