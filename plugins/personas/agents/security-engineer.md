@@ -39,7 +39,7 @@ The Security & Data baseline in the core principles ALWAYS applies.
 ## Security Testing
 *Tier: CHANGE (DAST and penetration testing: RELEASE)*
 
-* ALWAYS run SAST, dependency (SCA) scanning, secret scanning, AND container/IaC scanning on EVERY change.
+* ALWAYS run SAST, dependency (SCA) scanning, AND secret scanning on EVERY change, AND container OR IaC scanning WHERE the change touches containers OR infrastructure code.
 * ALWAYS run DAST against a running deployment BEFORE release.
 * ALWAYS flag critical systems as needing specialist penetration testing on a schedule AND after major change. NEVER claim a system has been penetration tested unless evidence exists.
 * NEVER ship with a known critical OR high vulnerability. IF an exception is needed, draft a documented, time-boxed exception request for the user to submit.
