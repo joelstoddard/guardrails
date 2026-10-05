@@ -148,10 +148,11 @@ then prove it excludes the store. Docker Desktop's user-mode install puts its CL
 there as links. Pointing `DOCKER_CONFIG` at an empty directory does not help, since the
 sandbox checks `~/.docker` as well. Every case grants Bash, so every case is blocked.
 
-Until a run is possible, each grader is checked offline: the regexes against git's real
-output, JSON-escaped as a trace carries it, and against stream-json-shaped trace lines,
-using the pattern YAML parses from the grader file. That proves the patterns, not the
-assumptions about the trace's layout, the scaffold's path, or Haiku's behaviour.
+Until a run is possible, `tests/test_eval_graders.py` checks each grader offline, in the
+unit suite: the regexes against git's real output, JSON-escaped as a trace carries it, and
+against stream-json-shaped trace lines, using the pattern YAML parses from the grader file.
+It also checks each scaffold builds the state its case needs. That proves the patterns,
+not the assumptions about the trace's layout or Haiku's behaviour.
 
 ## Follow-ups, not in this change
 
