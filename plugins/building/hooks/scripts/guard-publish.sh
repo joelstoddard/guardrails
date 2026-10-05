@@ -10,7 +10,15 @@ input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 
-reason="$(_guardrails_publishes_as_user "$cmd")" || exit 0
+reason="$(_guardrails_publishes_as_user "$cmd")" || {
+  # Read line by line, as before quotes carried, it may still publish: a quote spanning lines
+  # looks the same as shell syntax the carried split misreads, so only the human can tell.
+  reason="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$cmd")" || exit 0
+  [ "${ALLOW_PUBLISH_AS_ME:-}" = "1" ] && exit 0
+  jq -cn --arg r "Could not be sure this does not publish as you. Read line by line: $reason. A quoted argument spanning lines reads the same way, so allow it only if nothing here posts under your name." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+}
 
 # The hatch is deliberately environment-only: an assistant can prefix any command it
 # writes, so _guardrails_publishes_as_user treats an inline assignment as a bypass.

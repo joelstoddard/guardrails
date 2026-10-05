@@ -81,4 +81,20 @@ cwd "cd /a && git push"          commit /a     /a          "cd applies, but no m
 cwd "grep -E 'x|cd /evil' f && git commit -m y" commit /start /start "fabricated cd from a pattern ignored"
 cwd "echo 'cd /evil; git commit' && git commit" commit /start /start "fabricated cd and commit both ignored"
 
+# A carried quote turns any misread into hidden lines, so $'...' and # end only where the shell ends them.
+yes $'printf $\'a\\n\'\ngit commit -m x\n# \'' commit "an a inside \$'...' does not end it"
+yes 'echo \;#; git commit -m x'                commit "a # after an escaped ; is mid-word"
+yes 'echo $(true)#; git commit -m x'           commit "a # after \$( ) is mid-word"
+
+# A heredoc is recognised by the delimiter the shell reads, and <<< opens none.
+yes $'cat <<\\EOF\nWe don\'t ship this yet.\nEOF\ngit commit -m x # it\'s done' commit "a backslash-quoted delimiter opens a heredoc"
+yes $'cat <<EOF \\\n  > /dev/null\nbody\nEOF\ngit commit -m x'                commit "a heredoc body starts after its joined line"
+yes $'read -r b <<<"$PWD"\ngit commit -m x'                                    commit "a here-string opens no heredoc"
+
+# What the per-line split sees still counts, so a quote the carried split misreads hides nothing.
+yes $'bash -c \'\ncd /tmp\ngit commit -m x\n\''       commit "a commit only the per-line split sees"
+yes $'echo "`echo \'"\'`"\ngit commit -m x\n# \''     commit "a commit after a misread backtick"
+cwd $'echo "`echo \'"\'`"\ncd /evil\n# \'\ngit commit -m x' commit /start $'/start\n/evil' \
+  "both directories when the splits disagree"
+
 finish "git-cmd"

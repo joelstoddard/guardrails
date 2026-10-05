@@ -50,4 +50,34 @@ unset ALLOW_PUBLISH_AS_ME
 run_hook "$S" "$(json 'ALLOW_PUBLISH_AS_ME=1 gh pr comment 1 --body x')"
 assert_rc 2 "inline hatch blocked without env hatch"
 
+# --- multi-line commands, which need real JSON escaping ---
+jsonc() { jq -cn --arg c "$1" '{tool_input:{command:$c}}'; }
+
+# A backslash-newline joins the verb to its command.
+run_hook "$S" "$(jsonc $'gh pr \\\n  comment 1 -b x')"
+assert_rc 2 "line continuation blocked"
+
+# Read line by line, these publish, but carrying quotes across lines reads them differently.
+# The guard cannot tell a quoted argument spanning lines from syntax it misreads, so it asks (#3).
+asks() {
+  run_hook "$S" "$(jsonc "$1")"
+  assert_rc 0 "$2"
+  assert_out '"permissionDecision":"ask"' "$2"
+  assert_out 'Read line by line: ' "$2"
+  assert_out 'publishes under your name' "$2"
+}
+asks "perl -pi -e 's#a#b#;
+s#the plugin'\"'\"'s publish guard#the building plugin'\"'\"'s publish guard#;' SKILL.md" \
+  "multi-line quoted perl program asks"
+asks $'echo "`echo \'"\'`"\ngh pr comment 1 -b x\n# \''                         "backtick inside double quotes asks"
+asks $'x=a; echo "${x#"\'"}"\ngh pr comment 1 -b x\n# \''                       "nested quotes inside \${ } ask"
+asks $'echo "$(case a in a) printf \'"\' ;; esac)"\ngh pr comment 1 -b x\n# \'' "a case pattern inside \$( ) asks"
+
+# The human's own hatch covers the question too.
+export ALLOW_PUBLISH_AS_ME=1
+run_hook "$S" "$(jsonc $'echo "`echo \'"\'`"\ngh pr comment 1 -b x\n# \'')"
+assert_rc 0 "environment hatch allows what would be asked"
+assert_eq "$OUT" "" "environment hatch asks nothing"
+unset ALLOW_PUBLISH_AS_ME
+
 finish "guard-publish"

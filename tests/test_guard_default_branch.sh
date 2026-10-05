@@ -73,4 +73,10 @@ r10="$(make_repo main)"
 run_hook "$S" "$(json "$r10" "cd && git commit -m x")"
 assert_rc 2 "bare cd does not smuggle a default-branch commit past the guard"
 
+# A cd only the per-line split sees still sends the guard there: a misread quote must not hide it.
+r11="$(make_repo main)"; r11b="$(make_repo main)"; git -C "$r11b" switch -q -c nbc-6-u
+run_hook "$S" "$(jq -cn --arg cwd "$r11b" --arg c $'echo "`echo \'"\'`"\ncd '"$r11"$'\n# \'\ngit commit -m x' \
+  '{cwd:$cwd,tool_input:{command:$c}}')"
+assert_rc 2 "cd into a default-branch repo hidden by a misread quote blocked"
+
 finish "guard-default-branch"

@@ -160,4 +160,56 @@ allows "$(printf 'git commit -m "$(cat <<%sEOF%s\nShortened the wording so it fi
 blocks "$(printf 'git commit -m "$(cat <<%sEOF%s\nharmless prose\nEOF\n)" && gh pr comment 12 --body hi' "'" "'")" \
   "command after a nested heredoc closes"
 
+# ---------------------------------------------------------------------------
+# A quoted argument can span lines, and its text is data on every line (#3).
+# ---------------------------------------------------------------------------
+allows "perl -pi -e 's#a#b#;
+s#the plugin'\"'\"'s publish guard#the building plugin'\"'\"'s publish guard#;' SKILL.md" \
+  "multi-line quoted perl program"
+allows 'git commit -m "first line
+gh pr comment is only mentioned here"' "multi-line double-quoted message"
+
+# Quote state carries across lines only where the shell's does, so nothing hides behind a false quote.
+blocks $'gh pr \\\n  comment 1 -b x' "a backslash-newline joins the command"
+blocks $'echo don\\\'t\ngh pr comment 1 -b x' "an escaped apostrophe opens no quote"
+blocks $'echo hi # it\'s fine\ngh pr comment 1 -b x' "an apostrophe in a comment opens no quote"
+blocks $'printf $\'it\\\'s\\n\'\ngh pr comment 1 -b x' "an escaped quote does not end \$'...'"
+blocks $'echo "a \\" b"\ngh pr comment 1 -b x' "an escaped double quote does not end \"...\""
+blocks $'echo \'never closed\ngh pr comment 1 -b x' "an unclosed quote falls back to scanning every line"
+
+# A carried quote turns any misread into hidden lines, so $'...' and # end only where the shell ends them.
+blocks $'printf $\'Added a line\\n\' >> notes.txt\ngh pr comment 1 -b x\necho \\\'' "an a inside \$'...' does not end it"
+blocks 'echo \;#; gh pr comment 1 -b x'    "a # after an escaped ; is mid-word"
+blocks 'echo a\ #; gh pr comment 1 -b x'   "a # after an escaped blank is mid-word"
+blocks 'echo a\|#| gh pr comment 1 -b x'   "a # after an escaped | is mid-word"
+blocks 'echo $(true)#; gh pr comment 1 -b x'  "a # after \$( ) is mid-word"
+blocks 'echo $((1))#; gh pr comment 1 -b x'   "a # after \$(( )) is mid-word"
+blocks 'cat <(true)#; gh pr comment 1 -b x'   "a # after <( ) is mid-word"
+blocks $'echo a\\\n#; gh pr comment 1 -b x'   "a # on a joined line continues the word"
+blocks $'(cd /tmp)# it\'s\ngh pr comment 1 -b x\n# it\'s' "a # after a subshell still starts a comment"
+
+# A heredoc is recognised by the delimiter the shell reads, and <<< opens none.
+blocks $'cat <<\\EOF > notes.txt\nWe don\'t ship this yet.\nEOF\ngh pr comment 1 -b x # it\'s done' \
+  "a backslash-quoted delimiter opens a heredoc"
+blocks $'cat <<.END > notes.txt\nWe don\'t ship this yet.\n.END\ngh pr comment 1 -b x # it\'s done' \
+  "a delimiter with punctuation opens a heredoc"
+blocks $'cat <<EOF \\\n  > /dev/null\nbody\nEOF\ngh pr comment 1 -b x' "a heredoc body starts after its joined line"
+blocks $'grep -q foo <<<"$PWD"\ngh pr comment 1 -b x' "a here-string opens no heredoc"
+blocks $'cat <<<word\ngh pr comment 1 -b x'         "a bare here-string opens no heredoc"
+blocks $'cat <<E\\OF\nbody\nEOF\ngh pr comment 1 -b x'   "a delimiter keeps its escaped letters"
+blocks $'cat <<E"OF"\nbody\nEOF\ngh pr comment 1 -b x'   "a delimiter keeps its quoted part"
+blocks $'cat <<EOF-1\nbody\nEOF-1\ngh pr comment 1 -b x' "a delimiter keeps its punctuation"
+blocks $'echo $[1<<2]\ngh pr comment 1 -b x'         "1<<2 inside \$[ ] is a shift"
+blocks $'((\n  x = 1<<2\n))\ngh pr comment 1 -b x'     "1<<2 inside a split (( )) is a shift"
+allows $'cat > b.md <<\\EOF\ngh pr comment is documented here\nEOF' "prose in a backslash-quoted heredoc"
+
+# An sh -c or eval payload is a script, so its line breaks still separate commands.
+blocks $'bash -c \'\nset -e\ncd /tmp\ngh pr comment 1 -b x\n\'' "a multi-line bash -c script"
+blocks $'eval "\nset -e\ngh pr comment 1 -b x\n"'             "a multi-line eval"
+blocks $'sh -c "echo hi\ngh pr comment 1 -b x"'               "a multi-line sh -c after a text tool"
+
+# bash runs the lines before a quote that never closes, so they are split as carried too.
+blocks $'grep -q foo <<<"$PWD"\ngh pr comment 1 -b x\necho \'never closed' \
+  "lines before an unclosed quote are split as carried"
+
 finish "publish-cmd"
