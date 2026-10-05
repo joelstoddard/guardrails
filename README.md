@@ -45,6 +45,6 @@ Prerequisites: `jq`, and the `superpowers` plugin from `claude-plugins-official`
 
 ```bash
 claude --plugin-dir ./plugins   # loads all three from this checkout, replacing installed copies
-bash tests/run.sh               # needs jq, the claude CLI, and Python 3 with PyYAML (or uv)
+bash tests/run.sh               # needs bash 4.1+, jq, the claude CLI, and Python 3 with PyYAML (or uv)
 bash tests/lint.sh              # needs shellcheck and actionlint
 ```
