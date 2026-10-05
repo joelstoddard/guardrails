@@ -30,7 +30,7 @@ A mistake is told once, plainly, with the fix and the constraint that stops it r
 4. **Name the audience** above the draft: who it is for, AND what it needs to achieve.
 5. **Hand it over.** Show the full draft to the user. NEVER send, post, OR publish it.
 6. **Record the lesson.** A lesson about this repo → `recording:project-memory`. A lesson about a skill → `recording:self-improvement`.
-7. **Track the prevention.** Each prevention NOT built in this change is a finding. File it with `recording:track-findings`.
+7. **Track the prevention.** Each prevention NOT built in this change is a finding. File it with `recording:track-findings`. IF you are a subagent, list it under "Findings outside scope" in your report instead, AND NEVER file it.
 
 ## Rules
 
