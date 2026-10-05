@@ -2,6 +2,10 @@
 # Minimal test helper for hook scripts and libs. No external deps beyond git+jq.
 FAILS=0
 
+# Tests make commits, and a user's commit.gpgsign would make each one wait on a GPG prompt.
+# The environment form ranks with -c, above every config file.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false
+
 # run_hook <script-path> <json-on-stdin>  → sets OUT, ERR, RC
 run_hook() {
   local script="$1" json="$2" errfile
