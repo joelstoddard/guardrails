@@ -45,4 +45,16 @@ assert_eq "" "$OUT" "stop_hook_active lets it through"
 run_hook "$S" '{"agent_type":"architect"}'
 assert_eq "" "$OUT" "no message, no opinion"
 
+run_hook "$S" "$(stop "$(printf '```markdown\n%s\n```' "$good")")"
+assert_out '"decision": "block"' "a report wrapped in a fence blocks, as findings-capture cannot read it"
+
+run_hook "$S" "$(stop "$(printf 'The format:\n```\n## Result: DONE\n```\n\n%s' "$good")")"
+assert_eq "" "$OUT" "a fenced example before the real report passes"
+
+# The personas plugin cannot source the recording plugin's lib, so it keeps a copy of the fence rule.
+lib_copy="$(sed -n '/^_guardrails_unfence() {/,/^}/p' "$DIR/../plugins/recording/lib/findings.sh")"
+hook_copy="$(sed -n '/^_guardrails_unfence() {/,/^}/p' "$S")"
+[ -n "$lib_copy" ] || { echo "  FAIL [unfence copy]: no _guardrails_unfence in recording/lib/findings.sh"; FAILS=1; }
+assert_eq "$lib_copy" "$hook_copy" "persona-report's _guardrails_unfence matches the recording lib's"
+
 finish "persona-report"
