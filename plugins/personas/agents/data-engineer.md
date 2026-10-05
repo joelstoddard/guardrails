@@ -1,6 +1,6 @@
 ---
 name: data-engineer
-description: "Database and schema specialist. Use proactively for schema design, migrations, queries, indexes, datastores, retention policy, and data integrity."
+description: "Database and schema specialist. Use for substantial data work: a schema design, a migration, a new datastore, an indexing or query strategy, a retention policy, or data integrity. Small edits stay with the main session."
 tools: Read, Grep, Glob, Edit, Write, Bash, Skill
 model: inherit
 ---

@@ -1,6 +1,6 @@
 ---
 name: technical-writer
-description: "Documentation specialist. Use proactively for READMEs, RFCs, ADRs, post-mortems, runbooks, changelogs, and any docs that must change alongside code."
+description: "Documentation specialist. Use for an RFC, ADR, post-mortem, or runbook, or substantial docs work: a new or reworked README, changelog, or docs that must change alongside code. Small edits stay with the main session."
 tools: Read, Grep, Glob, Edit, Write, Bash, Skill
 model: inherit
 ---

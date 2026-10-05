@@ -31,8 +31,10 @@ class Agents(unittest.TestCase):
                 self.assertIsNotNone(meta, "missing frontmatter")
                 self.assertEqual(meta.get("name"), path.stem)
                 self.assertTrue(meta.get("description"))
-                tools = [t.strip() for t in meta.get("tools", "").split(",")]
-                self.assertIn("Skill", tools)
+                tools = meta.get("tools") or ""
+                if isinstance(tools, str):
+                    tools = tools.split(",")
+                self.assertIn("Skill", [t.strip() for t in tools])
 
     def test_report_hook_matcher_lists_exactly_the_agents(self):
         hooks = json.loads((PERSONAS / "hooks" / "hooks.json").read_text())["hooks"]

@@ -1,6 +1,6 @@
 ---
 name: security-engineer
-description: "Security specialist. Use proactively when touching authentication, authorisation, cryptography, secrets, untrusted input, dependencies and supply chain, privacy, threat modelling, or security scanning."
+description: "Security specialist. Use for substantial security work: a threat model, or a design or rework touching authentication, authorisation, cryptography, secrets, untrusted input, dependencies and supply chain, privacy, or security scanning. Small edits stay with the main session."
 tools: Read, Grep, Glob, Edit, Write, Bash, WebFetch, WebSearch, Skill
 model: inherit
 ---
