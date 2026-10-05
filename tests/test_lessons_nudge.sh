@@ -13,12 +13,12 @@ out="$(run /nonexistent/journal.jsonl)"
 [ -z "$out" ] || { echo "  FAIL: spoke with no journal"; FAILS=1; }
 
 # --- silent when every unpromoted entry is recent
-j="$(mktemp)"; printf '{"date":"%s","skill":"a","promoted":false}\n' "$new" > "$j"
+j="$(scratch_file)"; printf '{"date":"%s","skill":"a","promoted":false}\n' "$new" > "$j"
 out="$(run "$j")"
 [ -z "$out" ] || { echo "  FAIL: nudged on a fresh entry: $out"; FAILS=1; }
 
 # --- reports a count when an unpromoted entry is older than 7 days
-j="$(mktemp)"
+j="$(scratch_file)"
 printf '{"date":"%s","skill":"a","promoted":false}\n' "$old" >> "$j"
 printf '{"date":"%s","skill":"b","promoted":false}\n' "$new" >> "$j"
 out="$(run "$j")"
@@ -28,12 +28,12 @@ case "$out" in
 esac
 
 # --- entries already promoted do not count
-j="$(mktemp)"; printf '{"date":"%s","skill":"a","promoted":true}\n' "$old" > "$j"
+j="$(scratch_file)"; printf '{"date":"%s","skill":"a","promoted":true}\n' "$old" > "$j"
 out="$(run "$j")"
 [ -z "$out" ] || { echo "  FAIL: counted a promoted entry: $out"; FAILS=1; }
 
 # --- malformed lines are skipped, not fatal
-j="$(mktemp)"
+j="$(scratch_file)"
 echo 'not json at all' >> "$j"
 printf '{"date":"%s","skill":"a","promoted":false}\n' "$old" >> "$j"
 out="$(run "$j")"

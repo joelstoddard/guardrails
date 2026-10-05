@@ -3,9 +3,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 GATE="$DIR/../plugins/recording/hooks/scripts/findings-gate.sh"
 CAPTURE="$DIR/../plugins/recording/hooks/scripts/findings-capture.sh"
-XDG_STATE_HOME="$(mktemp -d)" || exit 1
+XDG_STATE_HOME="$(scratch_dir)" || exit 1
 export XDG_STATE_HOME
-trap 'rm -rf "$XDG_STATE_HOME"' EXIT
 PENDING="$XDG_STATE_HOME/claude-guardrails/pending/s1"
 
 stop() { jq -n --arg m "$1" --argjson a "${2:-false}" '{session_id:"s1", last_assistant_message:$m, stop_hook_active:$a}'; }

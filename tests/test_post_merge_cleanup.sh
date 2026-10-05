@@ -13,7 +13,7 @@ assert_dir() { [ -d "$1" ] || { echo "  FAIL [$2]: $1 no longer exists"; FAILS=1
 
 # Build a repo with an origin, a default branch, and a worktree per scenario.
 setup() {
-  root="$(mktemp -d)"
+  root="$(scratch_dir)"
   git init --quiet --bare "$root/origin.git"
   git init --quiet -b main "$root/repo"
   git -C "$root/repo" config user.email t@t; git -C "$root/repo" config user.name t
@@ -127,6 +127,6 @@ run "$root/repo"
 setup
 git -C "$root/repo" remote remove origin
 run "$root/repo" || { echo "  FAIL: nonzero exit with no origin"; FAILS=1; }
-run "$(mktemp -d)" || { echo "  FAIL: nonzero exit outside a git repo"; FAILS=1; }
+run "$(scratch_dir)" || { echo "  FAIL: nonzero exit outside a git repo"; FAILS=1; }
 
 finish "post-merge-cleanup"
