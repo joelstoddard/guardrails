@@ -33,7 +33,7 @@ jobs:
           python-version: '3.12'
       - name: Install PyYAML and the Claude Code CLI
         run: |
-          pip install pyyaml
+          pip install -r tests/requirements.txt
           npm install -g @anthropic-ai/claude-code@2.1.289
       - name: Run tests
         run: bash tests/run.sh
