@@ -1,6 +1,6 @@
 ---
 name: qa-engineer
-description: "Test specialist for everything beyond unit tests: Gherkin and acceptance, component, integration, contract, E2E, smoke, property-based, fuzz, snapshot, visual, accessibility, performance and load, chaos, exploratory, and architecture-fitness tests. Use proactively when writing or changing any of these."
+description: "Test specialist for everything beyond unit tests: Gherkin and acceptance, component, integration, contract, E2E, smoke, property-based, fuzz, snapshot, visual, accessibility, performance and load, chaos, exploratory, and architecture-fitness tests. Use for a new suite of any of these, or a substantial change to one. Small edits stay with the main session."
 tools: Read, Grep, Glob, Edit, Write, Bash, Skill
 model: inherit
 ---

@@ -31,8 +31,10 @@ class Agents(unittest.TestCase):
                 self.assertIsNotNone(meta, "missing frontmatter")
                 self.assertEqual(meta.get("name"), path.stem)
                 self.assertTrue(meta.get("description"))
-                tools = [t.strip() for t in meta.get("tools", "").split(",")]
-                self.assertIn("Skill", tools)
+                tools = meta.get("tools") or ""
+                if isinstance(tools, str):
+                    tools = tools.split(",")
+                self.assertIn("Skill", [t.strip() for t in tools])
 
     def test_report_hook_matcher_lists_exactly_the_agents(self):
         hooks = json.loads((PERSONAS / "hooks" / "hooks.json").read_text())["hooks"]
@@ -46,6 +48,17 @@ class Agents(unittest.TestCase):
         # Plugin agents report as personas:<name>. A bare name never matches, so the hook does not run.
         self.assertTrue(all(alt.startswith("personas:") for alt in alternatives), matchers[0])
         self.assertEqual({alt.split(":", 1)[1] for alt in alternatives}, {p.stem for p in agents()})
+
+    def test_delegation_names_every_tool_beyond_the_shared_allowlist(self):
+        # delegation.md tells the orchestrator what a persona can do; a tool it omits is one it plans without.
+        shared = {"Read", "Grep", "Glob", "Edit", "Write", "Bash", "Skill"}
+        lines = (PERSONAS / "rules" / "delegation.md").read_text().splitlines()
+        for path in agents():
+            tools = frontmatter(path).get("tools") or ""
+            names = tools if isinstance(tools, list) else tools.split(",")
+            for tool in {t.strip() for t in names} - shared:
+                with self.subTest(agent=path.stem, tool=tool):
+                    self.assertTrue(any(tool in line and path.stem in line for line in lines))
 
 
 if __name__ == "__main__":

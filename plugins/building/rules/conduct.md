@@ -7,7 +7,7 @@ Loaded in every session by the building plugin, with the engineering rules. Doma
 ### Keywords
 * ALWAYS / NEVER: absolute. No exceptions unless the user explicitly grants one for a specific case.
 * MUST / MUST NOT: a hard property the result has to have.
-* IF / WHEN: the rule applies only under that condition.
+* IF / WHEN / WHERE: the rule applies only under that condition.
 * AND: ALL listed conditions apply (cumulative). OR: ANY ONE satisfies the rule (alternative).
 * BEFORE / THEN / FIRST / LASTLY: strict ordering.
 * NOT: the thing after it is the wrong approach.
