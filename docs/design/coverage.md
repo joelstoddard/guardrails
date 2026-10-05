@@ -111,6 +111,20 @@ The `test` job runs `bash tests/coverage.sh` after the suite, so a pull request 
 if a file falls below its floor or a new file has none. The floors were measured on
 bash 5.3 (macOS) and on bash 5.2 in Ubuntu 24.04, as on the runner, and matched.
 
+On a pull request, the job also gets the floor file from the PR's base branch
+(`$GITHUB_BASE_REF`) and runs `--ratchet` against it. A stacked PR compares with its
+parent branch, not with `main`, so each PR in a stack is checked against the floors it
+would merge into. The step has no fallback. If the base has no floor file, `git show`
+fails and the step fails, and the tool also rejects an empty base. A push to `main`
+skips the step, because a push has no base and its PR already ran the step.
+
+The PR that added the floor file could not run this step, because its base had no
+floor file. The dotfiles had the same problem and added a branch that passed when the
+base had no floor file. That branch then had to go (dotfiles #149): it would also pass
+for any later base that lost its floor file. Here the ratchet came in a second PR,
+stacked on the first, whose base already had the floor file. So no code path skips the
+comparison.
+
 ## Failure modes
 
 Every one fails the run, or reads as lower coverage, never as higher, so a broken
