@@ -160,4 +160,21 @@ allows "$(printf 'git commit -m "$(cat <<%sEOF%s\nShortened the wording so it fi
 blocks "$(printf 'git commit -m "$(cat <<%sEOF%s\nharmless prose\nEOF\n)" && gh pr comment 12 --body hi' "'" "'")" \
   "command after a nested heredoc closes"
 
+# ---------------------------------------------------------------------------
+# A quoted argument can span lines, and its text is data on every line (#3).
+# ---------------------------------------------------------------------------
+allows "perl -pi -e 's#a#b#;
+s#the plugin'\"'\"'s publish guard#the building plugin'\"'\"'s publish guard#;' SKILL.md" \
+  "multi-line quoted perl program"
+allows 'git commit -m "first line
+gh pr comment is only mentioned here"' "multi-line double-quoted message"
+
+# Quote state carries across lines only where the shell's does, so nothing hides behind a false quote.
+blocks $'gh pr \\\n  comment 1 -b x' "a backslash-newline joins the command"
+blocks $'echo don\\\'t\ngh pr comment 1 -b x' "an escaped apostrophe opens no quote"
+blocks $'echo hi # it\'s fine\ngh pr comment 1 -b x' "an apostrophe in a comment opens no quote"
+blocks $'printf $\'it\\\'s\\n\'\ngh pr comment 1 -b x' "an escaped quote does not end \$'...'"
+blocks $'echo "a \\" b"\ngh pr comment 1 -b x' "an escaped double quote does not end \"...\""
+blocks $'echo \'never closed\ngh pr comment 1 -b x' "an unclosed quote falls back to scanning every line"
+
 finish "publish-cmd"
