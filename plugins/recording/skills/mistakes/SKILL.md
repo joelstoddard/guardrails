@@ -37,5 +37,5 @@ A mistake is told once, plainly, with the fix and the constraint that stops it r
 * NEVER write "be more careful" as a prevention. A prevention a machine does not check is NOT a prevention.
 * NEVER assign blame to a person. Describe the system that allowed the mistake.
 * NEVER present a hypothesis as the root cause.
-* NEVER declare it resolved while a prevention is neither in place NOR tracked.
+* NEVER declare it resolved while a prevention is neither in place NOR tracked. A prevention is tracked ONLY once the main session has filed it, OR marked it `(asked)` OR `(declined)`; a subagent listing it in its report is NOT enough.
 * IF the session context names a post-mortem skill AND the incident is above the project's severity threshold, ALSO draft that post-mortem. IF the threshold is undefined, ask.

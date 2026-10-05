@@ -14,7 +14,9 @@ for line in 'it.skip("slow", () => {})' 'xit("flaky", () => {})' '@pytest.mark.s
   'y = f()  # type: ignore' 'const z = w as any;' 'v := g() //nolint' \
   '// @ts-expect-error' '// @ts-nocheck' '# pylint: disable=invalid-name' '# shellcheck disable=SC2086' \
   '@unittest.skip("later")' '    pytest.skip("later")' 'xdescribe("suite", () => {})' '  t.Skipf("later %d", n)' \
-  '#[allow(dead_code)]' '@SuppressWarnings("unchecked")' 'out = run(cmd)  # nosec' 'const u = x as any as Foo;'; do
+  '#[allow(dead_code)]' '@SuppressWarnings("unchecked")' 'out = run(cmd)  # nosec' 'const u = x as any as Foo;' \
+  '#![allow(unused)]' '#[ignore]' 'xtest("flaky", () => {})' '        self.skipTest("later")' '    @Disabled' \
+  'def f  # rubocop:disable Metrics/AbcSize' '// biome-ignore lint/suspicious/noExplicitAny: legacy'; do
   run_hook "$S" "$(write case.txt.js "$line")"
   assert_rc 0 "never blocks: $line"
   assert_out "additionalContext" "warns: $line"
