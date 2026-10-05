@@ -12,10 +12,10 @@ added="$(printf '%s' "$input" | jq -r '
   | map(select(. != null)) | join("\n")' 2>/dev/null)"
 [ -n "$added" ] || exit 0
 
-pattern='(^|[^A-Za-z0-9_])(it|test|describe|context|suite)\.skip\(|(^|[^A-Za-z0-9_])x(it|describe)\('
-pattern+='|@pytest\.mark\.skip|pytest\.skip\(|@unittest\.skip|t\.Skipf?\('
+pattern='(^|[^A-Za-z0-9_])(it|test|describe|context|suite)\.skip\(|(^|[^A-Za-z0-9_])x(it|test|describe)\('
+pattern+='|@pytest\.mark\.skip|pytest\.skip\(|@unittest\.skip|\.skipTest\(|t\.Skipf?\(|@Disabled|#\[ignore\]'
 pattern+='|#[[:space:]]*(noqa|nosec)|eslint-disable|pylint:[[:space:]]*disable|shellcheck[[:space:]]+disable='
-pattern+='|(^|[^A-Za-z0-9_])nolint([^A-Za-z0-9_]|$)|#\[allow\(|@SuppressWarnings'
+pattern+='|(^|[^A-Za-z0-9_])nolint([^A-Za-z0-9_]|$)|#!?\[allow\(|@SuppressWarnings|rubocop:[[:space:]]*disable|biome-ignore'
 pattern+='|@ts-(ignore|expect-error|nocheck)|type:[[:space:]]*ignore|as any( as |[];),.}>]|$)'
 # ponytail: grep cannot tell code from a string literal, so "# noqa" inside a string still warns.
 hits="$(printf '%s\n' "$added" | grep -E -- "$pattern")" || exit 0
