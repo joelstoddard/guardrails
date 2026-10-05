@@ -188,4 +188,19 @@ blocks 'cat <(true)#; gh pr comment 1 -b x'   "a # after <( ) is mid-word"
 blocks $'echo a\\\n#; gh pr comment 1 -b x'   "a # on a joined line continues the word"
 blocks $'(cd /tmp)# it\'s\ngh pr comment 1 -b x\n# it\'s' "a # after a subshell still starts a comment"
 
+# A heredoc is recognised by the delimiter the shell reads, and <<< opens none.
+blocks $'cat <<\\EOF > notes.txt\nWe don\'t ship this yet.\nEOF\ngh pr comment 1 -b x # it\'s done' \
+  "a backslash-quoted delimiter opens a heredoc"
+blocks $'cat <<.END > notes.txt\nWe don\'t ship this yet.\n.END\ngh pr comment 1 -b x # it\'s done' \
+  "a delimiter with punctuation opens a heredoc"
+blocks $'cat <<EOF \\\n  > /dev/null\nbody\nEOF\ngh pr comment 1 -b x' "a heredoc body starts after its joined line"
+blocks $'grep -q foo <<<"$PWD"\ngh pr comment 1 -b x' "a here-string opens no heredoc"
+blocks $'cat <<<word\ngh pr comment 1 -b x'         "a bare here-string opens no heredoc"
+blocks $'cat <<E\\OF\nbody\nEOF\ngh pr comment 1 -b x'   "a delimiter keeps its escaped letters"
+blocks $'cat <<E"OF"\nbody\nEOF\ngh pr comment 1 -b x'   "a delimiter keeps its quoted part"
+blocks $'cat <<EOF-1\nbody\nEOF-1\ngh pr comment 1 -b x' "a delimiter keeps its punctuation"
+blocks $'echo $[1<<2]\ngh pr comment 1 -b x'         "1<<2 inside \$[ ] is a shift"
+blocks $'((\n  x = 1<<2\n))\ngh pr comment 1 -b x'     "1<<2 inside a split (( )) is a shift"
+allows $'cat > b.md <<\\EOF\ngh pr comment is documented here\nEOF' "prose in a backslash-quoted heredoc"
+
 finish "publish-cmd"

@@ -25,7 +25,8 @@ _guardrails_split_awk() {
   printf '%s' "$2" | awk -v carry="$1" '
     BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1 }
     {
-      if (hd != "") {
+      # A heredoc body starts once its opening line ends, and a backslash-newline has not ended it.
+      if (hd != "" && !cont) {
         t = $0
         sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
         if (t == hd) hd = ""
@@ -68,12 +69,25 @@ _guardrails_split_awk() {
         if (c == ")" && d > 0) { q = st[d--]; out = out c; wb = 0; continue }
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
+        if (carry && c == "<" && substr($0, i + 1, 2) == "<<") { out = out "<<<"; i += 2; wb = 1; continue }
         if (c == "<" && substr($0, i + 1, 1) == "<" && substr($0, i + 2, 1) != "<" && ar == 0) {
           j = i + 2
           if (substr($0, j, 1) == "-") j++
           while (substr($0, j, 1) == " " || substr($0, j, 1) == "\t") j++
           dl = ""; qc = substr($0, j, 1)
-          if (qc == sq || qc == dq) {
+          if (carry) {
+            # The delimiter is a whole shell word, as the shell reads it: quotes and backslashes removed.
+            qd = ""; quoted = 0
+            for (; j <= n; j++) {
+              ch = substr($0, j, 1)
+              if (qd != "") { if (ch == qd) qd = ""; else dl = dl ch; continue }
+              if (ch == sq || ch == dq) { qd = ch; quoted = 1; continue }
+              if (ch == bs) { dl = dl substr($0, ++j, 1); quoted = 1; continue }
+              if (index(" \t;&|<>()", ch)) break
+              dl = dl ch
+            }
+            if (!quoted && index("0123456789", substr(dl, 1, 1))) dl = ""   # 1<<2 inside $[ ] or a split (( )) is a shift
+          } else if (qc == sq || qc == dq) {
             j++
             while (j <= n && substr($0, j, 1) != qc) { dl = dl substr($0, j, 1); j++ }
             j++

@@ -86,4 +86,9 @@ yes $'printf $\'a\\n\'\ngit commit -m x\n# \'' commit "an a inside \$'...' does 
 yes 'echo \;#; git commit -m x'                commit "a # after an escaped ; is mid-word"
 yes 'echo $(true)#; git commit -m x'           commit "a # after \$( ) is mid-word"
 
+# A heredoc is recognised by the delimiter the shell reads, and <<< opens none.
+yes $'cat <<\\EOF\nWe don\'t ship this yet.\nEOF\ngit commit -m x # it\'s done' commit "a backslash-quoted delimiter opens a heredoc"
+yes $'cat <<EOF \\\n  > /dev/null\nbody\nEOF\ngit commit -m x'                commit "a heredoc body starts after its joined line"
+yes $'read -r b <<<"$PWD"\ngit commit -m x'                                    commit "a here-string opens no heredoc"
+
 finish "git-cmd"
