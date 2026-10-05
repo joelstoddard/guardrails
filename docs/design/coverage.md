@@ -61,7 +61,8 @@ every time changes no result.
 Known limits:
 
 - A multi-line command counts on its first line, but bash credits a hit to a later
-  line, so that first line reads as uncovered.
+  line, so that first line reads as uncovered. When the floors were set, nine of the
+  fifteen uncovered lines were such first lines.
 - A case label continued with a backslash counts as executable but is never traced
   (`git-cmd.sh:16`).
 - A file a test copies before running is traced under the copy's path and is not
@@ -103,6 +104,12 @@ unknown option or a bash older than 4.1.
 
 Output goes to `.coverage/`, which git ignores. `.coverage/hits.tsv` lists every traced
 line as `test<TAB>path<TAB>line`.
+
+## In CI
+
+The `test` job runs `bash tests/coverage.sh` after the suite, so a pull request fails
+if a file falls below its floor or a new file has none. The floors were measured on
+bash 5.3 (macOS) and on bash 5.2 in Ubuntu 24.04, as on the runner, and matched.
 
 ## Failure modes
 

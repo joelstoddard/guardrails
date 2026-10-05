@@ -45,3 +45,5 @@ jobs:
           npm install -g @anthropic-ai/claude-code@2.1.289
       - name: Run tests
         run: bash tests/run.sh
+      - name: Check coverage floors
+        run: bash tests/coverage.sh
