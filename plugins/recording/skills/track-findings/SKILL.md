@@ -29,7 +29,7 @@ Other developers may not want AI-filed issues, so ask BEFORE filing anywhere tha
 3. **Ensure the label.** IF `gh label list --repo <owner>/<repo> --search finding` shows no `finding` label:
    * **Personal**: ask the user to approve `gh label create finding --repo <owner>/<repo> --description "Noticed outside a task's scope"`.
    * **Shared**: NEVER create a label. File the issue without one.
-4. **File it**, one issue per finding. The permission prompt is the user's approval. IF the repo is shared AND has no `finding` label, leave out `--label finding`:
+4. **File it**, one issue per finding. In a personal repo, the permission prompt is the user's approval. In a shared repo, file ONLY after the user's explicit yes in chat for that issue. IF the repo has no `finding` label, because it is shared OR the user declined to create one, leave out `--label finding`:
 
    ```bash
    gh issue create --repo <owner>/<repo> --label finding --title "<imperative summary, under 70 characters>" --body-file - <<'EOF'
