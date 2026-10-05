@@ -22,9 +22,19 @@ _guardrails_unfence() {
     }'
 }
 
+# Also a copy of the recording lib's function: a report handed back through the tool is not in
+# last_assistant_message.
+_guardrails_handback() {
+  [ -f "$1" ] || return 0
+  tail -n 200 "$1" | jq -rs '[.[] | select(.type == "assistant")] | last | .message.content // []
+    | map(select(.type == "tool_use" and .name == "SubagentHandback")) | last | .input.message // empty' 2>/dev/null
+}
+
 input="$(cat)"
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ] && exit 0
 msg="$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)"
+handback="$(_guardrails_handback "$(printf '%s' "$input" | jq -r '.agent_transcript_path // empty' 2>/dev/null)")"
+[ -z "$handback" ] || msg="$handback"
 [ -n "$msg" ] || exit 0
 msg="$(_guardrails_unfence "$msg")"
 

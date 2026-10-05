@@ -18,6 +18,12 @@ assert_eq "" "$versions" "no version pins"
 assert_eq '["building","recording"]' "$(jq -c '.dependencies' "$ROOT/plugins/personas/.claude-plugin/plugin.json")" \
   "personas depends on building and recording"
 
+# A hook script that no hooks.json entry runs is a guard that silently stopped.
+for s in "$ROOT"/plugins/*/hooks/scripts/*.sh; do
+  jq -e --arg s "/hooks/scripts/$(basename "$s")" '[.. | objects | select(has("command")) | .command | select(contains($s))] != []' \
+    "${s%/scripts/*}/hooks.json" >/dev/null || { echo "  FAIL [${s#"$ROOT"/}]: not run by its plugin's hooks.json"; FAILS=1; }
+done
+
 # Every script hook must run from a plugin root that contains a space.
 SPACED="$(scratch_dir)/with space"
 mkdir -p "$SPACED"

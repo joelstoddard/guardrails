@@ -85,4 +85,11 @@ run_hook "$CAPTURE" "$(sub "$(report 'x')" s1 '../../escape')"
 run_hook "$GATE" '{}'
 assert_eq "" "$OUT" "no message, no opinion"
 
+# A report handed back through the tool is in the transcript, not in last_assistant_message (#2).
+t="$(scratch_file)"
+jq -nc --arg m "$(report 'Handed-back finding')" \
+  '{type:"assistant", message:{content:[{type:"tool_use", name:"SubagentHandback", input:{message:$m}}]}}' > "$t"
+run_hook "$CAPTURE" "$(jq -n --arg t "$t" '{session_id:"s1", agent_id:"a9", agent_type:"sre", last_assistant_message:"", agent_transcript_path:$t}')"
+assert_eq "[sre] Handed-back finding" "$(cat "$PENDING/a9" 2>/dev/null)" "a report handed back through the tool is captured"
+
 finish "findings-hooks"
