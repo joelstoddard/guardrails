@@ -15,25 +15,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      # Lint first: it is cheaper than the installs below. The runner image has shellcheck, not actionlint.
-      - name: Install actionlint
+      # Lint first: it is cheaper than the installs below. Both linters are pinned, so a runner image
+      # update cannot change what the gate flags; GITHUB_PATH puts them ahead of the image's shellcheck.
+      - name: Install shellcheck and actionlint
         env:
-          VERSION: 1.7.12
-          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          SHELLCHECK_VERSION: 0.11.0
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
           cd "$RUNNER_TEMP"
-          curl -sSfLo actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz"
-          echo "${SHA256}  actionlint.tar.gz" | sha256sum -c -
+          curl -sSfLo shellcheck.tar.xz "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf shellcheck.tar.xz --strip-components=1 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          curl -sSfLo actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
           tar -xzf actionlint.tar.gz actionlint
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       - name: Lint
-        run: bash tests/lint.sh
+        run: |
+          shellcheck --version | grep '^version'
+          bash tests/lint.sh
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: '3.12'
       - name: Install PyYAML and the Claude Code CLI
         run: |
-          pip install pyyaml
+          pip install -r tests/requirements.txt
           npm install -g @anthropic-ai/claude-code@2.1.289
       - name: Run tests
         run: bash tests/run.sh
