@@ -4,6 +4,7 @@
 command -v jq >/dev/null 2>&1 || exit 0
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/../../lib/findings.sh"
+umask 077
 input="$(cat)"
 field() { printf '%s' "$input" | jq -r "$1 // empty" 2>/dev/null; }
 active="$(field .stop_hook_active)"

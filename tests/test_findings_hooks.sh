@@ -4,6 +4,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GATE="$DIR/../plugins/recording/hooks/scripts/findings-gate.sh"
 CAPTURE="$DIR/../plugins/recording/hooks/scripts/findings-capture.sh"
 export XDG_STATE_HOME="$(mktemp -d)"
+trap 'rm -rf "$XDG_STATE_HOME"' EXIT
 PENDING="$XDG_STATE_HOME/claude-guardrails/pending/s1"
 
 stop() { jq -n --arg m "$1" --argjson a "${2:-false}" '{session_id:"s1", last_assistant_message:$m, stop_hook_active:$a}'; }
@@ -32,6 +33,7 @@ assert_rc 0 "capture never blocks"
 assert_eq "" "$OUT" "capture is silent"
 assert_eq "[sre] Retries are unbounded
 [sre] TTL unset" "$(cat "$PENDING/a1")" "capture keeps the subagent's findings for the session"
+assert_eq "-rw-------" "$(ls -l "$PENDING/a1" | cut -c1-10)" "pending findings are readable only by the user"
 
 run_hook "$CAPTURE" "$(sub "$(report 'Retries have no upper bound' 'TTL unset')")"
 assert_eq "[sre] Retries have no upper bound
