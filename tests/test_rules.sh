@@ -5,8 +5,17 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
 
 actual="$(cd "$ROOT/plugins" && ls -1 */rules/*.md 2>/dev/null | tr '\n' ' ')"
-assert_eq "building/rules/conduct.md building/rules/engineering.md personas/rules/delegation.md recording/rules/findings.md " \
-  "$actual" "the four rules files exist"
+assert_eq "building/rules/conduct.md building/rules/engineering.md personas/rules/delegation.md personas/rules/persona-protocol.md recording/rules/findings.md " \
+  "$actual" "the five rules files exist"
+
+# Most rules load everywhere. The orchestrator rules are for the main session only, the persona protocol for subagents only.
+events_for() {
+  case "$1" in
+    delegation.md) echo SessionStart ;;
+    persona-protocol.md) echo SubagentStart ;;
+    *) echo SessionStart SubagentStart ;;
+  esac
+}
 
 for f in "$ROOT"/plugins/*/rules/*.md; do
   [ -e "$f" ] || continue
@@ -25,7 +34,9 @@ for f in "$ROOT"/plugins/*/rules/*.md; do
     cmds="$(jq -r --arg e "$e" --arg n "rules/$name" \
       '[.hooks[$e][]?.hooks[]?.command | select(contains($n))] | .[]' "$ROOT/plugins/$plugin/hooks/hooks.json")"
     count="$(printf '%s' "$cmds" | grep -c . || true)"
-    [ "$count" = 1 ] || { echo "  FAIL [$plugin/$name]: $count $e entries, want 1"; FAILS=1; continue; }
+    case " $(events_for "$name") " in *" $e "*) want=1 ;; *) want=0 ;; esac
+    [ "$count" = "$want" ] || { echo "  FAIL [$plugin/$name]: $count $e entries, want $want"; FAILS=1; continue; }
+    [ "$want" = 1 ] || continue
     CLAUDE_PLUGIN_ROOT="$SPACED/$plugin" bash -c "$cmds" \
       | jq -e --arg e "$e" --arg r "$SPACED/$plugin" --rawfile f "$f" \
         '.hookSpecificOutput.hookEventName == $e and .hookSpecificOutput.additionalContext == ($f | gsub("\\$\\{CLAUDE_PLUGIN_ROOT\\}"; $r))' \
