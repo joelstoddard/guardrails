@@ -33,7 +33,6 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 * ALWAYS reach potential errors as fast as possible (fail fast).
 * NEVER swallow errors. ALWAYS handle an error, propagate it, OR fail loudly.
     * Where possible, surface meaningful logs and errors to end users.
-* ALWAYS validate input at system boundaries. NEVER trust data crossing a boundary.
 * ALWAYS name things for what they ARE or DO. NEVER use names that need a comment to explain them.
 * ALWAYS prefer pure functions and immutability. ALWAYS keep side effects (clock, randomness, network, filesystem, environment) at the edges. Inject them ONLY WHEN a test must control them.
 * NEVER commit commented-out code, dead code, OR unreferenced TODOs.
@@ -49,14 +48,11 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 
 * ALWAYS create quality through the environment, NOT through instruction. IF a rule matters, a deterministic machine MUST enforce it.
 * ALWAYS work inside the constraints (tests, types, linters, metrics, gates). Your code is correct ONLY when it survives them.
-* NEVER rely on your own belief that code is correct. Confidence comes from the gauntlet the code survived.
 * NEVER submit a change that lowers confidence in the system.
 * ALWAYS test behaviour, NEVER implementation details.
 * NEVER weaken, skip, delete, OR loosen a test, threshold, OR gate to make a change pass. Fix the code.
 * NEVER disable a failing check. IF a check is genuinely wrong, STOP AND ask the user, with evidence.
 * ALWAYS add a new constraint when a defect escapes. The escape MUST become impossible to repeat.
-* ALWAYS treat the quality gate as the definition of done.
-* ALWAYS run the relevant checks yourself BEFORE reporting completion. NEVER hand unverified work to the user.
 * IF a constraint you need does not exist (no tests, no linter, no gate), ALWAYS leave the ONE smallest check that fails if your logic breaks, AND propose the larger gate as a finding. NEVER build test infrastructure unasked.
 
 ### Quality gates & metrics
@@ -91,7 +87,6 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 
 * ALWAYS catch defects at the earliest, cheapest stage (types, lint, unit tests, THEN CI, THEN production).
 * ALWAYS consider testing and security during design, NOT after implementation.
-* NEVER rely on a later stage to catch what an earlier stage could.
 
 ---
 
@@ -111,8 +106,6 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 * ALWAYS keep changes small enough to be reviewed properly.
 * ALWAYS draft the WHY in pull request descriptions. PRs open as drafts through `building:draft-pr`; promoting one to ready is the user's call.
 * ALWAYS review the change, NOT the author.
-* NEVER leave knowledge only in your context window. Write it down where the next reader will look.
-* ALWAYS ask WHEN blocked or uncertain, NOT after building the wrong thing.
 * ALWAYS track technical debt explicitly, as an issue in the session's tracker, with an owner AND a cost of delay. NEVER hide it. IF the owner is unknown, ask; NEVER invent one.
 * ALWAYS deprecate a published interface (an API, CLI flag, config key, OR file format that others depend on) with a timeline, a migration path, AND a removal date. NEVER remove one without notice. Code your own change made unused is NOT a published interface; remove it.
 * ALWAYS pay down the debt you touch, WITHIN the scope of the task.
