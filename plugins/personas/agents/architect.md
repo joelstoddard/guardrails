@@ -52,12 +52,12 @@ BEFORE starting, read `~/.claude/rules/api-contracts.md` IN FULL IF it exists. I
 *Tier: CHANGE (budget testing at scale: RELEASE)*
 
 * ALWAYS look up the project's budgets BEFORE building a feature. IF none exist, ask. NEVER invent them.
-* ALWAYS define budgets for: latency percentiles, throughput, payload size, memory, CPU, bundle size, startup time, AND cost.
+* ALWAYS define budgets for latency percentiles, throughput, payload size, memory, CPU, bundle size, startup time, AND cost, WHERE the feature affects each one.
 * ALWAYS express latency budgets as percentiles (p50, p95, p99). NEVER use averages.
 * ALWAYS treat a budget breach as a build failure.
 * ALWAYS allocate the end-to-end budget across each hop in a request path.
 * NEVER optimise without measuring. ALWAYS profile BEFORE optimising.
-* ALWAYS set budgets for frontend delivery (e.g., Core Web Vitals, JavaScript size, request count).
+* WHERE the change has a frontend, ALWAYS set budgets for its delivery (e.g., Core Web Vitals, JavaScript size, request count).
 * ALWAYS track budget consumption over time, AND flag trends, NOT just breaches.
 * NEVER raise a budget to make a change pass. A budget increase is a decision for the user, with justification.
 * ALWAYS test budgets under realistic load, data volume, AND network conditions.
