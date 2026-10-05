@@ -91,4 +91,10 @@ yes $'cat <<\\EOF\nWe don\'t ship this yet.\nEOF\ngit commit -m x # it\'s done' 
 yes $'cat <<EOF \\\n  > /dev/null\nbody\nEOF\ngit commit -m x'                commit "a heredoc body starts after its joined line"
 yes $'read -r b <<<"$PWD"\ngit commit -m x'                                    commit "a here-string opens no heredoc"
 
+# What the per-line split sees still counts, so a quote the carried split misreads hides nothing.
+yes $'bash -c \'\ncd /tmp\ngit commit -m x\n\''       commit "a commit only the per-line split sees"
+yes $'echo "`echo \'"\'`"\ngit commit -m x\n# \''     commit "a commit after a misread backtick"
+cwd $'echo "`echo \'"\'`"\ncd /evil\n# \'\ngit commit -m x' commit /start $'/start\n/evil' \
+  "both directories when the splits disagree"
+
 finish "git-cmd"

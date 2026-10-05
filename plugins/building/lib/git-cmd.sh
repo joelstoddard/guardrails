@@ -6,6 +6,9 @@
 # Usage: _guardrails_invokes_git      "<cmdline>" <subcommand>        → rc 0 if run, else 1.
 #        _guardrails_git_effective_cwd "<cmdline>" <subcommand> <cwd> → prints the cwd git
 #                                                                       will actually run in.
+#
+# Both read the split that carries quotes across lines and the per-line split it replaced, so a
+# quote the carried split misreads can never make a guard weaker than it was.
 
 _GUARDRAILS_GIT_CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_GUARDRAILS_GIT_CMD_DIR/shell-split.sh"
@@ -56,7 +59,7 @@ _guardrails_invokes_git() {
         [ "${toks[$i]:-}" = "$want" ] && return 0
         ;;
     esac
-  done < <(_guardrails_split_segments "$cmdline")
+  done < <(_guardrails_split_segments "$cmdline"; _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_split_segments "$cmdline")
   return 1
 }
 
@@ -65,7 +68,16 @@ _guardrails_invokes_git() {
 # compose. Why this matters: docs/design/git-command-parsing.md.
 #
 # Usage: _guardrails_git_effective_cwd "<command line>" <subcommand> "<starting cwd>"
+#        → one line, or two when the two splits disagree, so a guard can judge both.
 _guardrails_git_effective_cwd() {
+  local carried per_line
+  carried="$(_guardrails_git_walk_cwd "$@")"
+  per_line="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_git_walk_cwd "$@")"
+  printf '%s\n' "$carried"
+  [ "$per_line" = "$carried" ] || printf '%s\n' "$per_line"
+}
+
+_guardrails_git_walk_cwd() {
   local cmdline="$1" want="$2" cur="$3" seg i j k d v
   local -a toks
   while IFS= read -r seg; do

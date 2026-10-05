@@ -54,6 +54,16 @@ to be honoured, and they compose, so segments are walked in order:
 | `cd <path> && git commit` | The payload `cwd` never changes, so this is the form that bites under worktree-per-ticket. |
 | `git -C <path> commit` | Cumulative — each `-C` is relative to the previous one. |
 
+## Two splits, never weaker than one
+
+The splitter carries quote state across lines, so a quoted argument spanning lines
+stays data. A shell construct it misreads can leave it inside a quote the shell has
+already closed, hiding the lines that follow. So every guard also reads the per-line
+split it replaced (`_GUARDRAILS_SPLIT_PER_LINE=1`), and git counts as run if either split
+sees it. When the two disagree on the directory, `_guardrails_git_effective_cwd` prints
+both and `guard-default-branch` refuses if either is on its default branch. The cost is
+that the per-line split's false positives remain for the git guards.
+
 ## What was rejected
 
 - **Substring matching.** The original approach; produced the `gh pr create` false

@@ -19,6 +19,8 @@
 # also split on its own, with quotes reset, and no command can hide behind a false quote.
 #
 # Usage: _guardrails_split_segments "<cmdline>" → one segment per line.
+#        _GUARDRAILS_SPLIT_PER_LINE=1 resets quotes on every line, the split from before they carried,
+#        which the guards keep as a cross-check so that carrying never weakens them.
 
 # carry=1 carries quotes across lines and exits 3 if they never close; carry=0 resets them per line.
 _guardrails_split_awk() {
@@ -115,6 +117,7 @@ _guardrails_split_awk() {
 
 _guardrails_split_segments() {
   local segs closed=1
+  if [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ]; then _guardrails_split_awk 0 "$1"; return; fi
   segs="$(_guardrails_split_awk 1 "$1")" || closed=0
   [ -z "$segs" ] || printf '%s\n' "$segs"
   [ "$closed" = 1 ] || _guardrails_split_awk 0 "$1"
