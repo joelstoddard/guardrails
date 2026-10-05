@@ -34,7 +34,7 @@ printf '%s\n' "$msg" | grep -qE '^## Result: (DONE|PARTIAL|BLOCKED)[[:space:]]*$
   missing="$missing"$'\n'"  - ## Result: DONE | PARTIAL | BLOCKED"
 for h in "Changes" "Checks run" "Rules not satisfied or skipped" "Findings outside scope" \
   "Drafts for the user to send" "Questions for the user"; do
-  printf '%s\n' "$msg" | grep -qE "^### $h[[:space:]]*$" || missing="$missing"$'\n'"  - ### $h"
+  printf '%s\n' "$msg" | grep -qE "^### ${h}[[:space:]]*$" || missing="$missing"$'\n'"  - ### $h"
 done
 [ -n "$missing" ] || exit 0
 

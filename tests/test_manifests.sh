@@ -19,8 +19,7 @@ assert_eq '["building","recording"]' "$(jq -c '.dependencies' "$ROOT/plugins/per
   "personas depends on building and recording"
 
 # Every script hook must run from a plugin root that contains a space.
-SPACED="$(mktemp -d)/with space"
-trap 'rm -rf "$(dirname "$SPACED")"' EXIT
+SPACED="$(scratch_dir)/with space"
 mkdir -p "$SPACED"
 for p in "$ROOT"/plugins/*; do
   name="$(basename "$p")"; cp -R "$p" "$SPACED/$name"
