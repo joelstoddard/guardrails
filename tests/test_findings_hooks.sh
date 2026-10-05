@@ -3,7 +3,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 GATE="$DIR/../plugins/recording/hooks/scripts/findings-gate.sh"
 CAPTURE="$DIR/../plugins/recording/hooks/scripts/findings-capture.sh"
-export XDG_STATE_HOME="$(mktemp -d)"
+XDG_STATE_HOME="$(mktemp -d)" || exit 1
+export XDG_STATE_HOME
 trap 'rm -rf "$XDG_STATE_HOME"' EXIT
 PENDING="$XDG_STATE_HOME/claude-guardrails/pending/s1"
 
