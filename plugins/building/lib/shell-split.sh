@@ -105,9 +105,9 @@ _guardrails_split_awk() {
         out = out c
       }
       # A line break inside a quote is data here, but a separator to the sh -c or eval that re-splits
-      # the quote, so it is written as a semicolon.
-      if (carry && q != "") { out = out ";"; next }
-      if (cont) next
+      # the quote, so it is written as a semicolon. Flushing each line keeps a long quote linear.
+      if (carry && q != "") { printf "%s;", out; out = ""; next }
+      if (cont) { printf "%s", out; out = ""; next }
       print out
     }
     END { if (carry && (q != "" || cont)) exit 3 }'
