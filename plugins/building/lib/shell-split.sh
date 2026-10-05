@@ -15,8 +15,8 @@
 #
 # A quoted argument can span lines, so quote state carries across them, with the
 # shell's escapes, comments and $'...' strings, and a backslash-newline joins two lines.
-# If the quotes never close, the shell would not run the input at all; it is then split
-# line by line, resetting quotes on each, so no command can hide behind a false quote.
+# If the quotes never close, bash still runs the lines before them, so every line is then
+# also split on its own, with quotes reset, and no command can hide behind a false quote.
 #
 # Usage: _guardrails_split_segments "<cmdline>" → one segment per line.
 
@@ -114,10 +114,8 @@ _guardrails_split_awk() {
 }
 
 _guardrails_split_segments() {
-  local segs
-  if segs="$(_guardrails_split_awk 1 "$1")"; then
-    [ -z "$segs" ] || printf '%s\n' "$segs"
-  else
-    _guardrails_split_awk 0 "$1"
-  fi
+  local segs closed=1
+  segs="$(_guardrails_split_awk 1 "$1")" || closed=0
+  [ -z "$segs" ] || printf '%s\n' "$segs"
+  [ "$closed" = 1 ] || _guardrails_split_awk 0 "$1"
 }

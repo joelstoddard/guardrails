@@ -208,4 +208,8 @@ blocks $'bash -c \'\nset -e\ncd /tmp\ngh pr comment 1 -b x\n\'' "a multi-line ba
 blocks $'eval "\nset -e\ngh pr comment 1 -b x\n"'             "a multi-line eval"
 blocks $'sh -c "echo hi\ngh pr comment 1 -b x"'               "a multi-line sh -c after a text tool"
 
+# bash runs the lines before a quote that never closes, so they are split as carried too.
+blocks $'grep -q foo <<<"$PWD"\ngh pr comment 1 -b x\necho \'never closed' \
+  "lines before an unclosed quote are split as carried"
+
 finish "publish-cmd"
