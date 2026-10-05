@@ -13,7 +13,10 @@ dir="$(_guardrails_pending_dir "$(field .session_id)")" || exit 0
 id="$(field .agent_id)"
 [ -n "$id" ] || id="capture-$$-$RANDOM" # without an agent_id, every report is kept
 _guardrails_token "$id" || exit 0
-items="$(_guardrails_findings "$(field .last_assistant_message)")"
+msg="$(field .last_assistant_message)"
+handback="$(_guardrails_handback "$(field .agent_transcript_path)")"
+[ -z "$handback" ] || msg="$handback"
+items="$(_guardrails_findings "$msg")"
 [ -n "$items" ] || { rm -f "$dir/$id"; exit 0; }
 agent="$(field .agent_type)"
 mkdir -p "$dir"
