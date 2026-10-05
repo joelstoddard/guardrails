@@ -1,7 +1,7 @@
 ---
 name: track-findings
 description: File every finding outside scope as a tracked issue, so nothing you noticed is left only in chat. Follow this skill BEFORE ending a turn that lists findings — yours or a persona's — and whenever the user says "track this", "add a todo", or "file an issue". Uses the tracker the session context names (a work project), otherwise GitHub issues.
-allowed-tools: Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh repo view:*), Bash(gh label list:*), Bash(git remote:*), Bash(git branch:*), Read, Grep, Skill
+allowed-tools: Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh repo view:*), Bash(gh label list:*), Bash(git remote get-url:*), Bash(git branch --show-current), Read, Grep, Skill
 ---
 
 # Track findings
@@ -26,8 +26,10 @@ Other developers may not want AI-filed issues, so ask BEFORE filing anywhere tha
 
 1. **Pick the repo.** IF the finding's repo is NOT one the user can write to, ask the user which repo to use.
 2. **Look for a duplicate.** Run `gh issue list --repo <owner>/<repo> --state open --search "<key words>"`. IF an open issue already covers it, use that issue's URL AND do NOT file another.
-3. **Ensure the label.** IF `gh label list --repo <owner>/<repo> --search finding` shows no `finding` label, ask the user to approve `gh label create finding --repo <owner>/<repo> --description "Noticed outside a task's scope"`.
-4. **File it**, one issue per finding. The permission prompt is the user's approval:
+3. **Ensure the label.** IF `gh label list --repo <owner>/<repo> --search finding` shows no `finding` label:
+   * **Personal**: ask the user to approve `gh label create finding --repo <owner>/<repo> --description "Noticed outside a task's scope"`.
+   * **Shared**: NEVER create a label. File the issue without one.
+4. **File it**, one issue per finding. The permission prompt is the user's approval. IF the repo is shared AND has no `finding` label, leave out `--label finding`:
 
    ```bash
    gh issue create --repo <owner>/<repo> --label finding --title "<imperative summary, under 70 characters>" --body-file - <<'EOF'

@@ -49,6 +49,17 @@ class Agents(unittest.TestCase):
         self.assertTrue(all(alt.startswith("personas:") for alt in alternatives), matchers[0])
         self.assertEqual({alt.split(":", 1)[1] for alt in alternatives}, {p.stem for p in agents()})
 
+    def test_delegation_names_every_tool_beyond_the_shared_allowlist(self):
+        # delegation.md tells the orchestrator what a persona can do; a tool it omits is one it plans without.
+        shared = {"Read", "Grep", "Glob", "Edit", "Write", "Bash", "Skill"}
+        lines = (PERSONAS / "rules" / "delegation.md").read_text().splitlines()
+        for path in agents():
+            tools = frontmatter(path).get("tools") or ""
+            names = tools if isinstance(tools, list) else tools.split(",")
+            for tool in {t.strip() for t in names} - shared:
+                with self.subTest(agent=path.stem, tool=tool):
+                    self.assertTrue(any(tool in line and path.stem in line for line in lines))
+
 
 if __name__ == "__main__":
     unittest.main()
