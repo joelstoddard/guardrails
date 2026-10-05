@@ -36,6 +36,14 @@ jobs:
         run: |
           shellcheck --version | grep '^version'
           bash tests/lint.sh
+      # A stacked PR compares with the branch it targets, and a base without the floor file fails the step.
+      # See docs/design/coverage.md
+      - name: Check coverage floors only rise
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "$GITHUB_BASE_REF"
+          git show FETCH_HEAD:tests/coverage-floor.tsv > "$RUNNER_TEMP/base-floor.tsv"
+          bash tests/coverage.sh --ratchet "$RUNNER_TEMP/base-floor.tsv"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: '3.12'
