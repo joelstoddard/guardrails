@@ -1,7 +1,7 @@
 ---
 name: ci-watch
 description: Watch a pull request's CI checks and repair failures until they pass. Follow this skill after opening a PR, or when asked to watch, babysit, or fix CI on a PR. Bounded at three fix rounds; never weakens a test to reach green.
-allowed-tools: Bash(git branch:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr checks:*), Bash(gh run list:*), Bash(gh run view:*), Bash(gh run rerun:*), Read, Edit, Write, Grep, Glob, Skill
+allowed-tools: Bash(git branch --show-current), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr view:*), Bash(gh pr checks:*), Bash(gh run list:*), Bash(gh run view:*), Bash(gh run rerun:*), Read, Edit, Write, Grep, Glob, Skill
 ---
 
 ## Current state
