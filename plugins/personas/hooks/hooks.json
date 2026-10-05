@@ -29,7 +29,7 @@
           {
             "type": "command",
             "timeout": 10,
-            "command": "jq -Rs --arg root \"${CLAUDE_PLUGIN_ROOT}\" 'gsub(\"\\\\$\\\\{CLAUDE_PLUGIN_ROOT\\\\}\"; $root) | {hookSpecificOutput:{hookEventName:\"SubagentStart\",additionalContext:.}}' \"${CLAUDE_PLUGIN_ROOT}/rules/delegation.md\""
+            "command": "jq -Rs --arg root \"${CLAUDE_PLUGIN_ROOT}\" 'gsub(\"\\\\$\\\\{CLAUDE_PLUGIN_ROOT\\\\}\"; $root) | {hookSpecificOutput:{hookEventName:\"SubagentStart\",additionalContext:.}}' \"${CLAUDE_PLUGIN_ROOT}/rules/persona-protocol.md\""
           }
         ]
       }
