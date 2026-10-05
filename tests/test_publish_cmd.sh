@@ -203,4 +203,9 @@ blocks $'echo $[1<<2]\ngh pr comment 1 -b x'         "1<<2 inside \$[ ] is a shi
 blocks $'((\n  x = 1<<2\n))\ngh pr comment 1 -b x'     "1<<2 inside a split (( )) is a shift"
 allows $'cat > b.md <<\\EOF\ngh pr comment is documented here\nEOF' "prose in a backslash-quoted heredoc"
 
+# An sh -c or eval payload is a script, so its line breaks still separate commands.
+blocks $'bash -c \'\nset -e\ncd /tmp\ngh pr comment 1 -b x\n\'' "a multi-line bash -c script"
+blocks $'eval "\nset -e\ngh pr comment 1 -b x\n"'             "a multi-line eval"
+blocks $'sh -c "echo hi\ngh pr comment 1 -b x"'               "a multi-line sh -c after a text tool"
+
 finish "publish-cmd"

@@ -104,8 +104,9 @@ _guardrails_split_awk() {
         wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         out = out c
       }
-      # Inside a quote the line break is data, so the segment goes on; a joined line goes on too.
-      if (carry && q != "") { out = out " "; next }
+      # A line break inside a quote is data here, but a separator to the sh -c or eval that re-splits
+      # the quote, so it is written as a semicolon.
+      if (carry && q != "") { out = out ";"; next }
       if (cont) next
       print out
     }
