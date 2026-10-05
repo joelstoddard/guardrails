@@ -81,4 +81,9 @@ cwd "cd /a && git push"          commit /a     /a          "cd applies, but no m
 cwd "grep -E 'x|cd /evil' f && git commit -m y" commit /start /start "fabricated cd from a pattern ignored"
 cwd "echo 'cd /evil; git commit' && git commit" commit /start /start "fabricated cd and commit both ignored"
 
+# A carried quote turns any misread into hidden lines, so $'...' and # end only where the shell ends them.
+yes $'printf $\'a\\n\'\ngit commit -m x\n# \'' commit "an a inside \$'...' does not end it"
+yes 'echo \;#; git commit -m x'                commit "a # after an escaped ; is mid-word"
+yes 'echo $(true)#; git commit -m x'           commit "a # after \$( ) is mid-word"
+
 finish "git-cmd"

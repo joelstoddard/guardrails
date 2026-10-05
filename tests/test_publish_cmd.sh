@@ -177,4 +177,15 @@ blocks $'printf $\'it\\\'s\\n\'\ngh pr comment 1 -b x' "an escaped quote does no
 blocks $'echo "a \\" b"\ngh pr comment 1 -b x' "an escaped double quote does not end \"...\""
 blocks $'echo \'never closed\ngh pr comment 1 -b x' "an unclosed quote falls back to scanning every line"
 
+# A carried quote turns any misread into hidden lines, so $'...' and # end only where the shell ends them.
+blocks $'printf $\'Added a line\\n\' >> notes.txt\ngh pr comment 1 -b x\necho \\\'' "an a inside \$'...' does not end it"
+blocks 'echo \;#; gh pr comment 1 -b x'    "a # after an escaped ; is mid-word"
+blocks 'echo a\ #; gh pr comment 1 -b x'   "a # after an escaped blank is mid-word"
+blocks 'echo a\|#| gh pr comment 1 -b x'   "a # after an escaped | is mid-word"
+blocks 'echo $(true)#; gh pr comment 1 -b x'  "a # after \$( ) is mid-word"
+blocks 'echo $((1))#; gh pr comment 1 -b x'   "a # after \$(( )) is mid-word"
+blocks 'cat <(true)#; gh pr comment 1 -b x'   "a # after <( ) is mid-word"
+blocks $'echo a\\\n#; gh pr comment 1 -b x'   "a # on a joined line continues the word"
+blocks $'(cd /tmp)# it\'s\ngh pr comment 1 -b x\n# it\'s' "a # after a subshell still starts a comment"
+
 finish "publish-cmd"

@@ -23,7 +23,7 @@
 # carry=1 carries quotes across lines and exits 3 if they never close; carry=0 resets them per line.
 _guardrails_split_awk() {
   printf '%s' "$2" | awk -v carry="$1" '
-    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0 }
+    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1 }
     {
       if (hd != "") {
         t = $0
@@ -33,6 +33,7 @@ _guardrails_split_awk() {
       }
       if (!carry) { q = ""; out = "" }
       else if (q == "" && !cont) out = ""
+      if (!cont) wb = 1
       cont = 0; ar = 0; n = length($0)
       for (i = 1; i <= n; i++) {
         c = substr($0, i, 1)
@@ -41,27 +42,30 @@ _guardrails_split_awk() {
         # At the end of an unquoted line it joins the next line to this one.
         if (carry && c == bs && q != sq) {
           if (i == n) { if (q == "") cont = 1; else out = out c; break }
-          out = out c substr($0, i + 1, 1); i++; continue
+          out = out c substr($0, i + 1, 1); i++; wb = 0; continue
         }
 
         # An enclosing quote does not reach inside $( ), where quoting restarts and
         # a <<WORD is a real opener. Depth outlives the line because the closing )
         # of a `-m "$(cat <<EOF ...)"` body lands on a later one.
-        if (q != sq && q != "a" && c == "$" && substr($0, i + 1, 1) == "(" && substr($0, i + 2, 1) != "(") {
-          st[++d] = q; q = ""; out = out "$("; i++; continue
+        if (q != sq && q != "ansi" && c == "$" && substr($0, i + 1, 1) == "(" && substr($0, i + 2, 1) != "(") {
+          st[++d] = q; q = ""; out = out "$("; i++; wb = 1; continue
         }
-        if (q != "") { out = out c; if (c == q || (q == "a" && c == sq)) q = ""; continue }
-        if (carry && c == "$" && substr($0, i + 1, 1) == sq) { q = "a"; out = out c sq; i++; continue }
+        # An ANSI-C string ends only at a single quote, so its marker is longer than any character.
+        if (q != "") { out = out c; wb = 0; if (c == q || (q == "ansi" && c == sq)) q = ""; continue }
+        if (carry && c == "$" && substr($0, i + 1, 1) == sq) { q = "ansi"; out = out c sq; i++; continue }
         if (c == sq || c == dq) { q = c; out = out c; continue }
+        if (carry && (c == "<" || c == ">") && substr($0, i + 1, 1) == "(") { st[++d] = q; out = out c "("; i++; wb = 1; continue }
 
-        # A word that starts with # comments out the rest of the line.
-        if (carry && c == "#" && (i == 1 || substr($0, i - 1, 1) ~ /[ \t;&|()<>]/)) break
+        # A word that starts with # comments out the rest of the line. wb marks a word start: after a
+        # blank or an operator, but not after an escape, or the ) closing a $( ), <( ) or $(( )).
+        if (carry && c == "#" && wb) break
 
         # (( )) is arithmetic, where << is a bit shift rather than a redirect.
         # Miscounting only suppresses heredoc detection, which is the safe way to err.
-        if (c == "(" && substr($0, i + 1, 1) == "(") { ar++; out = out "(("; i++; continue }
-        if (c == ")" && substr($0, i + 1, 1) == ")" && ar > 0) { ar--; out = out "))"; i++; continue }
-        if (c == ")" && d > 0) { q = st[d--]; out = out c; continue }
+        if (c == "(" && substr($0, i + 1, 1) == "(") { ad[++ar] = (substr($0, i - 1, 1) == "$"); out = out "(("; i++; wb = 0; continue }
+        if (c == ")" && substr($0, i + 1, 1) == ")" && ar > 0) { wb = !ad[ar--]; out = out "))"; i++; continue }
+        if (c == ")" && d > 0) { q = st[d--]; out = out c; wb = 0; continue }
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
         if (c == "<" && substr($0, i + 1, 1) == "<" && substr($0, i + 2, 1) != "<" && ar == 0) {
@@ -77,12 +81,13 @@ _guardrails_split_awk() {
             while (j <= n && substr($0, j, 1) ~ /[A-Za-z0-9_]/) { dl = dl substr($0, j, 1); j++ }
             if (dl ~ /^[0-9]+$/) dl = ""   # a bare number is a shift operand, not a delimiter
           }
-          if (dl != "") { hd = dl; out = out "<<"; i = j - 1; continue }
+          if (dl != "") { hd = dl; out = out "<<"; i = j - 1; wb = 0; continue }
         }
 
         if ((c == "&" && substr($0, i + 1, 1) == "&") ||
-            (c == "|" && substr($0, i + 1, 1) == "|")) { out = out "\n"; i++; continue }
-        if (c == "|" || c == ";") { out = out "\n"; continue }
+            (c == "|" && substr($0, i + 1, 1) == "|")) { out = out "\n"; i++; wb = 1; continue }
+        if (c == "|" || c == ";") { out = out "\n"; wb = 1; continue }
+        wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         out = out c
       }
       # Inside a quote the line break is data, so the segment goes on; a joined line goes on too.
