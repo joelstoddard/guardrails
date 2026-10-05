@@ -10,6 +10,14 @@ input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 
+# Fail closed: a command the guard cannot read in full gets a question, not a pass.
+if why="$(_guardrails_unreadable "$cmd")"; then
+  [ "${ALLOW_PUBLISH_AS_ME:-}" = "1" ] && exit 0
+  jq -cn --arg r "Could not read this command to check it does not publish as you: $why. Allow it only if nothing here posts under your name." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+fi
+
 reason="$(_guardrails_publishes_as_user "$cmd")" || {
   # Read line by line, as before quotes carried, it may still publish: a quote spanning lines
   # looks the same as shell syntax the carried split misreads, so only the human can tell.
