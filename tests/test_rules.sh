@@ -4,7 +4,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 ROOT="$(cd "$DIR/.." && pwd)"
 
-actual="$(cd "$ROOT/plugins" && ls -1 */rules/*.md 2>/dev/null | tr '\n' ' ')"
+actual="$(cd "$ROOT/plugins" && for f in */rules/*.md; do printf '%s ' "$f"; done)"
 assert_eq "building/rules/conduct.md building/rules/engineering.md personas/rules/delegation.md personas/rules/persona-protocol.md recording/rules/findings.md " \
   "$actual" "the five rules files exist"
 

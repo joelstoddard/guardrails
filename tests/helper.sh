@@ -33,4 +33,4 @@ assert_rc()  { [ "$RC" = "$1" ] || { echo "  FAIL [$2]: rc=$RC expected $1 (err:
 assert_err() { case "$ERR" in *"$1"*) ;; *) echo "  FAIL [$2]: stderr missing '$1' (got: $ERR)"; FAILS=1;; esac; }
 assert_out() { case "$OUT" in *"$1"*) ;; *) echo "  FAIL [$2]: stdout missing '$1' (got: $OUT)"; FAILS=1;; esac; }
 assert_eq()  { [ "$1" = "$2" ] || { echo "  FAIL [$3]: '$1' != '$2'"; FAILS=1; }; }
-finish()     { [ "$FAILS" = 0 ] && echo "OK: $1" || { echo "FAILED: $1"; exit 1; }; }
+finish()     { if [ "$FAILS" = 0 ]; then echo "OK: $1"; else echo "FAILED: $1"; exit 1; fi; }
