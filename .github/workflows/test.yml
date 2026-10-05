@@ -1,8 +1,8 @@
 name: test
 
 on:
+  # Every PR, so a stacked PR is tested before its base merges.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
