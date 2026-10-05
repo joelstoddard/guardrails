@@ -1,0 +1,4 @@
+# Scripts source siblings as `. "$DIR/helper.sh"`; resolve those against the script's own directory,
+# so shellcheck sees what the sourced file reads (FAILS, RC) instead of calling it unused.
+source-path=SCRIPTDIR
+external-sources=true
