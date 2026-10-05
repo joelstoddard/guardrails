@@ -5,10 +5,17 @@ command -v jq >/dev/null 2>&1 || exit 0
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/../../lib/findings.sh"
 input="$(cat)"
-file="$(_guardrails_findings_file "$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)")" || exit 0
-items="$(_guardrails_findings "$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)")"
-[ -n "$items" ] || exit 0
-agent="$(printf '%s' "$input" | jq -r '.agent_type // "subagent"' 2>/dev/null)"
-mkdir -p "$(dirname "$file")"
-printf '%s\n' "$items" | awk -v a="$agent" '{ print "[" a "] " $0 }' >> "$file"
+field() { printf '%s' "$input" | jq -r "$1 // empty" 2>/dev/null; }
+dir="$(_guardrails_pending_dir "$(field .session_id)")" || exit 0
+
+# One file per subagent, so a retry after a rejected report replaces the first one.
+id="$(field .agent_id)"
+[ -n "$id" ] || id="capture-$$-$RANDOM" # without an agent_id, every report is kept
+_guardrails_token "$id" || exit 0
+items="$(_guardrails_findings "$(field .last_assistant_message)")"
+[ -n "$items" ] || { rm -f "$dir/$id"; exit 0; }
+agent="$(field .agent_type)"
+mkdir -p "$dir"
+printf '%s\n' "$items" | awk -v a="${agent:-subagent}" '{ print "[" a "] " $0 }' > "$dir/.$id.tmp" &&
+  mv "$dir/.$id.tmp" "$dir/$id"
 exit 0
