@@ -147,3 +147,32 @@ _guardrails_split_segments() {
   [ -z "$segs" ] || printf '%s\n' "$segs"
   [ "$closed" = 1 ] || _guardrails_split_awk 0 "$1"
 }
+
+# _guardrails_shell_payload <segment> → rc 0 with _GUARDRAILS_PAYLOAD set to the script a shell runs from
+# its command line (a -c argument, alone or in a cluster such as -lc, or a here-string) or eval runs,
+# else rc 1. It sets a variable rather than printing, since a subshell for every segment is slow.
+_guardrails_shell_payload() {
+  local seg="$1" i=0 t inner=""
+  local -a toks
+  case "$seg" in *eval* | *'<<<'* | *-*c*) ;; *) return 1 ;; esac
+  read -r -a toks <<<"$seg" || return 1
+  while [ "$i" -lt "${#toks[@]}" ]; do
+    case "${toks[$i]}" in [A-Za-z_]*=*) i=$((i + 1)) ;; *) break ;; esac
+  done
+  case "${toks[$i]:-}" in
+    eval) inner="${seg#*eval }" ;;
+    sh | bash | zsh | dash | ksh | */sh | */bash | */zsh | */dash | */ksh)
+      for t in "${toks[@]:$((i + 1))}"; do
+        case "$t" in
+          --*) ;;
+          -*c*) inner="${seg#*"$t"}"; break ;;
+        esac
+      done
+      [ -n "$inner" ] || case "$seg" in *'<<<'*) inner="${seg#*<<<}" ;; esac ;;
+    *) return 1 ;;
+  esac
+  inner="${inner#"${inner%%[![:space:]]*}"}"
+  inner="${inner#[\"\']}"; inner="${inner%[\"\']}"
+  [ -n "$inner" ] && [ "$inner" != "$seg" ] || return 1
+  _GUARDRAILS_PAYLOAD="$inner"
+}

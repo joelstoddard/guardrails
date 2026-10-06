@@ -212,4 +212,10 @@ blocks $'sh -c "echo hi\ngh pr comment 1 -b x"'               "a multi-line sh -
 blocks $'grep -q foo <<<"$PWD"\ngh pr comment 1 -b x\necho \'never closed' \
   "lines before an unclosed quote are split as carried"
 
+# A shell runs a -c argument or a here-string as a script, wherever -c sits among its flags.
+blocks "bash <<<'gh pr comment 1 -b x'"                                   "a here-string fed to bash"
+blocks 'ksh <<< "gh pr comment 1 -b x"'                                   "a spaced here-string fed to ksh"
+blocks $'bash <<<\'set -e\ngh pr comment 1 -b x\''                         "a multi-line here-string fed to bash"
+blocks "bash -lc 'gh pr comment 1 -b x'"                                  "a -c inside a cluster of flags"
+
 finish "publish-cmd"
