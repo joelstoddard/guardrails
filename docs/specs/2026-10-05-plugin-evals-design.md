@@ -142,19 +142,29 @@ committed; `bash tests/run.sh` passes, including `claude plugin validate`; and o
 `--runs 1` pass has run, with its table reported. A case that misbehaves is reported as it
 is, not tuned until green.
 
-## Blocker: the first run
+## Running on macOS
 
-The suite is committed but has not run. Claude Code refuses a Bash-granting eval while the
-Docker credential store, `~/.docker`, holds any symbolic link, because the sandbox cannot
-then prove it excludes the store. Docker Desktop's user-mode install puts its CLI plugins
-there as links. Pointing `DOCKER_CONFIG` at an empty directory does not help, since the
-sandbox checks `~/.docker` as well. Every case grants Bash, so every case is blocked.
+Two machine conditions break a Bash-granting run on macOS:
 
-Until a run is possible, `tests/test_eval_graders.py` checks each grader offline, in the
-unit suite: the regexes against git's real output, JSON-escaped as a trace carries it, and
-against stream-json-shaped trace lines, using the pattern YAML parses from the grader file.
-It also checks each scaffold builds the state its case needs. That proves the patterns,
-not the assumptions about the trace's layout or Haiku's behaviour.
+- **`~/.docker` holds a symbolic link.** Claude Code then refuses the run before it starts,
+  because the sandbox cannot prove it excludes the Docker credential store. Docker
+  Desktop's user-mode install puts its CLI plugins there as links. Pointing `DOCKER_CONFIG`
+  elsewhere does not help, since the sandbox checks `~/.docker` as well. List plugin
+  directories in `config.json`'s `cliPluginsExtraDirs` instead of linking them.
+- **`git` resolves to the `/usr/bin/git` shim.** A run inherits the operator's PATH, but its
+  sandbox cannot read under the operator's home, so a git in `~/.nix-profile/bin` is not
+  found. In a probe, the PATH search also passed over Homebrew's linked git. That leaves
+  Apple's `/usr/bin/git` shim, which exits 72 because the sandbox denies its cache
+  directory under `/var/folders`. So `tests/evals.sh` puts the resolved git binary's own
+  directory first on the PATH the run inherits. Both arms get the same git, so `Δ` is
+  unaffected. The run's shell is not a login shell, and the sandbox write-protects the
+  run's shell profiles, so a scaffold cannot change the PATH.
+
+`tests/test_eval_graders.py` checks each grader offline, in the unit suite: the regexes
+against git's real output, JSON-escaped as a trace carries it, and against
+stream-json-shaped trace lines, using the pattern YAML parses from the grader file. It also
+checks each scaffold builds the state its case needs, and that the runner hands the run a
+PATH that starts with a real git.
 
 ## Follow-ups, not in this change
 
