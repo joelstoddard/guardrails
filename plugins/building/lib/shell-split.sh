@@ -147,8 +147,14 @@ _guardrails_split_awk() {
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
           out = out "\n"; i++; wb = 1; fw = ""; fwd = 0; fwe = 0; continue
         }
-        if (c == "|" || c == ";") {
-          if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 }
+        # A lone & ends a command as ; does, but the & in >&, <&, &> and |& belongs to a redirect or pipe.
+        if (carry && ((index("<>", c) && chars[i + 1] == "&") || (c == "&" && chars[i + 1] == ">"))) {
+          out = out c chars[i + 1]; i++; wb = 1; continue
+        }
+        if (c == "|" || c == ";" || (carry && c == "&")) {
+          j = (carry && c == "|" && chars[i + 1] == "&")
+          if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 + j }
+          i += j
           out = out "\n"; wb = 1; fw = ""; fwd = 0; fwe = 0; continue
         }
         if (carry) wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))

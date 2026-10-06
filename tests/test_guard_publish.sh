@@ -147,4 +147,11 @@ assert_eq "$OUT" "" "segments within the cap are read"
 run_hook "$S" "$(jsonin "$(printf 'eval x\n%.0s' {1..16})")"
 assert_eq "$OUT" "" "shells and evals within the cap are read"
 
+# A lone & ends a command, but a redirect's & does not (#89).
+run_hook "$S" "$(jsonin 'true & gh pr comment 1 -b x')"
+assert_rc 2 "a publish after a lone & blocked"
+run_hook "$S" "$(jsonin 'echo x 2>&1 send it')"
+assert_rc 0 "2>&1 is a redirect"
+assert_eq "$OUT" "" "2>&1 asks nothing"
+
 finish "guard-publish"

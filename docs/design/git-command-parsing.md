@@ -22,7 +22,8 @@ which point it protects nothing.
 
 ## Design
 
-For each chained simple command — split on `&&`, `||`, `;`, `|` and newlines —
+For each chained simple command — split on `&&`, `||`, `;`, `|`, a lone `&` and
+newlines, but not the `&` of a redirect such as `2>&1` or `&>` —
 `_guardrails_invokes_git`:
 
 1. skips leading `VAR=value` assignments,

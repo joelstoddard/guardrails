@@ -125,4 +125,9 @@ yes 'cat <(git commit -m x)'               commit "inside a process substitution
 no  "echo '\$(git commit -m x)'"           commit "inside single quotes it is text"
 cwd 'x=$(cd /x; pwd); git commit -m y'     commit /start /start "a cd inside a substitution does not last"
 
+# A lone & ends a command (#89).
+yes 'true & git commit -m x'               commit "a commit after a lone &"
+yes 'git add -A 2>&1 & git push'           push   "a push after a redirect and a lone &"
+no  'git status &>/dev/null commit'        commit "&> does not split"
+
 finish "git-cmd"

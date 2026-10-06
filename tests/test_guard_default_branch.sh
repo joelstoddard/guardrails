@@ -137,4 +137,8 @@ assert_out '"permissionDecision":"ask"' "too many shells and evals to re-read as
 run_hook "$S" "$(jsonat "$r13" "$(printf 'true\n%.0s' {1..4998})"$'\n''git commit -m x')"
 assert_rc 2 "a commit within the segment cap is still read and refused"
 
+# A lone & ends a command (#89).
+run_hook "$S" "$(jsonat "$r13" 'true & git commit -m x')"
+assert_rc 2 "a commit after a lone & on the default branch blocked"
+
 finish "guard-default-branch"

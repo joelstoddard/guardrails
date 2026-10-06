@@ -257,4 +257,25 @@ allows "echo '\$(gh pr comment 1 -b x)'"                          "a substitutio
 allows 'echo "\$(gh pr comment 1 -b x)"'                          "an escaped substitution is text"
 allows $'git commit -F - <<\'EOF\'\n$(gh pr comment 1 -b x)\nEOF'  "a substitution in a quoted heredoc is text"
 
+# A lone & ends a command as ; does, but &&, &>, >&, <& and |& are other operators (#89).
+splits() { assert_eq "$(_guardrails_split_segments "$1")" "$2" "$3"; }
+blocks 'true & gh pr comment 1 -b x'                    "a command after a lone &"
+blocks 'sleep 1 & npm publish'                          "a publish after a background job"
+blocks $'true & bash <<EOF\ngh pr comment 1 -b x\nEOF'  "a heredoc fed to a shell after a lone &"
+allows 'echo x 2>&1 send it'                            "2>&1 is a redirect"
+allows 'echo x &> log send it'                          "&> is a redirect"
+allows 'cat <&3 post it'                                "<& is a redirect"
+splits 'a & b'      $'a \n b'   "a lone & splits"
+splits 'a |& b'     $'a \n b'   "|& is one operator"
+splits 'echo "$(a |& b)"' $'echo "$(a \n b)"\na \n b' "|& is one operator inside a substitution"
+splits 'a >&2 & b'  $'a >&2 \n b' ">& does not split, a lone & after it does"
+splits 'a &>f b'    'a &>f b'   "&> does not split"
+splits "a '&' b"    "a '&' b"   "a quoted & does not split"
+
+# The per-line split stays as it was before quotes carried (#77), so these split as they did on main.
+per_line() { assert_eq "$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_split_segments "$1")" "$2" "per-line: $3"; }
+per_line 'true & gh pr comment 1 -b x'                    'true & gh pr comment 1 -b x' "a lone &"
+per_line 'a |& b'                                         $'a \n& b'                    "|&"
+per_line $'true & bash <<EOF\ngh pr comment 1 -b x\nEOF'  'true & bash <<'              "a shell heredoc after a lone &"
+
 finish "publish-cmd"
