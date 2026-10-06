@@ -45,7 +45,7 @@ _guardrails_split_awk() {
       subemit(k, e)
       if (k > 1) cs[k - 1] = e
     }
-    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1; fw = ""; fwd = 0 }
+    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1; fw = ""; fwd = 0; fwe = 0 }
     {
       # A heredoc body starts once its opening line ends, and a backslash-newline has not ended it.
       if (hd != "" && !cont) {
@@ -57,7 +57,7 @@ _guardrails_split_awk() {
       if (!carry) q = ""
       if (!cont) wb = 1
       # fw is the first word of the segment, once fwd = 2; a heredoc fed to a shell is the script it runs.
-      if (carry && q == "" && !cont) { fw = ""; fwd = 0 }
+      if (carry && q == "" && !cont) { fw = ""; fwd = 0; fwe = 0 }
       # Indexing the line split into characters keeps the scan linear: substr rescans the line on each call.
       cont = 0; ar = 0; n = split($0, chars, "")
       for (i = 1; i <= n; i++) {
@@ -76,21 +76,21 @@ _guardrails_split_awk() {
         # a <<WORD is a real opener. Depth outlives the line because the closing )
         # of a `-m "$(cat <<EOF ...)"` body lands on a later one.
         if (q != sq && q != "ansi" && q != "bt" && c == "$" && chars[i + 1] == "(" && chars[i + 2] != "(") {
-          st[++d] = q; sw[d] = fw; swd[d] = fwd; q = ""; fw = ""; fwd = 0; out = out "$("
+          st[++d] = q; sw[d] = fw; swd[d] = fwd; swe[d] = fwe; q = ""; fw = ""; fwd = 0; fwe = 0; out = out "$("
           if (carry) { kind[d] = "$"; subopen(d, i + 2) }
           i++; wb = 1; continue
         }
         # A backtick substitution ends at the next unescaped backtick, whatever quotes it holds.
-        if (carry && c == "`" && q == "bt") { subclose(d, i); fw = sw[d]; fwd = swd[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (carry && c == "`" && q == "bt") { subclose(d, i); fw = sw[d]; fwd = swd[d]; fwe = swe[d]; q = st[d--]; out = out c; wb = 0; continue }
         if (carry && c == "`" && (q == "" || q == dq)) {
-          st[++d] = q; sw[d] = fw; swd[d] = fwd; kind[d] = "`"; subopen(d, i + 1); q = "bt"; out = out c; continue
+          st[++d] = q; sw[d] = fw; swd[d] = fwd; swe[d] = fwe; kind[d] = "`"; subopen(d, i + 1); q = "bt"; out = out c; continue
         }
         # An ANSI-C string ends only at a single quote, so its marker is longer than any character.
         if (q != "") { out = out c; wb = 0; if (c == q || (q == "ansi" && c == sq)) q = ""; continue }
         if (carry && c == "$" && chars[i + 1] == sq) { q = "ansi"; out = out c sq; i++; continue }
         if (c == sq || c == dq) { q = c; out = out c; continue }
         if (carry && (c == "<" || c == ">") && chars[i + 1] == "(") {
-          st[++d] = q; sw[d] = fw; swd[d] = fwd; fw = ""; fwd = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
+          st[++d] = q; sw[d] = fw; swd[d] = fwd; swe[d] = fwe; fw = ""; fwd = 0; fwe = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
         }
 
         # A word that starts with # comments out the rest of the line. wb marks a word start: after a
@@ -101,7 +101,7 @@ _guardrails_split_awk() {
         # Miscounting only suppresses heredoc detection, which is the safe way to err.
         if (c == "(" && chars[i + 1] == "(") { ad[++ar] = (chars[i - 1] == "$"); out = out "(("; i++; wb = 0; continue }
         if (c == ")" && chars[i + 1] == ")" && ar > 0) { wb = !ad[ar--]; out = out "))"; i++; continue }
-        if (c == ")" && d > 0) { if (carry) subclose(d, i); fw = sw[d]; fwd = swd[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (c == ")" && d > 0) { if (carry) subclose(d, i); fw = sw[d]; fwd = swd[d]; fwe = swe[d]; q = st[d--]; out = out c; wb = 0; continue }
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
         if (carry && c == "<" && (chars[i + 1] chars[i + 2]) == "<<") { out = out "<<<"; i += 2; wb = 1; continue }
@@ -112,8 +112,11 @@ _guardrails_split_awk() {
           dl = ""; qc = chars[j]
           if (carry) {
             # The delimiter is a whole shell word, as the shell reads it: quotes and backslashes removed.
-            qd = ""; quoted = 0
+            # A delimiter is a short word: past 1024 characters this opens no heredoc, which errs toward
+            # scanning and keeps a long word from making the read quadratic.
+            qd = ""; quoted = 0; dn = 0
             for (; j <= n; j++) {
+              if (++dn > 1024) { dl = ""; break }
               ch = chars[j]
               if (qd != "") { if (ch == qd) qd = ""; else dl = dl ch; continue }
               if (ch == sq || ch == dq) { qd = ch; quoted = 1; continue }
@@ -142,17 +145,21 @@ _guardrails_split_awk() {
         if ((c == "&" && chars[i + 1] == "&") ||
             (c == "|" && chars[i + 1] == "|")) {
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
-          out = out "\n"; i++; wb = 1; fw = ""; fwd = 0; continue
+          out = out "\n"; i++; wb = 1; fw = ""; fwd = 0; fwe = 0; continue
         }
         if (c == "|" || c == ";") {
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 }
-          out = out "\n"; wb = 1; fw = ""; fwd = 0; continue
+          out = out "\n"; wb = 1; fw = ""; fwd = 0; fwe = 0; continue
         }
         if (carry) wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         if (carry && fwd < 2) {
-          # A NAME=value word before the command is an assignment, not the command.
-          if (c != " " && c != "\t") { fw = fw c; fwd = 1 }
-          else if (fwd == 1) { if (index(fw, "=") > 1) { fw = ""; fwd = 0 } else fwd = 2 }
+          # A NAME=value word before the command is an assignment, not the command. fw keeps only what a
+          # shell name needs, five characters after the last slash, so a long word stays linear.
+          if (c != " " && c != "\t") {
+            if (c == "=" && fwd) fwe = 1
+            if (c == "/") { fw = "" } else if (length(fw) < 5) { fw = fw c }
+            fwd = 1
+          } else if (fwd == 1) { if (fwe) { fw = ""; fwd = 0; fwe = 0 } else fwd = 2 }
         }
         out = out c
       }
@@ -208,7 +215,7 @@ _guardrails_split_segments() {
 # its command line (a -c argument, alone or in a cluster such as -lc, or a here-string) or eval runs,
 # else rc 1. It sets a variable rather than printing, since a subshell for every segment is slow.
 _guardrails_shell_payload() {
-  local seg="$1" i=0 t inner=""
+  local seg="$1" i=0 k inner="" here='<<<[[:space:]]*(.*)$'
   local -a toks
   case "$seg" in *eval* | *'<<<'* | *-*c*) ;; *) return 1 ;; esac
   read -r -a toks <<<"$seg" || return 1
@@ -216,18 +223,18 @@ _guardrails_shell_payload() {
     case "${toks[$i]}" in [A-Za-z_]*=*) i=$((i + 1)) ;; *) break ;; esac
   done
   case "${toks[$i]:-}" in
-    eval) inner="${seg#*eval }" ;;
+    eval) inner="${toks[*]:$((i + 1))}" ;;
     sh | bash | zsh | dash | ksh | */sh | */bash | */zsh | */dash | */ksh)
-      for t in "${toks[@]:$((i + 1))}"; do
-        case "$t" in
+      for ((k = i + 1; k < ${#toks[@]}; k++)); do
+        case "${toks[$k]}" in
           --*) ;;
-          -*c*) inner="${seg#*"$t"}"; break ;;
+          -*c*) inner="${toks[*]:$((k + 1))}"; break ;;
         esac
       done
-      [ -n "$inner" ] || case "$seg" in *'<<<'*) inner="${seg#*<<<}" ;; esac ;;
+      # Words and a regex, as searching with ${seg#*<<<} is quadratic on a long segment.
+      [ -n "$inner" ] || { [[ $seg =~ $here ]] && inner="${BASH_REMATCH[1]}"; } ;;
     *) return 1 ;;
   esac
-  inner="${inner#"${inner%%[![:space:]]*}"}"
   inner="${inner#[\"\']}"; inner="${inner%[\"\']}"
   [ -n "$inner" ] && [ "$inner" != "$seg" ] || return 1
   _GUARDRAILS_PAYLOAD="$inner"

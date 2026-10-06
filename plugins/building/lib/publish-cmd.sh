@@ -58,13 +58,15 @@ _guardrails_http_has_body() {
 # True when the command names a host that is not this machine. Loopback and .local
 # are development, not publishing — that distinction is the deliberate hole here.
 _guardrails_has_remote_target() {
-  local seg="$1" url host
+  local seg="$1" url host bracketed='^[^]]*' plain='^[^/:]*'
   while IFS= read -r url; do
     [ -n "$url" ] || continue
-    host="${url#*://}"
+    # Regexes and a guarded ${url#*://}, as ${host%%/*} and an unmatched ${url#*://} are quadratic.
+    host="$url"
+    case "$url" in *://*) host="${url#*://}" ;; esac
     case "$host" in
-      \[*) host="${host%%\]*}]" ;;
-      *) host="${host%%/*}"; host="${host%%:*}" ;;
+      \[*) [[ $host =~ $bracketed ]]; host="${BASH_REMATCH[0]}]" ;;
+      *) [[ $host =~ $plain ]]; host="${BASH_REMATCH[0]}" ;;
     esac
     case "$host" in
       localhost | localhost:* | 127.* | 0.0.0.0 | \[::1\] | ::1 | *.local | *.localhost) ;;
@@ -98,7 +100,9 @@ _guardrails_publishes_as_user() {
       esac
     done
     [ "$i" -lt "${#toks[@]}" ] || continue
-    base="${toks[$i]##*/}"
+    # ${word##*/} is quadratic on a long word, enough to time the hook out; this regex is linear.
+    base="${toks[$i]}"
+    [[ $base == */* && $base =~ /([^/]*)$ ]] && base="${BASH_REMATCH[1]}"
 
     case "$base" in
       sh | bash | zsh | dash | ksh | eval)
