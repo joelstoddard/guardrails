@@ -82,7 +82,7 @@ assert_rc 2 "cd into a default-branch repo hidden by a misread quote blocked"
 # A command the guard cannot read in full might cd anywhere and commit, so it asks (#64, #76).
 r12="$(make_repo main)"; git -C "$r12" switch -q -c nbc-7-t
 long="git status $(printf '%0263000d' 0)"
-run_hook "$S" "$(jq -cn --arg cwd "$r12" --arg c "$long" '{cwd:$cwd,tool_input:{command:$c}}')"
+run_hook "$S" "$(printf '%s' "$long" | jq -cRs --arg cwd "$r12" '{cwd:$cwd,tool_input:{command:.}}')"
 assert_rc 0 "a command too long to read is not refused outright"
 assert_out '"permissionDecision":"ask"' "a command too long to read asks"
 broken="$(scratch_dir)"; printf '#!/bin/sh\nexit 2\n' > "$broken/awk"; chmod +x "$broken/awk"
@@ -91,7 +91,7 @@ run_hook "$S" "$(json "$r12" "git commit -m x")"
 export PATH="$old"
 assert_out '"permissionDecision":"ask"' "a split that aborts asks"
 export ALLOW_DEFAULT_COMMIT=1
-run_hook "$S" "$(jq -cn --arg cwd "$r12" --arg c "$long" '{cwd:$cwd,tool_input:{command:$c}}')"
+run_hook "$S" "$(printf '%s' "$long" | jq -cRs --arg cwd "$r12" '{cwd:$cwd,tool_input:{command:.}}')"
 assert_eq "$OUT" "" "the override asks nothing about an unreadable command"
 unset ALLOW_DEFAULT_COMMIT
 
