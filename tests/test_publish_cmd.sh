@@ -243,4 +243,18 @@ seen 'bash < script.sh'                                   "a script fed from a f
 seen 'echo hi | grep bash'                                "bash as an argument"
 seen 'grep -c bash notes.txt'                             "a -c that belongs to another command"
 
+# A command substitution runs, wherever it sits: an argument, a double-quoted string, an
+# assignment, a process substitution or backticks (#87).
+blocks 'echo "$(gh pr comment 1 -b x)"'                           "inside a double-quoted substitution"
+blocks 'git commit -m "$(gh pr comment 1 -b x)"'                  "inside a substitution in a flag value"
+blocks $'git commit -m "$(gh pr comment 1 -b x\n)"'               "inside a substitution closed on a later line"
+blocks 'x=$(curl -X POST https://api.example.com/hook -d y)'      "an HTTP write inside an assignment"
+blocks 'cat <(gh pr comment 1 -b x)'                              "inside a process substitution"
+blocks 'echo "`gh pr comment 1 -b x`"'                            "inside backticks"
+blocks 'echo "$(printf %s x)" "$(gh pr comment 1 -b x)"'          "the second of two substitutions"
+blocks 'echo $(echo $(echo $(echo $(echo $(gh pr comment 1 -b x)))))' "five substitutions deep"
+allows "echo '\$(gh pr comment 1 -b x)'"                          "a substitution inside single quotes is text"
+allows 'echo "\$(gh pr comment 1 -b x)"'                          "an escaped substitution is text"
+allows $'git commit -F - <<\'EOF\'\n$(gh pr comment 1 -b x)\nEOF'  "a substitution in a quoted heredoc is text"
+
 finish "publish-cmd"

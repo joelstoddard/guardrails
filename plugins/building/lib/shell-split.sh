@@ -25,6 +25,26 @@
 # carry=1 carries quotes across lines and exits 3 if they never close; carry=0 resets them per line.
 _guardrails_split_awk() {
   printf '%s' "$2" | awk -v carry="$1" '
+    # Carry mode also writes each command inside a $( ), <( ) or >( ) as a segment of its own, after the
+    # rest, as backticks are written as sh -c "...". Level k of nesting holds its text from cs[k] on this
+    # line, after pieces lp[k, 1..ln[k]] from earlier lines; a nested level leaves its opener and closer.
+    function subopen(k, start) {
+      if (k > 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
+      cs[k] = start; ln[k] = 0
+    }
+    function subemit(k, e,   j, t) {
+      t = substr($0, cs[k], e - cs[k])
+      if (t == "" && !ln[k]) return
+      if (kind[k] == "`") xp[++nxp] = "sh -c \""
+      for (j = 1; j <= ln[k]; j++) xp[++nxp] = lp[k, j]
+      xp[++nxp] = t
+      if (kind[k] == "`") xp[++nxp] = "\""
+      xp[++nxp] = "\n"; ln[k] = 0
+    }
+    function subclose(k, e) {
+      subemit(k, e)
+      if (k > 1) cs[k - 1] = e
+    }
     BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1; fw = ""; fwd = 0 }
     {
       # A heredoc body starts once its opening line ends, and a backslash-newline has not ended it.
@@ -55,14 +75,23 @@ _guardrails_split_awk() {
         # An enclosing quote does not reach inside $( ), where quoting restarts and
         # a <<WORD is a real opener. Depth outlives the line because the closing )
         # of a `-m "$(cat <<EOF ...)"` body lands on a later one.
-        if (q != sq && q != "ansi" && c == "$" && chars[i + 1] == "(" && chars[i + 2] != "(") {
-          st[++d] = q; sw[d] = fw; swd[d] = fwd; q = ""; fw = ""; fwd = 0; out = out "$("; i++; wb = 1; continue
+        if (q != sq && q != "ansi" && q != "bt" && c == "$" && chars[i + 1] == "(" && chars[i + 2] != "(") {
+          st[++d] = q; sw[d] = fw; swd[d] = fwd; q = ""; fw = ""; fwd = 0; out = out "$("
+          if (carry) { kind[d] = "$"; subopen(d, i + 2) }
+          i++; wb = 1; continue
+        }
+        # A backtick substitution ends at the next unescaped backtick, whatever quotes it holds.
+        if (carry && c == "`" && q == "bt") { subclose(d, i); fw = sw[d]; fwd = swd[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (carry && c == "`" && (q == "" || q == dq)) {
+          st[++d] = q; sw[d] = fw; swd[d] = fwd; kind[d] = "`"; subopen(d, i + 1); q = "bt"; out = out c; continue
         }
         # An ANSI-C string ends only at a single quote, so its marker is longer than any character.
         if (q != "") { out = out c; wb = 0; if (c == q || (q == "ansi" && c == sq)) q = ""; continue }
         if (carry && c == "$" && chars[i + 1] == sq) { q = "ansi"; out = out c sq; i++; continue }
         if (c == sq || c == dq) { q = c; out = out c; continue }
-        if (carry && (c == "<" || c == ">") && chars[i + 1] == "(") { st[++d] = q; sw[d] = fw; swd[d] = fwd; fw = ""; fwd = 0; out = out c "("; i++; wb = 1; continue }
+        if (carry && (c == "<" || c == ">") && chars[i + 1] == "(") {
+          st[++d] = q; sw[d] = fw; swd[d] = fwd; fw = ""; fwd = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
+        }
 
         # A word that starts with # comments out the rest of the line. wb marks a word start: after a
         # blank or an operator, but not after an escape, or the ) closing a $( ), <( ) or $(( )).
@@ -72,7 +101,7 @@ _guardrails_split_awk() {
         # Miscounting only suppresses heredoc detection, which is the safe way to err.
         if (c == "(" && chars[i + 1] == "(") { ad[++ar] = (chars[i - 1] == "$"); out = out "(("; i++; wb = 0; continue }
         if (c == ")" && chars[i + 1] == ")" && ar > 0) { wb = !ad[ar--]; out = out "))"; i++; continue }
-        if (c == ")" && d > 0) { fw = sw[d]; fwd = swd[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (c == ")" && d > 0) { if (carry) subclose(d, i); fw = sw[d]; fwd = swd[d]; q = st[d--]; out = out c; wb = 0; continue }
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
         if (carry && c == "<" && (chars[i + 1] chars[i + 2]) == "<<") { out = out "<<<"; i += 2; wb = 1; continue }
@@ -111,8 +140,14 @@ _guardrails_split_awk() {
         }
 
         if ((c == "&" && chars[i + 1] == "&") ||
-            (c == "|" && chars[i + 1] == "|")) { out = out "\n"; i++; wb = 1; fw = ""; fwd = 0; continue }
-        if (c == "|" || c == ";") { out = out "\n"; wb = 1; fw = ""; fwd = 0; continue }
+            (c == "|" && chars[i + 1] == "|")) {
+          if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
+          out = out "\n"; i++; wb = 1; fw = ""; fwd = 0; continue
+        }
+        if (c == "|" || c == ";") {
+          if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 }
+          out = out "\n"; wb = 1; fw = ""; fwd = 0; continue
+        }
         if (carry) wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         if (carry && fwd < 2) {
           # A NAME=value word before the command is an assignment, not the command.
@@ -120,6 +155,12 @@ _guardrails_split_awk() {
           else if (fwd == 1) { if (index(fw, "=") > 1) { fw = ""; fwd = 0 } else fwd = 2 }
         }
         out = out c
+      }
+      # Inside a substitution a line break ends a command too, unless quoted, escaped or in backticks.
+      if (carry && d > 0) {
+        if (kind[d] == "$" && q == "" && !cont) subemit(d, i)
+        else lp[d, ++ln[d]] = substr($0, cs[d], i - cs[d]) (cont ? "" : ";")
+        cs[d] = 1
       }
       # A line is written only once read whole, so an awk that aborts mid-line writes none of it, as
       # before. A line break inside a quote is data here, but a separator to the sh -c or eval that
@@ -130,7 +171,11 @@ _guardrails_split_awk() {
       if (cont) next
       print ""
     }
-    END { if (carry && (q != "" || cont)) exit 3 }'
+    END {
+      if (nxp && (q != "" || cont)) printf "\n"
+      for (j = 1; j <= nxp; j++) printf "%s", xp[j]
+      if (carry && (q != "" || cont)) exit 3
+    }'
 }
 
 # A hook that times out lets the command through, so the guards do not try to read one this long.
