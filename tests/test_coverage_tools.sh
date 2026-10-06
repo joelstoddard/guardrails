@@ -96,6 +96,48 @@ echo after-two-lines
 EOF
 assert_eq "1 2 3 4 5 8 11 12 13 14 " "$(bash "$TOOL" --lines "$D/a.sh" | tr '\n' ' ')" "arith-shift"
 
+echo "--- a hit on a later line of a multi-line command is credited to the command's counted line"
+setup
+cat >"$D/$S" <<'EOF'
+x=$(printf '%s' "a
+b")
+echo one \
+  two
+echo "c
+d" | cat
+EOF
+echo 'bash "$(dirname "$0")/../plugins/p/hooks/scripts/f.sh" >/dev/null' >"$D/tests/test_f.sh"
+cov --update
+assert_eq "3/3 100.0 NO" "$(row "$S")" "span-credit"
+assert_eq "1 3 5 " "$(awk -F'\t' -v p="$S" '$2 == p { print $3 }' "$D/.coverage/hits.tsv" | tr '\n' ' ')" "span-hits"
+
+echo "--- a multi-line command the test never reaches stays uncovered"
+setup
+cat >"$D/$S" <<'EOF'
+if [[ ${1:-} == yes ]]; then
+  echo "took yes"
+else
+  echo "took no \
+  twice"
+fi
+EOF
+cov --update
+assert_eq "2/3 66.6 NO" "$(row "$S")" "span-uncovered"
+
+echo "--- a hit on the continuation of a line that does not count credits no earlier command"
+setup
+cat >"$D/$S" <<'EOF'
+if [[ ${1:-} == yes ]]; then
+  echo "took yes"
+else x="took
+no"
+fi
+EOF
+echo 'bash "$(dirname "$0")/../plugins/p/hooks/scripts/f.sh" no' >"$D/tests/test_f.sh"
+cov --update
+assert_eq "1/2 50.0 NO" "$(row "$S")" "span-uncounted"
+assert_eq "1 4 " "$(awk -F'\t' -v p="$S" '$2 == p { print $3 }' "$D/.coverage/hits.tsv" | tr '\n' ' ')" "span-uncounted-hits"
+
 echo "--- a measured file with no executable lines counts as fully covered"
 setup; echo '# only a comment' >"$D/plugins/p/lib/empty.sh"; cov --update
 assert_eq "0/0 100.0 NO" "$(row plugins/p/lib/empty.sh)" "empty"

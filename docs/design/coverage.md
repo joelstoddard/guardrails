@@ -60,11 +60,19 @@ The rules are a heuristic. They need to be consistent, not exact: floors start a
 measured values, so each run compares like with like. A line miscounted the same way
 every time changes no result.
 
+A multi-line command counts on its first line, but bash credits its hit to a later
+line, and which line differs between bash 5.2 and 5.3. So a traced hit on a
+continuation line of a counted command, inside a string or after a backslash, is
+credited to the command's counted line. `executable.awk -v spans=1` prints each such
+continuation line with its counted line, and `hits()` rewrites `hits.tsv` with it. When
+the floors were first set, nine of the fifteen uncovered lines were such first lines.
+
 Known limits:
 
-- A multi-line command counts on its first line, but bash credits a hit to a later
-  line, so that first line reads as uncovered. When the floors were set, nine of the
-  fifteen uncovered lines were such first lines.
+- A command substitution that spans lines outside quotes, as in `x=$(` on one line and
+  `)` on a later one, is traced on the line of its `)`, for the commands inside it too.
+  That line does not count and is no continuation, so the lines before it read as
+  uncovered. No measured file has one.
 - A case label continued with a backslash counts as executable but is never traced
   (`git-cmd.sh:16`).
 - A file a test copies before running is traced under the copy's path and is not
@@ -109,7 +117,7 @@ missing argument after `--lines` or `--ratchet`, an unreadable base file, or a r
 cannot list; 2 for an unknown option or a bash older than 4.1.
 
 Output goes to `.coverage/`, which git ignores. `.coverage/hits.tsv` lists every traced
-line as `test<TAB>path<TAB>line`.
+line as `test<TAB>path<TAB>line`, with a continuation line's hit on its counted line.
 
 ## In CI
 

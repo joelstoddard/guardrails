@@ -59,7 +59,15 @@ hits() { # writes "test<TAB>path<TAB>line" for each traced line of a file under 
   done < <(cut -f2 "$OUT/raw-hits.tsv" | LC_ALL=C sort -u)
   while IFS=$'\t' read -r t raw ln; do
     if [[ -n ${rel_of[$raw]:-} ]]; then printf '%s\t%s\t%s\n' "$t" "${rel_of[$raw]}" "$ln"; fi
-  done <"$OUT/raw-hits.tsv" | LC_ALL=C sort -u >"$OUT/hits.tsv"
+  done <"$OUT/raw-hits.tsv" | credit_spans | LC_ALL=C sort -u >"$OUT/hits.tsv"
+}
+
+credit_spans() { # stdin "test<TAB>path<TAB>line"; moves a hit on a command's later line to its counted line
+  local f
+  while IFS= read -r f; do
+    awk -v spans=1 -f "$HERE/coverage/executable.awk" "$ROOT/$f" | awk -v p="$f" '{ print p "\t" $0 }'
+  done < <(measured) >"$OUT/spans.tsv"
+  awk -F'\t' -v OFS='\t' 'FILENAME == ARGV[1] { first[$1 FS $2] = $3; next } { k = $2 FS $3; if (k in first) $3 = first[k]; print }' "$OUT/spans.tsv" -
 }
 
 floor_of() { awk -F'\t' -v p="$1" '$1 == p { print $2 }' "$FLOORS" 2>/dev/null || true; }
