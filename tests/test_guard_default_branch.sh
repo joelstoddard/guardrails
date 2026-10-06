@@ -126,4 +126,15 @@ assert_rc 2 "a commit inside a substitution on the default branch blocked"
 run_hook "$S" "$(jq -cn --arg cwd "$r13" --arg c 'x=`git commit -m x`' '{cwd:$cwd,tool_input:{command:$c}}')"
 assert_rc 2 "a commit inside backticks on the default branch blocked"
 
+# Many segments, or many shells and evals to re-read, cost far more than their length, so past these
+# caps a command might commit unread, and it asks (#94).
+jsonat() { printf '%s' "$2" | jq -cRs --arg cwd "$1" '{cwd:$cwd,tool_input:{command:.}}'; }
+run_hook "$S" "$(jsonat "$r13" "$(printf 'true\n%.0s' {1..5001})"$'\n''git commit -m x')"
+assert_out '"permissionDecision":"ask"' "too many segments to read in time asks"
+assert_out 'segments are too many' "the question names the segments"
+run_hook "$S" "$(jsonat "$r13" "$(printf 'eval x\n%.0s' {1..17})"$'\n''git commit -m x')"
+assert_out '"permissionDecision":"ask"' "too many shells and evals to re-read asks"
+run_hook "$S" "$(jsonat "$r13" "$(printf 'true\n%.0s' {1..4998})"$'\n''git commit -m x')"
+assert_rc 2 "a commit within the segment cap is still read and refused"
+
 finish "guard-default-branch"

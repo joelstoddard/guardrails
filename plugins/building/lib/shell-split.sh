@@ -185,21 +185,30 @@ _guardrails_split_awk() {
     }'
 }
 
-# A hook that times out lets the command through, so the guards do not try to read one this long.
-# At this size the slowest guard takes about 2 s of its 10 s budget; see issue #64.
-_GUARDRAILS_SPLIT_MAX=262144
+# A hook that times out lets the command through, so the guards do not read a command past these limits:
+# its length, the segments in its two splits, and the shells and evals it could make them re-read. With all
+# three at their limits at once, the slowest guard measured 2.5 s of its 10 s budget (#94).
+_GUARDRAILS_SPLIT_MAX=131072
+_GUARDRAILS_SPLIT_MAX_SEGMENTS=10000
+_GUARDRAILS_SPLIT_MAX_SHELLS=16
 
 # _guardrails_unreadable <cmdline> → rc 0 and a reason if a guard cannot read the command in full:
-# too long to read in time, or a split whose awk aborted, as BSD awk does on invalid bytes (#76).
+# too much to read in time, or a split whose awk aborted, as BSD awk does on invalid bytes (#76).
 _guardrails_unreadable() {
-  local rc
+  local rc carried per_line n
   if [ "${#1}" -gt "$_GUARDRAILS_SPLIT_MAX" ]; then
     printf '%s characters is too long to read in time' "${#1}"; return 0
   fi
-  _guardrails_split_awk 1 "$1" >/dev/null 2>&1; rc=$?
+  carried="$(_guardrails_split_awk 1 "$1" 2>/dev/null)"; rc=$?
   [ "$rc" = 0 ] || [ "$rc" = 3 ] || { printf 'splitting it failed (awk exit %s)' "$rc"; return 0; }
-  _guardrails_split_awk 0 "$1" >/dev/null 2>&1; rc=$?
+  per_line="$(_guardrails_split_awk 0 "$1" 2>/dev/null)"; rc=$?
   [ "$rc" = 0 ] || { printf 'splitting it line by line failed (awk exit %s)' "$rc"; return 0; }
+  n=$(($(printf '%s\n%s\n' "$carried" "$per_line" | wc -l)))
+  [ "$n" -le "$_GUARDRAILS_SPLIT_MAX_SEGMENTS" ] || { printf '%s segments are too many to read in time' "$n"; return 0; }
+  # Each shell or eval may be a script to split again, so they are counted as words, nested ones too, but
+  # not in heredoc bodies, which are data.
+  n=$(($(printf '%s' "$carried" | LC_ALL=C awk -F'[^A-Za-z0-9_.-]+' '{ for (i = 1; i <= NF; i++) if ($i == "sh" || $i == "bash" || $i == "zsh" || $i == "dash" || $i == "ksh" || $i == "eval") n++ } END { print n + 0 }')))
+  [ "$n" -le "$_GUARDRAILS_SPLIT_MAX_SHELLS" ] || { printf '%s shells and evals are too many to re-read in time' "$n"; return 0; }
   return 1
 }
 

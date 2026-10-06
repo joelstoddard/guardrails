@@ -135,4 +135,16 @@ run_hook "$S" "$(jsonc "echo '\$(gh pr comment 1 -b x)'")"
 assert_rc 0 "a substitution inside single quotes is text"
 assert_eq "$OUT" "" "a substitution inside single quotes asks nothing"
 
+# Many segments, or many shells and evals to re-read, cost far more than their length, so past these
+# caps a command is unreadable too, as is one past 128 KiB (#94).
+unreadable "$(printf 'a\n%.0s' {1..5001})" "too many segments to read in time asks"
+assert_out 'segments are too many' "the question names the segments"
+unreadable "$(printf 'eval x\n%.0s' {1..17})" "too many shells and evals to re-read asks"
+assert_out 'shells and evals are too many' "the question names the shells and evals"
+unreadable "echo $(printf '%0131100d' 0)" "a command past 128 KiB asks"
+run_hook "$S" "$(jsonin "$(printf 'a\n%.0s' {1..4999})")"
+assert_eq "$OUT" "" "segments within the cap are read"
+run_hook "$S" "$(jsonin "$(printf 'eval x\n%.0s' {1..16})")"
+assert_eq "$OUT" "" "shells and evals within the cap are read"
+
 finish "guard-publish"
