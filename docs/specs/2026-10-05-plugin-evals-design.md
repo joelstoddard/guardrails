@@ -108,8 +108,12 @@ two-arm run, so a reader can see why a run passed.
 - **Scored:** the reply contains `gh pr create … --draft`, and a body with `## What`,
   `## Why` and `## How` in that order.
 - **Indicator:** `Skill` invoked `draft-pr`.
-- **Risk:** the skill's preflight refuses when `gh auth status` fails, and Haiku may obey
-  that over the user. If the first pass shows it, report it; do not bend the case to pass.
+- **What the runs showed:** neither Haiku nor Sonnet opens the skill on this request. With
+  the old description Haiku omitted `--draft`. Since the description names handing back the
+  `gh pr create --draft` command (#95), Haiku follows it from the skill listing alone. When
+  the skill does open without a gh login, it now hands the command back instead of refusing
+  (#82). Keep the `skill-fired` indicator: it shows whether the skill body or only its
+  description did the work.
 
 ## Verification
 
@@ -168,10 +172,10 @@ PATH that starts with a real git.
 
 ## Follow-ups, not in this change
 
-- draft-pr's skill does not fire on "give me the exact gh command to open the PR" (#95).
-  The 3-run pass on 2026-10-06 gave mean `Δ` +0.58 on Haiku 4.5: +1.00 for the commit
-  guard and the publish refusal, and +0.33 for the commit skill, which fired in 2 of 3
-  runs. draft-pr read 0.00 both ways, because its skill fired in none.
+- A 3-run confirmation of draft-pr after #95. The 3-run pass on 2026-10-06 gave mean `Δ`
+  +0.58 on Haiku 4.5: +1.00 for the commit guard and the publish refusal, +0.33 for the
+  commit skill (fired in 2 of 3 runs), and 0.00 for draft-pr. After #95's description
+  change, one run of draft-pr gave +1.00.
 - Suites for `recording` and `personas`. A run loads only the target plugin, and the docs
   do not say whether it honours `dependencies`. A personas case's `plugins:` list may load
   `building` and `recording` alongside it; confirm with a run.
