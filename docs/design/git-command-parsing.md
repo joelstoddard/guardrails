@@ -34,6 +34,13 @@ Global options that consume a following separate argument (`-C`, `-c`,
 `_guardrails_git_opt_takes_value`, because skipping them means knowing whether to
 advance the index by one token or two.
 
+A command that runs a script of its own is read as one too. `bash -c '…'` (or `-c` in a
+cluster such as `-lc`), a here-string fed to a shell, and `eval '…'` are re-scanned to
+four levels deep, as `publish-cmd.sh` does; a heredoc fed to a shell is split as script
+lines by `shell-split.sh`. A `cd` inside `sh -c` ends with that child shell, while one
+inside `eval` lasts. A pipe into a shell runs commands no guard can see, so
+`guard-default-branch` asks when the directory it would run in is on its default branch.
+
 ## Which repository the command acts on
 
 Parsing global options is not optional, because `git -C <path> commit` is a real

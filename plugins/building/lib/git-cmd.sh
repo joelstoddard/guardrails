@@ -8,7 +8,8 @@
 #                                                                       will actually run in.
 #
 # Both read the split that carries quotes across lines and the per-line split it replaced, so a
-# quote the carried split misreads can never make a guard weaker than it was.
+# quote the carried split misreads can never make a guard weaker than it was. Both also read the
+# script a shell or eval runs from its command line, as publish-cmd.sh does.
 
 _GUARDRAILS_GIT_CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_GUARDRAILS_GIT_CMD_DIR/shell-split.sh"
@@ -41,8 +42,9 @@ _guardrails_git_skip_globals() {
 }
 
 _guardrails_invokes_git() {
-  local cmdline="$1" want="$2" seg i
+  local cmdline="$1" want="$2" depth="${3:-0}" seg i
   local -a toks
+  [ "$depth" -gt 4 ] && return 1
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
     i=0
@@ -58,6 +60,9 @@ _guardrails_invokes_git() {
         i="$(_guardrails_git_skip_globals "$((i + 1))" "${toks[@]}")"
         [ "${toks[$i]:-}" = "$want" ] && return 0
         ;;
+      *sh | eval)
+        _guardrails_shell_payload "$seg" &&
+          _guardrails_invokes_git "$_GUARDRAILS_PAYLOAD" "$want" "$((depth + 1))" && return 0 ;;
     esac
   done < <(_guardrails_split_segments "$cmdline"; _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_split_segments "$cmdline")
   return 1
@@ -77,9 +82,11 @@ _guardrails_git_effective_cwd() {
   [ "$per_line" = "$carried" ] || printf '%s\n' "$per_line"
 }
 
+# Prints the cwd, with rc 0 once the matching git command is reached and rc 1 if it never is.
 _guardrails_git_walk_cwd() {
-  local cmdline="$1" want="$2" cur="$3" seg i j k d v
+  local cmdline="$1" want="$2" cur="$3" depth="${4:-0}" seg i j k d v
   local -a toks
+  [ "$depth" -gt 4 ] && { printf '%s' "$cur"; return 1; }
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
     i=0
@@ -117,7 +124,18 @@ _guardrails_git_walk_cwd() {
           return 0
         fi
         ;;
+      *sh | eval)
+        # A payload that runs the command says where; otherwise only eval's cd outlives it, as sh -c
+        # runs in a child shell.
+        _guardrails_shell_payload "$seg" || continue
+        if d="$(_guardrails_git_walk_cwd "$_GUARDRAILS_PAYLOAD" "$want" "$cur" "$((depth + 1))")"; then
+          printf '%s' "$d"
+          return 0
+        fi
+        [ "${toks[$i]}" = eval ] && cur="$d"
+        ;;
     esac
   done < <(_guardrails_split_segments "$cmdline")
   printf '%s' "$cur"
+  return 1
 }

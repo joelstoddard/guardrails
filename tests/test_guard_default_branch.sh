@@ -95,4 +95,29 @@ run_hook "$S" "$(printf '%s' "$long" | jq -cRs --arg cwd "$r12" '{cwd:$cwd,tool_
 assert_eq "$OUT" "" "the override asks nothing about an unreadable command"
 unset ALLOW_DEFAULT_COMMIT
 
+# A commit in a heredoc fed to a shell is a commit (#63).
+r13="$(make_repo main)"
+run_hook "$S" "$(jq -cn --arg cwd "$r13" --arg c $'bash <<EOF\ngit commit -m x\nEOF' '{cwd:$cwd,tool_input:{command:$c}}')"
+assert_rc 2 "a commit in a heredoc fed to bash blocked"
+
+# A pipe into a shell could commit unseen: on a default branch it asks, elsewhere it passes (#63).
+r14b="$(make_repo main)"; git -C "$r14b" switch -q -c nbc-8-s
+run_hook "$S" "$(json "$r13" "cat cmds.txt | bash")"
+assert_rc 0 "a pipe into a shell is not refused outright"
+assert_out '"permissionDecision":"ask"' "a pipe into a shell on a default branch asks"
+assert_out 'reads commands from stdin' "the question says why"
+run_hook "$S" "$(json "$r14b" "cat cmds.txt | bash")"
+assert_eq "$OUT" "" "a pipe into a shell off the default branch asks nothing"
+export ALLOW_DEFAULT_COMMIT=1
+run_hook "$S" "$(json "$r13" "cat cmds.txt | bash")"
+assert_eq "$OUT" "" "the override asks nothing about a pipe into a shell"
+unset ALLOW_DEFAULT_COMMIT
+
+# A commit inside a shell payload is a commit (#65).
+r14="$(make_repo main)"
+run_hook "$S" "$(json "$r13" "bash -c 'git commit -m x'")"
+assert_rc 2 "a commit inside bash -c on the default branch blocked"
+run_hook "$S" "$(json "$r14b" "bash -c 'cd $r14 && git commit -m x'")"
+assert_rc 2 "a cd into a default-branch repo inside bash -c blocked"
+
 finish "guard-default-branch"

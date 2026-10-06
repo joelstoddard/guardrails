@@ -15,7 +15,9 @@ if why="$(_guardrails_unreadable "$cmd")"; then
   exit 0
 fi
 
-_guardrails_invokes_git "$cmd" commit || exit 0
+# A shell reading commands from a pipe might commit where no guard can read it, so it asks (#63).
+unseen=""
+_guardrails_invokes_git "$cmd" commit || unseen="$(_guardrails_unseen_shell_stdin "$cmd")" || exit 0
 [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
 
 # Judge the repo git will actually act on, not the one the shell happens to sit in —
@@ -35,6 +37,11 @@ while IFS= read -r dir; do
   fi
 
   if [ -n "$def" ] && [ "$cur" = "$def" ]; then
+    if [ -n "$unseen" ]; then
+      jq -cn --arg r "Could not check this does not commit on the default branch '$def': $unseen." \
+        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+      exit 0
+    fi
     echo "Refusing to commit on the default branch '$def'. Start a ticket branch (see the start-ticket skill), or set ALLOW_DEFAULT_COMMIT=1 to override." >&2
     exit 2
   fi

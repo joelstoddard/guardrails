@@ -21,10 +21,16 @@ fi
 reason="$(_guardrails_publishes_as_user "$cmd")" || {
   # Read line by line, as before quotes carried, it may still publish: a quote spanning lines
   # looks the same as shell syntax the carried split misreads, so only the human can tell.
-  reason="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$cmd")" || exit 0
+  if reason="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$cmd")"; then
+    ask="Could not be sure this does not publish as you. Read line by line: $reason. A quoted argument spanning lines reads the same way, so allow it only if nothing here posts under your name."
+  # A shell reading commands from a pipe runs what no guard can read (#63).
+  elif why="$(_guardrails_unseen_shell_stdin "$cmd")"; then
+    ask="Could not check this does not publish as you: $why. Allow it only if nothing it runs posts under your name."
+  else
+    exit 0
+  fi
   [ "${ALLOW_PUBLISH_AS_ME:-}" = "1" ] && exit 0
-  jq -cn --arg r "Could not be sure this does not publish as you. Read line by line: $reason. A quoted argument spanning lines reads the same way, so allow it only if nothing here posts under your name." \
-    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  jq -cn --arg r "$ask" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
   exit 0
 }
 
