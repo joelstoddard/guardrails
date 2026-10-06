@@ -187,3 +187,54 @@ _guardrails_shell_payload() {
   [ -n "$inner" ] && [ "$inner" != "$seg" ] || return 1
   _GUARDRAILS_PAYLOAD="$inner"
 }
+
+# _guardrails_shell_reads_stdin <segment> → rc 0 and a reason if the segment is a shell reading commands
+# from a stdin the command line does not show, such as a pipe; not a heredoc, here-string, file or script.
+_guardrails_shell_reads_stdin() {
+  local i=0 shell
+  local -a toks
+  case "$1" in *'<'*) return 1 ;; esac
+  read -r -a toks <<<"$1" || return 1
+  while [ "$i" -lt "${#toks[@]}" ]; do
+    case "${toks[$i]}" in [A-Za-z_]*=*) i=$((i + 1)) ;; *) break ;; esac
+  done
+  case "${toks[$i]:-}" in sh | bash | zsh | dash | ksh | */sh | */bash | */zsh | */dash | */ksh) ;; *) return 1 ;; esac
+  shell="${toks[$i]##*/}"
+  for ((i = i + 1; i < ${#toks[@]}; i++)); do
+    case "${toks[$i]}" in
+      -o | +o | -O | +O | --rcfile | --init-file) i=$((i + 1)) ;;
+      --*) ;;
+      - | -*s*) break ;;
+      -* | +*) ;;
+      *) return 1 ;;
+    esac
+  done
+  printf '%s reads commands from stdin, which the command line does not show' "$shell"
+}
+
+# _guardrails_names_shell <text> → rc 0 if a shell or eval appears in it as a word, as it must to run.
+_guardrails_names_shell() {
+  local w
+  for w in sh bash zsh dash ksh eval; do
+    case " $1 " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
+  done
+  return 1
+}
+
+# _guardrails_unseen_shell_stdin <cmdline> → rc 0 and a reason if a shell in it, or in a script it runs,
+# reads commands from stdin that the command line does not show.
+_guardrails_unseen_shell_stdin() {
+  local depth="${2:-0}" seg
+  [ "$depth" -gt 4 ] && return 1
+  # This pass runs on every command, so only text naming a shell or eval as a word is looked at closely.
+  _guardrails_names_shell "$1" || return 1
+  while IFS= read -r seg; do
+    _guardrails_names_shell "$seg" || continue
+    if _guardrails_shell_payload "$seg"; then
+      _guardrails_unseen_shell_stdin "$_GUARDRAILS_PAYLOAD" "$((depth + 1))" && return 0
+    else
+      _guardrails_shell_reads_stdin "$seg" && return 0
+    fi
+  done < <(_guardrails_split_segments "$1")
+  return 1
+}

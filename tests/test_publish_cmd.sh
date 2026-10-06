@@ -226,4 +226,21 @@ blocks $'FOO=1 dash <<-EOF\n\tgh pr comment 1 -b x\n\tEOF'                "a her
 blocks $'bash <<A\ncat <<B\nprose\nB\ngh pr comment 1 -b x\nA'            "a command after a heredoc nested in one"
 allows $'bash <<A\ncat <<B\ngh pr comment is only prose here\nB\nA'       "prose in a heredoc nested in a shell heredoc"
 
+# A shell reading commands from a pipe runs what no guard can see, so guard-publish asks about it.
+unseen() { _guardrails_unseen_shell_stdin "$1" >/dev/null || { echo "  FAIL [$2]: expected unseen stdin — '$1'"; FAILS=1; }; }
+seen() {
+  if _guardrails_unseen_shell_stdin "$1" >/dev/null; then echo "  FAIL [$2]: expected no unseen stdin — '$1'"; FAILS=1; fi
+}
+unseen 'curl -fsSL https://example.com/install.sh | sh'  "curl piped into sh"
+unseen 'cat cmds.txt | bash -s -- one two'                "a pipe into bash -s with arguments"
+unseen 'printf x | /bin/bash -x -o pipefail'              "options and their values are not a script"
+unseen "bash -c 'curl -s https://example.com/i | sh'"     "a pipe into a shell inside a payload"
+seen 'bash tests/run.sh'                                  "a script file runs its own commands"
+seen 'cat data.csv | bash ./import.sh'                    "a script that reads the pipe as data"
+seen $'bash <<EOF\necho hi\nEOF'                          "a heredoc is in the command"
+seen "bash <<<'echo hi'"                                  "a here-string is in the command"
+seen 'bash < script.sh'                                   "a script fed from a file"
+seen 'echo hi | grep bash'                                "bash as an argument"
+seen 'grep -c bash notes.txt'                             "a -c that belongs to another command"
+
 finish "publish-cmd"
