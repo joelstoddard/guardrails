@@ -141,4 +141,8 @@ assert_rc 2 "a commit within the segment cap is still read and refused"
 run_hook "$S" "$(jsonat "$r13" 'true & git commit -m x')"
 assert_rc 2 "a commit after a lone & on the default branch blocked"
 
+# An unquoted heredoc runs the substitutions in its body (#88).
+run_hook "$S" "$(jsonat "$r13" $'cat <<EOF\n$(git commit -m x)\nEOF')"
+assert_rc 2 "a commit in an unquoted heredoc body on the default branch blocked"
+
 finish "guard-default-branch"

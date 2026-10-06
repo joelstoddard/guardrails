@@ -11,7 +11,8 @@
 # writes, not commands the shell runs, and prose routinely starts a line with a word
 # a guard would read as a tool and a verb. Detection errs toward keeping lines —
 # anything not recognised as an opener is still scanned, so a miss costs a false
-# positive, never a missed command.
+# positive, never a missed command. The shell does run the $( ) and backticks in the
+# body of an unquoted <<EOF, so the split that carries quotes writes those as segments.
 #
 # A quoted argument can span lines, so quote state carries across them, with the
 # shell's escapes, comments and $'...' strings, and a backslash-newline joins two lines.
@@ -28,8 +29,9 @@ _guardrails_split_awk() {
     # Carry mode also writes each command inside a $( ), <( ) or >( ) as a segment of its own, after the
     # rest, as backticks are written as sh -c "...". Level k of nesting holds its text from cs[k] on this
     # line, after pieces lp[k, 1..ln[k]] from earlier lines; a nested level leaves its opener and closer.
+    # Levels at or below hb enclose an unquoted heredoc body being read, whose text is data, not theirs.
     function subopen(k, start) {
-      if (k > 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
+      if (k > hb + 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
       cs[k] = start; ln[k] = 0
     }
     function subemit(k, e,   j, t) {
@@ -43,16 +45,23 @@ _guardrails_split_awk() {
     }
     function subclose(k, e) {
       subemit(k, e)
-      if (k > 1) cs[k - 1] = e
+      if (k > hb + 1) cs[k - 1] = e
+    }
+    # The shell ends a body at its delimiter line, even inside a substitution, which is then never closed.
+    function bodyend() {
+      for (; d > hb; d--) subemit(d, cs[d])
+      q = hq; inb = 0; hb = 0; cont = 0
     }
     BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1; fw = ""; fwd = 0; fwe = 0 }
     {
       # A heredoc body starts once its opening line ends, and a backslash-newline has not ended it.
-      if (hd != "" && !cont) {
+      if (hd != "" && (!cont || inb)) {
         t = $0
         sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
-        if (t == hd) hd = ""
-        next
+        if (t == hd) { hd = ""; hx = 0; if (inb) bodyend(); next }
+        # The shell runs the $( ) and backticks of an unquoted body, where quotes are text, as in q = "hd".
+        if (!hx) next
+        if (!inb) { inb = 1; hb = d; hq = q; q = "hd" }
       }
       if (!carry) q = ""
       if (!cont) wb = 1
@@ -82,7 +91,7 @@ _guardrails_split_awk() {
         }
         # A backtick substitution ends at the next unescaped backtick, whatever quotes it holds.
         if (carry && c == "`" && q == "bt") { subclose(d, i); fw = sw[d]; fwd = swd[d]; fwe = swe[d]; q = st[d--]; out = out c; wb = 0; continue }
-        if (carry && c == "`" && (q == "" || q == dq)) {
+        if (carry && c == "`" && (q == "" || q == dq || q == "hd")) {
           st[++d] = q; sw[d] = fw; swd[d] = fwd; swe[d] = fwe; kind[d] = "`"; subopen(d, i + 1); q = "bt"; out = out c; continue
         }
         # An ANSI-C string ends only at a single quote, so its marker is longer than any character.
@@ -105,7 +114,8 @@ _guardrails_split_awk() {
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
         if (carry && c == "<" && (chars[i + 1] chars[i + 2]) == "<<") { out = out "<<<"; i += 2; wb = 1; continue }
-        if (c == "<" && chars[i + 1] == "<" && chars[i + 2] != "<" && ar == 0) {
+        # A body is read to its delimiter alone, so a heredoc opened in its substitution opens no other.
+        if (c == "<" && chars[i + 1] == "<" && chars[i + 2] != "<" && ar == 0 && !inb) {
           j = i + 2
           if (chars[j] == "-") j++
           while (chars[j] == " " || chars[j] == "\t") j++
@@ -137,7 +147,7 @@ _guardrails_split_awk() {
           }
           if (dl != "") {
             sh = fw; while ((k = index(sh, "/")) > 0) sh = substr(sh, k + 1)
-            if (!carry || !fwd || !index(" sh bash zsh dash ksh ", " " sh " ")) hd = dl
+            if (!carry || !fwd || !index(" sh bash zsh dash ksh ", " " sh " ")) { hd = dl; if (carry && !quoted) hx = 1 }
             out = out "<<"; i = j - 1; wb = 0; continue
           }
         }
@@ -170,11 +180,12 @@ _guardrails_split_awk() {
         out = out c
       }
       # Inside a substitution a line break ends a command too, unless quoted, escaped or in backticks.
-      if (carry && d > 0) {
+      if (carry && d > hb) {
         if (kind[d] == "$" && q == "" && !cont) subemit(d, i)
         else lp[d, ++ln[d]] = substr($0, cs[d], i - cs[d]) (cont ? "" : ";")
         cs[d] = 1
       }
+      if (inb) { out = ""; np = 0; appended = 0; next }
       # A line is written only once read whole, so an awk that aborts mid-line writes none of it, as
       # before. A line break inside a quote is data here, but a separator to the sh -c or eval that
       # re-splits the quote, so it is written as a semicolon.
@@ -185,6 +196,7 @@ _guardrails_split_awk() {
       print ""
     }
     END {
+      if (inb) bodyend()
       if (nxp && (q != "" || cont)) printf "\n"
       for (j = 1; j <= nxp; j++) printf "%s", xp[j]
       if (carry && (q != "" || cont)) exit 3

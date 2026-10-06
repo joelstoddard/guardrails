@@ -130,4 +130,9 @@ yes 'true & git commit -m x'               commit "a commit after a lone &"
 yes 'git add -A 2>&1 & git push'           push   "a push after a redirect and a lone &"
 no  'git status &>/dev/null commit'        commit "&> does not split"
 
+# An unquoted heredoc runs the substitutions in its body (#88).
+yes $'cat <<EOF\n$(git commit -m x)\nEOF'      commit "a substitution in an unquoted heredoc body"
+no  $'cat <<\'EOF\'\n$(git commit -m x)\nEOF'  commit "a substitution in a quoted heredoc body is text"
+cwd $'cd /x && cat <<EOF\n`git commit -m y`\nEOF' commit /start /x "a body substitution runs where the heredoc does"
+
 finish "git-cmd"

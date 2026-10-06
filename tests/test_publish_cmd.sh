@@ -272,10 +272,32 @@ splits 'a >&2 & b'  $'a >&2 \n b' ">& does not split, a lone & after it does"
 splits 'a &>f b'    'a &>f b'   "&> does not split"
 splits "a '&' b"    "a '&' b"   "a quoted & does not split"
 
+# An unquoted heredoc runs the $( ) and backticks in its body, where quotes are text, but the rest is data (#88).
+blocks $'cat <<EOF\n$(gh pr comment 1 -b x)\nEOF'                  "a substitution in an unquoted heredoc body"
+blocks $'cat > b.md <<EOF\nSee `gh pr comment 1 -b x` here\nEOF'    "backticks in an unquoted heredoc body"
+blocks $'cat <<-EOF\n\t\'$(gh pr comment 1 -b x)\'\n\tEOF'         "a single-quoted substitution in a body still runs"
+blocks $'cat <<EOF\n$(true\ngh pr comment 1 -b x)\nEOF'           "a substitution spanning body lines"
+blocks $'git commit -m "$(cat <<EOF\nSubject $(gh pr comment 1 -b x)\nEOF\n)"' \
+  "a substitution in a heredoc inside a substitution"
+blocks $'cat <<A <<\'B\'\n$(gh pr comment 1 -b x)\nA\nB'           "a substitution in the unquoted one of two heredocs"
+blocks $'cat <<EOF\n$(echo\nEOF\ngh pr comment 1 -b x'             "a command after a body whose substitution never closed"
+blocks $'cat <<EOF\n$(cat <<X\nEOF\ngh pr comment 1 -b x'          "a heredoc opened in a body substitution hides no later line"
+allows $'cat <<"EOF"\n$(gh pr comment 1 -b x)\nEOF'                "a substitution in a double-quoted heredoc is text"
+allows $'cat <<\\EOF\n`gh pr comment 1 -b x`\nEOF'                 "backticks in a backslash-quoted heredoc are text"
+allows $'cat <<EOF\n\\$(gh pr comment 1 -b x)\nEOF'                "an escaped substitution in a body is text"
+allows $'cat <<EOF\nlinear comment ENG-1 on $(date)\nEOF'          "body text around a substitution stays data"
+allows $'git commit -m "$(cat <<EOF\nlinear comment ENG-1 on $(date)\nsome-tool post `date`\nEOF\n)"' \
+  "body text in a heredoc inside a substitution stays data"
+allows $'cat <<EOF\n$((1 + 2)) people post here\nEOF'              "arithmetic in a body is not a substitution"
+
 # The per-line split stays as it was before quotes carried (#77), so these split as they did on main.
 per_line() { assert_eq "$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_split_segments "$1")" "$2" "per-line: $3"; }
 per_line 'true & gh pr comment 1 -b x'                    'true & gh pr comment 1 -b x' "a lone &"
 per_line 'a |& b'                                         $'a \n& b'                    "|&"
 per_line $'true & bash <<EOF\ngh pr comment 1 -b x\nEOF'  'true & bash <<'              "a shell heredoc after a lone &"
+per_line $'cat <<EOF\n$(gh pr comment 1 -b x)\nEOF'       'cat <<'                      "a substitution in a heredoc body"
+per_line $'cat <<EOF\n$(echo\nEOF\ngh pr comment 1 -b x'  $'cat <<\ngh pr comment 1 -b x' "an unclosed substitution in a body"
+per_line $'git commit -m "$(cat <<EOF\nSubject $(gh pr comment 1 -b x)\nEOF\n)"' $'git commit -m "$(cat <<\n)"' \
+  "a substitution in a heredoc inside a substitution"
 
 finish "publish-cmd"

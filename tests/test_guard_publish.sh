@@ -154,4 +154,11 @@ run_hook "$S" "$(jsonin 'echo x 2>&1 send it')"
 assert_rc 0 "2>&1 is a redirect"
 assert_eq "$OUT" "" "2>&1 asks nothing"
 
+# An unquoted heredoc runs the substitutions in its body; a quoted one does not (#88).
+run_hook "$S" "$(jsonin $'cat <<EOF\n$(gh pr comment 1 -b x)\nEOF')"
+assert_rc 2 "a publish in an unquoted heredoc body blocked"
+run_hook "$S" "$(jsonin $'cat <<\'EOF\'\n$(gh pr comment 1 -b x)\nEOF')"
+assert_rc 0 "a substitution in a quoted heredoc body is text"
+assert_eq "$OUT" "" "a quoted heredoc body asks nothing"
+
 finish "guard-publish"

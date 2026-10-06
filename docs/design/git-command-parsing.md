@@ -38,7 +38,7 @@ advance the index by one token or two.
 A command that runs a script of its own is read as one too. `bash -c '…'` (or `-c` in a
 cluster such as `-lc`), a here-string fed to a shell, and `eval '…'` are re-scanned to
 four levels deep, as `publish-cmd.sh` does; a heredoc fed to a shell is split as script
-lines by `shell-split.sh`. A `cd` inside `sh -c` ends with that child shell, while one
+lines by `shell-split.sh`, as are the `$( )` and backticks in an unquoted heredoc body. A `cd` inside `sh -c` ends with that child shell, while one
 inside `eval` lasts. A pipe into a shell runs commands no guard can see, so
 `guard-default-branch` asks when the directory it would run in is on its default branch.
 
