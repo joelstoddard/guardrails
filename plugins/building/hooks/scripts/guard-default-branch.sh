@@ -7,6 +7,14 @@ input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 
+# Fail closed: a command the guard cannot read in full might cd anywhere and commit, so ask.
+if why="$(_guardrails_unreadable "$cmd")"; then
+  [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
+  jq -cn --arg r "Could not read this command to check it does not commit on a default branch: $why." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+fi
+
 _guardrails_invokes_git "$cmd" commit || exit 0
 [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
 

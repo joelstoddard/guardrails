@@ -122,6 +122,24 @@ _guardrails_split_awk() {
     END { if (carry && (q != "" || cont)) exit 3 }'
 }
 
+# A hook that times out lets the command through, so the guards do not try to read one this long.
+# At this size the slowest guard takes about 2 s of its 10 s budget; see issue #64.
+_GUARDRAILS_SPLIT_MAX=262144
+
+# _guardrails_unreadable <cmdline> → rc 0 and a reason if a guard cannot read the command in full:
+# too long to read in time, or a split whose awk aborted, as BSD awk does on invalid bytes (#76).
+_guardrails_unreadable() {
+  local rc
+  if [ "${#1}" -gt "$_GUARDRAILS_SPLIT_MAX" ]; then
+    printf '%s characters is too long to read in time' "${#1}"; return 0
+  fi
+  _guardrails_split_awk 1 "$1" >/dev/null 2>&1; rc=$?
+  [ "$rc" = 0 ] || [ "$rc" = 3 ] || { printf 'splitting it failed (awk exit %s)' "$rc"; return 0; }
+  _guardrails_split_awk 0 "$1" >/dev/null 2>&1; rc=$?
+  [ "$rc" = 0 ] || { printf 'splitting it line by line failed (awk exit %s)' "$rc"; return 0; }
+  return 1
+}
+
 _guardrails_split_segments() {
   local segs closed=1
   if [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ]; then _guardrails_split_awk 0 "$1"; return; fi

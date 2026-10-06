@@ -80,4 +80,23 @@ assert_rc 0 "environment hatch allows what would be asked"
 assert_eq "$OUT" "" "environment hatch asks nothing"
 unset ALLOW_PUBLISH_AS_ME
 
+# A command the guard cannot read in full gets a question, not a pass (#64, #76).
+# jq reads the command from stdin: Linux caps one argument at 128 KiB, and these run past it.
+jsonin() { printf '%s' "$1" | jq -cRs '{tool_input:{command:.}}'; }
+unreadable() {  # <command> <label> [PATH prefix]
+  local old="$PATH"; [ -z "${3:-}" ] || export PATH="$3:$PATH"
+  run_hook "$S" "$(jsonin "$1")"; export PATH="$old"
+  assert_rc 0 "$2"
+  assert_out '"permissionDecision":"ask"' "$2"
+  assert_out 'Could not read this command' "$2"
+}
+unreadable "echo $(printf '%0263000d' 0)" "a command too long to read in time asks"
+broken="$(scratch_dir)"; printf '#!/bin/sh\nexit 2\n' > "$broken/awk"; chmod +x "$broken/awk"
+unreadable "gh pr view 12" "a split that aborts asks" "$broken"
+
+export ALLOW_PUBLISH_AS_ME=1
+run_hook "$S" "$(jsonin "echo $(printf '%0263000d' 0)")"
+assert_eq "$OUT" "" "environment hatch asks nothing about an unreadable command"
+unset ALLOW_PUBLISH_AS_ME
+
 finish "guard-publish"
