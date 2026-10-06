@@ -36,4 +36,8 @@ run_hook "$S" "$(json "$rf" "git push origin HEAD")"
 assert_rc 0 "escape hatch allows"
 unset SKIP_TEST_GATE
 
+# A push inside a shell payload is a push (#65).
+run_hook "$S" "$(json "$rf" "bash -c 'git push origin HEAD'")"
+assert_rc 2 "push inside bash -c gated"
+
 finish "test-gate"

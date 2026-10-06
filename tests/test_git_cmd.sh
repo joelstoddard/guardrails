@@ -101,4 +101,19 @@ cwd $'echo "`echo \'"\'`"\ncd /evil\n# \'\ngit commit -m x' commit /start $'/sta
 yes $'bash <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to bash"
 no  $'cat <<EOF\ngit commit -m x\nEOF'            commit "a heredoc fed to cat is data"
 
+# A shell or eval payload is a script of its own (#65).
+yes "bash -c 'git commit -m x'"                   commit "inside bash -c"
+yes 'sh -c "cd /x && git push origin HEAD"'       push   "inside sh -c after a cd"
+yes $'bash -c \'\nset -e\ngit commit -m x\n\''    commit "inside a multi-line bash -c"
+yes "bash -lc 'git commit -m x'"                  commit "a -c inside a cluster of flags"
+yes "zsh <<<'git push'"                           push   "a here-string fed to zsh"
+yes "eval 'git push'"                             push   "inside eval"
+yes "eval eval eval eval git commit -m x"         commit "four levels down"
+no  "eval eval eval eval eval git commit -m x"    commit "recursion stops at five levels"
+no  "bash -c 'echo git commit'"                   commit "a payload is parsed, not matched"
+
+cwd "bash -c 'cd /x && git commit -m y'"  commit /start /x     "a cd inside the payload"
+cwd "bash -c 'cd /x'; git commit -m y"    commit /start /start "a child shell's cd does not last"
+cwd "eval 'cd /x'; git commit -m y"       commit /start /x     "eval's cd lasts"
+
 finish "git-cmd"

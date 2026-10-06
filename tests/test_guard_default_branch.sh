@@ -113,4 +113,11 @@ run_hook "$S" "$(json "$r13" "cat cmds.txt | bash")"
 assert_eq "$OUT" "" "the override asks nothing about a pipe into a shell"
 unset ALLOW_DEFAULT_COMMIT
 
+# A commit inside a shell payload is a commit (#65).
+r14="$(make_repo main)"
+run_hook "$S" "$(json "$r13" "bash -c 'git commit -m x'")"
+assert_rc 2 "a commit inside bash -c on the default branch blocked"
+run_hook "$S" "$(json "$r14b" "bash -c 'cd $r14 && git commit -m x'")"
+assert_rc 2 "a cd into a default-branch repo inside bash -c blocked"
+
 finish "guard-default-branch"
