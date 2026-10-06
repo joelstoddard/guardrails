@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: commit-skill-no-push
+description: The commit skill fires on natural phrasing, writes a conventional subject, and never pushes.
+context:
+  scaffold_script: scaffold.sh
