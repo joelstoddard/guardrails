@@ -25,7 +25,27 @@
 # carry=1 carries quotes across lines and exits 3 if they never close; carry=0 resets them per line.
 _guardrails_split_awk() {
   printf '%s' "$2" | awk -v carry="$1" '
-    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1; fw = ""; fwd = 0 }
+    # Carry mode also writes each command inside a $( ), <( ) or >( ) as a segment of its own, after the
+    # rest, as backticks are written as sh -c "...". Level k of nesting holds its text from cs[k] on this
+    # line, after pieces lp[k, 1..ln[k]] from earlier lines; a nested level leaves its opener and closer.
+    function subopen(k, start) {
+      if (k > 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
+      cs[k] = start; ln[k] = 0
+    }
+    function subemit(k, e,   j, t) {
+      t = substr($0, cs[k], e - cs[k])
+      if (t == "" && !ln[k]) return
+      if (kind[k] == "`") xp[++nxp] = "sh -c \""
+      for (j = 1; j <= ln[k]; j++) xp[++nxp] = lp[k, j]
+      xp[++nxp] = t
+      if (kind[k] == "`") xp[++nxp] = "\""
+      xp[++nxp] = "\n"; ln[k] = 0
+    }
+    function subclose(k, e) {
+      subemit(k, e)
+      if (k > 1) cs[k - 1] = e
+    }
+    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1; fw = ""; fwd = 0; fwe = 0 }
     {
       # A heredoc body starts once its opening line ends, and a backslash-newline has not ended it.
       if (hd != "" && !cont) {
@@ -37,7 +57,7 @@ _guardrails_split_awk() {
       if (!carry) q = ""
       if (!cont) wb = 1
       # fw is the first word of the segment, once fwd = 2; a heredoc fed to a shell is the script it runs.
-      if (carry && q == "" && !cont) { fw = ""; fwd = 0 }
+      if (carry && q == "" && !cont) { fw = ""; fwd = 0; fwe = 0 }
       # Indexing the line split into characters keeps the scan linear: substr rescans the line on each call.
       cont = 0; ar = 0; n = split($0, chars, "")
       for (i = 1; i <= n; i++) {
@@ -55,14 +75,23 @@ _guardrails_split_awk() {
         # An enclosing quote does not reach inside $( ), where quoting restarts and
         # a <<WORD is a real opener. Depth outlives the line because the closing )
         # of a `-m "$(cat <<EOF ...)"` body lands on a later one.
-        if (q != sq && q != "ansi" && c == "$" && chars[i + 1] == "(" && chars[i + 2] != "(") {
-          st[++d] = q; sw[d] = fw; swd[d] = fwd; q = ""; fw = ""; fwd = 0; out = out "$("; i++; wb = 1; continue
+        if (q != sq && q != "ansi" && q != "bt" && c == "$" && chars[i + 1] == "(" && chars[i + 2] != "(") {
+          st[++d] = q; sw[d] = fw; swd[d] = fwd; swe[d] = fwe; q = ""; fw = ""; fwd = 0; fwe = 0; out = out "$("
+          if (carry) { kind[d] = "$"; subopen(d, i + 2) }
+          i++; wb = 1; continue
+        }
+        # A backtick substitution ends at the next unescaped backtick, whatever quotes it holds.
+        if (carry && c == "`" && q == "bt") { subclose(d, i); fw = sw[d]; fwd = swd[d]; fwe = swe[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (carry && c == "`" && (q == "" || q == dq)) {
+          st[++d] = q; sw[d] = fw; swd[d] = fwd; swe[d] = fwe; kind[d] = "`"; subopen(d, i + 1); q = "bt"; out = out c; continue
         }
         # An ANSI-C string ends only at a single quote, so its marker is longer than any character.
         if (q != "") { out = out c; wb = 0; if (c == q || (q == "ansi" && c == sq)) q = ""; continue }
         if (carry && c == "$" && chars[i + 1] == sq) { q = "ansi"; out = out c sq; i++; continue }
         if (c == sq || c == dq) { q = c; out = out c; continue }
-        if (carry && (c == "<" || c == ">") && chars[i + 1] == "(") { st[++d] = q; sw[d] = fw; swd[d] = fwd; fw = ""; fwd = 0; out = out c "("; i++; wb = 1; continue }
+        if (carry && (c == "<" || c == ">") && chars[i + 1] == "(") {
+          st[++d] = q; sw[d] = fw; swd[d] = fwd; swe[d] = fwe; fw = ""; fwd = 0; fwe = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
+        }
 
         # A word that starts with # comments out the rest of the line. wb marks a word start: after a
         # blank or an operator, but not after an escape, or the ) closing a $( ), <( ) or $(( )).
@@ -72,7 +101,7 @@ _guardrails_split_awk() {
         # Miscounting only suppresses heredoc detection, which is the safe way to err.
         if (c == "(" && chars[i + 1] == "(") { ad[++ar] = (chars[i - 1] == "$"); out = out "(("; i++; wb = 0; continue }
         if (c == ")" && chars[i + 1] == ")" && ar > 0) { wb = !ad[ar--]; out = out "))"; i++; continue }
-        if (c == ")" && d > 0) { fw = sw[d]; fwd = swd[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (c == ")" && d > 0) { if (carry) subclose(d, i); fw = sw[d]; fwd = swd[d]; fwe = swe[d]; q = st[d--]; out = out c; wb = 0; continue }
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
         if (carry && c == "<" && (chars[i + 1] chars[i + 2]) == "<<") { out = out "<<<"; i += 2; wb = 1; continue }
@@ -83,8 +112,11 @@ _guardrails_split_awk() {
           dl = ""; qc = chars[j]
           if (carry) {
             # The delimiter is a whole shell word, as the shell reads it: quotes and backslashes removed.
-            qd = ""; quoted = 0
+            # A delimiter is a short word: past 1024 characters this opens no heredoc, which errs toward
+            # scanning and keeps a long word from making the read quadratic.
+            qd = ""; quoted = 0; dn = 0
             for (; j <= n; j++) {
+              if (++dn > 1024) { dl = ""; break }
               ch = chars[j]
               if (qd != "") { if (ch == qd) qd = ""; else dl = dl ch; continue }
               if (ch == sq || ch == dq) { qd = ch; quoted = 1; continue }
@@ -111,15 +143,31 @@ _guardrails_split_awk() {
         }
 
         if ((c == "&" && chars[i + 1] == "&") ||
-            (c == "|" && chars[i + 1] == "|")) { out = out "\n"; i++; wb = 1; fw = ""; fwd = 0; continue }
-        if (c == "|" || c == ";") { out = out "\n"; wb = 1; fw = ""; fwd = 0; continue }
+            (c == "|" && chars[i + 1] == "|")) {
+          if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
+          out = out "\n"; i++; wb = 1; fw = ""; fwd = 0; fwe = 0; continue
+        }
+        if (c == "|" || c == ";") {
+          if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 }
+          out = out "\n"; wb = 1; fw = ""; fwd = 0; fwe = 0; continue
+        }
         if (carry) wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         if (carry && fwd < 2) {
-          # A NAME=value word before the command is an assignment, not the command.
-          if (c != " " && c != "\t") { fw = fw c; fwd = 1 }
-          else if (fwd == 1) { if (index(fw, "=") > 1) { fw = ""; fwd = 0 } else fwd = 2 }
+          # A NAME=value word before the command is an assignment, not the command. fw keeps only what a
+          # shell name needs, five characters after the last slash, so a long word stays linear.
+          if (c != " " && c != "\t") {
+            if (c == "=" && fwd) fwe = 1
+            if (c == "/") { fw = "" } else if (length(fw) < 5) { fw = fw c }
+            fwd = 1
+          } else if (fwd == 1) { if (fwe) { fw = ""; fwd = 0; fwe = 0 } else fwd = 2 }
         }
         out = out c
+      }
+      # Inside a substitution a line break ends a command too, unless quoted, escaped or in backticks.
+      if (carry && d > 0) {
+        if (kind[d] == "$" && q == "" && !cont) subemit(d, i)
+        else lp[d, ++ln[d]] = substr($0, cs[d], i - cs[d]) (cont ? "" : ";")
+        cs[d] = 1
       }
       # A line is written only once read whole, so an awk that aborts mid-line writes none of it, as
       # before. A line break inside a quote is data here, but a separator to the sh -c or eval that
@@ -130,24 +178,37 @@ _guardrails_split_awk() {
       if (cont) next
       print ""
     }
-    END { if (carry && (q != "" || cont)) exit 3 }'
+    END {
+      if (nxp && (q != "" || cont)) printf "\n"
+      for (j = 1; j <= nxp; j++) printf "%s", xp[j]
+      if (carry && (q != "" || cont)) exit 3
+    }'
 }
 
-# A hook that times out lets the command through, so the guards do not try to read one this long.
-# At this size the slowest guard takes about 2 s of its 10 s budget; see issue #64.
-_GUARDRAILS_SPLIT_MAX=262144
+# A hook that times out lets the command through, so the guards do not read a command past these limits:
+# its length, the segments in its two splits, and the shells and evals it could make them re-read. With all
+# three at their limits at once, the slowest guard measured 2.5 s of its 10 s budget (#94).
+_GUARDRAILS_SPLIT_MAX=131072
+_GUARDRAILS_SPLIT_MAX_SEGMENTS=10000
+_GUARDRAILS_SPLIT_MAX_SHELLS=16
 
 # _guardrails_unreadable <cmdline> → rc 0 and a reason if a guard cannot read the command in full:
-# too long to read in time, or a split whose awk aborted, as BSD awk does on invalid bytes (#76).
+# too much to read in time, or a split whose awk aborted, as BSD awk does on invalid bytes (#76).
 _guardrails_unreadable() {
-  local rc
+  local rc carried per_line n
   if [ "${#1}" -gt "$_GUARDRAILS_SPLIT_MAX" ]; then
     printf '%s characters is too long to read in time' "${#1}"; return 0
   fi
-  _guardrails_split_awk 1 "$1" >/dev/null 2>&1; rc=$?
+  carried="$(_guardrails_split_awk 1 "$1" 2>/dev/null)"; rc=$?
   [ "$rc" = 0 ] || [ "$rc" = 3 ] || { printf 'splitting it failed (awk exit %s)' "$rc"; return 0; }
-  _guardrails_split_awk 0 "$1" >/dev/null 2>&1; rc=$?
+  per_line="$(_guardrails_split_awk 0 "$1" 2>/dev/null)"; rc=$?
   [ "$rc" = 0 ] || { printf 'splitting it line by line failed (awk exit %s)' "$rc"; return 0; }
+  n=$(($(printf '%s\n%s\n' "$carried" "$per_line" | wc -l)))
+  [ "$n" -le "$_GUARDRAILS_SPLIT_MAX_SEGMENTS" ] || { printf '%s segments are too many to read in time' "$n"; return 0; }
+  # Each shell or eval may be a script to split again, so they are counted as words, nested ones too, but
+  # not in heredoc bodies, which are data.
+  n=$(($(printf '%s' "$carried" | LC_ALL=C awk -F'[^A-Za-z0-9_.-]+' '{ for (i = 1; i <= NF; i++) if ($i == "sh" || $i == "bash" || $i == "zsh" || $i == "dash" || $i == "ksh" || $i == "eval") n++ } END { print n + 0 }')))
+  [ "$n" -le "$_GUARDRAILS_SPLIT_MAX_SHELLS" ] || { printf '%s shells and evals are too many to re-read in time' "$n"; return 0; }
   return 1
 }
 
@@ -163,7 +224,7 @@ _guardrails_split_segments() {
 # its command line (a -c argument, alone or in a cluster such as -lc, or a here-string) or eval runs,
 # else rc 1. It sets a variable rather than printing, since a subshell for every segment is slow.
 _guardrails_shell_payload() {
-  local seg="$1" i=0 t inner=""
+  local seg="$1" i=0 k inner="" here='<<<[[:space:]]*(.*)$'
   local -a toks
   case "$seg" in *eval* | *'<<<'* | *-*c*) ;; *) return 1 ;; esac
   read -r -a toks <<<"$seg" || return 1
@@ -171,18 +232,18 @@ _guardrails_shell_payload() {
     case "${toks[$i]}" in [A-Za-z_]*=*) i=$((i + 1)) ;; *) break ;; esac
   done
   case "${toks[$i]:-}" in
-    eval) inner="${seg#*eval }" ;;
+    eval) inner="${toks[*]:$((i + 1))}" ;;
     sh | bash | zsh | dash | ksh | */sh | */bash | */zsh | */dash | */ksh)
-      for t in "${toks[@]:$((i + 1))}"; do
-        case "$t" in
+      for ((k = i + 1; k < ${#toks[@]}; k++)); do
+        case "${toks[$k]}" in
           --*) ;;
-          -*c*) inner="${seg#*"$t"}"; break ;;
+          -*c*) inner="${toks[*]:$((k + 1))}"; break ;;
         esac
       done
-      [ -n "$inner" ] || case "$seg" in *'<<<'*) inner="${seg#*<<<}" ;; esac ;;
+      # Words and a regex, as searching with ${seg#*<<<} is quadratic on a long segment.
+      [ -n "$inner" ] || { [[ $seg =~ $here ]] && inner="${BASH_REMATCH[1]}"; } ;;
     *) return 1 ;;
   esac
-  inner="${inner#"${inner%%[![:space:]]*}"}"
   inner="${inner#[\"\']}"; inner="${inner%[\"\']}"
   [ -n "$inner" ] && [ "$inner" != "$seg" ] || return 1
   _GUARDRAILS_PAYLOAD="$inner"

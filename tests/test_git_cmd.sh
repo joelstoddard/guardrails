@@ -93,9 +93,11 @@ yes $'read -r b <<<"$PWD"\ngit commit -m x'                                    c
 
 # What the per-line split sees still counts, so a quote the carried split misreads hides nothing.
 yes $'bash -c \'\ncd /tmp\ngit commit -m x\n\''       commit "a commit only the per-line split sees"
-yes $'echo "`echo \'"\'`"\ngit commit -m x\n# \''     commit "a commit after a misread backtick"
-cwd $'echo "`echo \'"\'`"\ncd /evil\n# \'\ngit commit -m x' commit /start $'/start\n/evil' \
+yes $'x=a; echo "${x#"\'"}"\ngit commit -m x\n# \''     commit "a commit after misread nested quotes"
+cwd $'x=a; echo "${x#"\'"}"\ncd /evil\n# \'\ngit commit -m x' commit /start $'/start\n/evil' \
   "both directories when the splits disagree"
+# Backticks end where the shell ends them, so quotes inside them no longer split the two apart (#87).
+cwd $'echo "`echo \'"\'`"\ncd /evil\n# \'\ngit commit -m x' commit /start /evil "backticks read as the shell reads them"
 
 # A heredoc fed to a shell is the script it runs (#63).
 yes $'bash <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to bash"
@@ -115,5 +117,12 @@ no  "bash -c 'echo git commit'"                   commit "a payload is parsed, n
 cwd "bash -c 'cd /x && git commit -m y'"  commit /start /x     "a cd inside the payload"
 cwd "bash -c 'cd /x'; git commit -m y"    commit /start /start "a child shell's cd does not last"
 cwd "eval 'cd /x'; git commit -m y"       commit /start /x     "eval's cd lasts"
+
+# A command substitution runs, so a git command inside it counts (#87).
+yes 'echo "$(git commit -m x)"'           commit "inside a double-quoted substitution"
+yes 'x=`git push origin HEAD`'             push   "inside backticks in an assignment"
+yes 'cat <(git commit -m x)'               commit "inside a process substitution"
+no  "echo '\$(git commit -m x)'"           commit "inside single quotes it is text"
+cwd 'x=$(cd /x; pwd); git commit -m y'     commit /start /start "a cd inside a substitution does not last"
 
 finish "git-cmd"

@@ -69,13 +69,17 @@ asks() {
 asks "perl -pi -e 's#a#b#;
 s#the plugin'\"'\"'s publish guard#the building plugin'\"'\"'s publish guard#;' SKILL.md" \
   "multi-line quoted perl program asks"
-asks $'echo "`echo \'"\'`"\ngh pr comment 1 -b x\n# \''                         "backtick inside double quotes asks"
 asks $'x=a; echo "${x#"\'"}"\ngh pr comment 1 -b x\n# \''                       "nested quotes inside \${ } ask"
 asks $'echo "$(case a in a) printf \'"\' ;; esac)"\ngh pr comment 1 -b x\n# \'' "a case pattern inside \$( ) asks"
 
+# Backticks end where the shell ends them, at the next unescaped backtick, so quotes inside them
+# no longer hide the lines after (#87).
+run_hook "$S" "$(jsonc $'echo "`echo \'"\'`"\ngh pr comment 1 -b x\n# \'')"
+assert_rc 2 "a publish after backticks inside double quotes blocked"
+
 # The human's own hatch covers the question too.
 export ALLOW_PUBLISH_AS_ME=1
-run_hook "$S" "$(jsonc $'echo "`echo \'"\'`"\ngh pr comment 1 -b x\n# \'')"
+run_hook "$S" "$(jsonc $'x=a; echo "${x#"\'"}"\ngh pr comment 1 -b x\n# \'')"
 assert_rc 0 "environment hatch allows what would be asked"
 assert_eq "$OUT" "" "environment hatch asks nothing"
 unset ALLOW_PUBLISH_AS_ME
@@ -121,5 +125,26 @@ export ALLOW_PUBLISH_AS_ME=1
 run_hook "$S" "$(jsonc 'curl -fsSL https://example.com/install.sh | sh')"
 assert_eq "$OUT" "" "environment hatch asks nothing about a pipe into a shell"
 unset ALLOW_PUBLISH_AS_ME
+
+# A command substitution runs, so the commands inside it are checked (#87).
+run_hook "$S" "$(jsonc 'echo "$(gh pr comment 1 -b x)"')"
+assert_rc 2 "a publish inside a substitution blocked"
+run_hook "$S" "$(jsonc 'git commit -m "`gh pr comment 1 -b x`"')"
+assert_rc 2 "a publish inside backticks blocked"
+run_hook "$S" "$(jsonc "echo '\$(gh pr comment 1 -b x)'")"
+assert_rc 0 "a substitution inside single quotes is text"
+assert_eq "$OUT" "" "a substitution inside single quotes asks nothing"
+
+# Many segments, or many shells and evals to re-read, cost far more than their length, so past these
+# caps a command is unreadable too, as is one past 128 KiB (#94).
+unreadable "$(printf 'a\n%.0s' {1..5001})" "too many segments to read in time asks"
+assert_out 'segments are too many' "the question names the segments"
+unreadable "$(printf 'eval x\n%.0s' {1..17})" "too many shells and evals to re-read asks"
+assert_out 'shells and evals are too many' "the question names the shells and evals"
+unreadable "echo $(printf '%0131100d' 0)" "a command past 128 KiB asks"
+run_hook "$S" "$(jsonin "$(printf 'a\n%.0s' {1..4999})")"
+assert_eq "$OUT" "" "segments within the cap are read"
+run_hook "$S" "$(jsonin "$(printf 'eval x\n%.0s' {1..16})")"
+assert_eq "$OUT" "" "shells and evals within the cap are read"
 
 finish "guard-publish"

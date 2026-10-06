@@ -23,7 +23,7 @@ _guardrails_git_opt_takes_value() {
   esac
 }
 
-# Advance an index past git's global options. Echoes the new index.
+# Advance an index past git's global options, into _GUARDRAILS_GIT_AT: a subshell per git command is slow.
 _guardrails_git_skip_globals() {
   local i="$1"; shift
   local -a toks=("$@")
@@ -38,13 +38,17 @@ _guardrails_git_skip_globals() {
       *) break ;;
     esac
   done
-  printf '%s' "$i"
+  _GUARDRAILS_GIT_AT="$i"
 }
 
 _guardrails_invokes_git() {
-  local cmdline="$1" want="$2" depth="${3:-0}" seg i
+  local cmdline="$1" want="$2" depth="${3:-0}" seg i carried per_line
   local -a toks
   [ "$depth" -gt 4 ] && return 1
+  carried="$(_guardrails_split_segments "$cmdline")"
+  per_line="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_split_segments "$cmdline")"
+  # Where the two splits agree, as they mostly do, one is read: both would double the work at each level.
+  [ "$per_line" != "$carried" ] || per_line=""
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
     i=0
@@ -57,14 +61,14 @@ _guardrails_invokes_git() {
     done
     case "${toks[$i]:-}" in
       git | */git)
-        i="$(_guardrails_git_skip_globals "$((i + 1))" "${toks[@]}")"
+        _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"; i="$_GUARDRAILS_GIT_AT"
         [ "${toks[$i]:-}" = "$want" ] && return 0
         ;;
       *sh | eval)
         _guardrails_shell_payload "$seg" &&
           _guardrails_invokes_git "$_GUARDRAILS_PAYLOAD" "$want" "$((depth + 1))" && return 0 ;;
     esac
-  done < <(_guardrails_split_segments "$cmdline"; _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_split_segments "$cmdline")
+  done <<<"$carried"$'\n'"$per_line"
   return 1
 }
 
@@ -107,7 +111,7 @@ _guardrails_git_walk_cwd() {
         esac
         ;;
       git | */git)
-        j="$(_guardrails_git_skip_globals "$((i + 1))" "${toks[@]}")"
+        _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"; j="$_GUARDRAILS_GIT_AT"
         if [ "${toks[$j]:-}" = "$want" ]; then
           k=$((i + 1))
           while [ "$k" -lt "$j" ]; do

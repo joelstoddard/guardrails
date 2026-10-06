@@ -75,7 +75,7 @@ assert_rc 2 "bare cd does not smuggle a default-branch commit past the guard"
 
 # A cd only the per-line split sees still sends the guard there: a misread quote must not hide it.
 r11="$(make_repo main)"; r11b="$(make_repo main)"; git -C "$r11b" switch -q -c nbc-6-u
-run_hook "$S" "$(jq -cn --arg cwd "$r11b" --arg c $'echo "`echo \'"\'`"\ncd '"$r11"$'\n# \'\ngit commit -m x' \
+run_hook "$S" "$(jq -cn --arg cwd "$r11b" --arg c $'x=a; echo "${x#"\'"}"\ncd '"$r11"$'\n# \'\ngit commit -m x' \
   '{cwd:$cwd,tool_input:{command:$c}}')"
 assert_rc 2 "cd into a default-branch repo hidden by a misread quote blocked"
 
@@ -119,5 +119,22 @@ run_hook "$S" "$(json "$r13" "bash -c 'git commit -m x'")"
 assert_rc 2 "a commit inside bash -c on the default branch blocked"
 run_hook "$S" "$(json "$r14b" "bash -c 'cd $r14 && git commit -m x'")"
 assert_rc 2 "a cd into a default-branch repo inside bash -c blocked"
+
+# A commit inside a command substitution is a commit (#87).
+run_hook "$S" "$(jq -cn --arg cwd "$r13" --arg c 'echo "$(git commit -m x)"' '{cwd:$cwd,tool_input:{command:$c}}')"
+assert_rc 2 "a commit inside a substitution on the default branch blocked"
+run_hook "$S" "$(jq -cn --arg cwd "$r13" --arg c 'x=`git commit -m x`' '{cwd:$cwd,tool_input:{command:$c}}')"
+assert_rc 2 "a commit inside backticks on the default branch blocked"
+
+# Many segments, or many shells and evals to re-read, cost far more than their length, so past these
+# caps a command might commit unread, and it asks (#94).
+jsonat() { printf '%s' "$2" | jq -cRs --arg cwd "$1" '{cwd:$cwd,tool_input:{command:.}}'; }
+run_hook "$S" "$(jsonat "$r13" "$(printf 'true\n%.0s' {1..5001})"$'\n''git commit -m x')"
+assert_out '"permissionDecision":"ask"' "too many segments to read in time asks"
+assert_out 'segments are too many' "the question names the segments"
+run_hook "$S" "$(jsonat "$r13" "$(printf 'eval x\n%.0s' {1..17})"$'\n''git commit -m x')"
+assert_out '"permissionDecision":"ask"' "too many shells and evals to re-read asks"
+run_hook "$S" "$(jsonat "$r13" "$(printf 'true\n%.0s' {1..4998})"$'\n''git commit -m x')"
+assert_rc 2 "a commit within the segment cap is still read and refused"
 
 finish "guard-default-branch"
