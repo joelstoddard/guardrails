@@ -76,6 +76,26 @@ f() {
 EOF
 assert_eq "2 3 5 8 10 12 18 " "$(bash "$TOOL" --lines "$D/h.sh" | tr '\n' ' ')" "heuristic"
 
+echo "--- a shift inside (( )) or \$(( )) opens no heredoc, and a heredoc after a closing )) still does"
+D="$(scratch_dir)"
+cat >"$D/a.sh" <<'EOF'
+(( x << y ))
+echo after-arith
+z=$(( x << y ))
+echo after-expansion
+(( x )) && cat <<BODY
+not code
+BODY
+d=$(dirname $(pwd)) && cat <<BODY
+not code
+BODY
+echo after-heredocs
+(( x +
+  y << z ))
+echo after-two-lines
+EOF
+assert_eq "1 2 3 4 5 8 11 12 13 14 " "$(bash "$TOOL" --lines "$D/a.sh" | tr '\n' ' ')" "arith-shift"
+
 echo "--- a measured file with no executable lines counts as fully covered"
 setup; echo '# only a comment' >"$D/plugins/p/lib/empty.sh"; cov --update
 assert_eq "0/0 100.0 NO" "$(row plugins/p/lib/empty.sh)" "empty"

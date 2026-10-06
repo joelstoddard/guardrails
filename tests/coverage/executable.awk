@@ -1,6 +1,6 @@
 # Prints the numbers of the lines in a shell file that count as executable.
 # Consistent rather than exact: floors start at measured values. See docs/design/coverage.md
-BEGIN { sq = 0; dq = 0; here = ""; cont = 0 }
+BEGIN { sq = 0; dq = 0; here = ""; cont = 0; ar = 0 }
 {
   line = $0
   if (here != "") {                          # heredoc body
@@ -24,7 +24,9 @@ BEGIN { sq = 0; dq = 0; here = ""; cont = 0 }
     if (c == "'") { sq = 1; code = code c; continue }
     if (c == "\"") { dq = 1; code = code c; continue }
     if (c == "#" && (i == 1 || substr(line, i - 1, 1) ~ /[ \t;]/)) break
-    if (c == "<" && substr(line, i + 1, 1) == "<" && substr(line, i + 2, 1) != "<" && (i == 1 || substr(line, i - 1, 1) != "<")) {
+    if (c == "(" && substr(line, i + 1, 1) == "(") { ar++; code = code "(("; i++; continue }   # inside (( )) or $(( )), even across lines, << is a shift
+    if (c == ")" && substr(line, i + 1, 1) == ")" && ar) { ar--; code = code "))"; i++; continue }
+    if (!ar && c == "<" && substr(line, i + 1, 1) == "<" && substr(line, i + 2, 1) != "<" && (i == 1 || substr(line, i - 1, 1) != "<")) {
       rest = substr(line, i + 2); sub(/^-/, "", rest); sub(/^[ \t]*/, "", rest); sub(/^["']/, "", rest)
       if (match(rest, /^[A-Za-z_][A-Za-z0-9_]*/)) opens = substr(rest, 1, RLENGTH)
       code = code "<<"; i++; continue

@@ -50,7 +50,9 @@ own tests run in `tests/run.sh`, so the suite needs bash 4.1 too.
   `;;&`, `{`, `}` or `)`, followed by nothing or by a space, `;`, `|`, `&`, `<` or `>`.
   The whole line is skipped, so `then cmd`, `else cmd` and `{ cmd; }` do not count;
 - function headers, and case labels on their own or with an empty arm (`pattern) ;;`);
-- continuation lines of multi-line strings, heredoc bodies and backslash continuations;
+- continuation lines of multi-line strings, heredoc bodies and backslash continuations.
+  A `<<` inside `(( ))` or `$(( ))` is a shift and opens no heredoc, even when the
+  `(( ))` spans lines;
 - lines ending in `# coverage: ignore <reason>`. The reason is required. Use the marker
   only for lines that cannot run.
 
@@ -68,8 +70,6 @@ Known limits:
 - A file a test copies before running is traced under the copy's path and is not
   credited to the original. `test_manifests.sh` runs every hook from a copy under a
   path with a space, so those runs do not count.
-- A `<<` followed by a word starts a heredoc, even inside `(( ))`, so `(( x << y ))`
-  would hide every later line of the file. No measured file has one.
 
 Known blind spot: code in another language inside a shell string is not measured. The
 awk in `shell-split.sh` and the jq in the hooks count as one shell line each, and a
