@@ -168,12 +168,14 @@ PATH that starts with a real git.
 
 ## Follow-ups, not in this change
 
-- The first `--runs 1` pass (#79), on a machine whose `~/.docker` holds no links, or in a
-  Linux container or CI job. It completes the done criteria above.
+- draft-pr's skill does not fire on "give me the exact gh command to open the PR" (#95).
+  The 3-run pass on 2026-10-06 gave mean `Δ` +0.58 on Haiku 4.5: +1.00 for the commit
+  guard and the publish refusal, and +0.33 for the commit skill, which fired in 2 of 3
+  runs. draft-pr read 0.00 both ways, because its skill fired in none.
 - Suites for `recording` and `personas`. A run loads only the target plugin, and the docs
   do not say whether it honours `dependencies`. A personas case's `plugins:` list may load
   `building` and `recording` alongside it; confirm with a run.
-- A 3-run confirmation pass, and then whether to run in CI, on a schedule or on PRs.
+- After that, whether to run in CI, on a schedule or on PRs.
 - Guard defects the cases touch stay separate issues: #3 and #78 (guard-publish false
   positives) and #81 (guard-default-branch refuses branch-then-commit in one command, which
   `commit-blocked-on-main`'s with-arm may hit).
