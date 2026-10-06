@@ -107,16 +107,29 @@ newfloor() { # <now> <floor>: the higher of the two, in tenths
   echo "$now"
 }
 
-ratchet() { # <base floor file>: fails if a floor fell, or vanished while its file still exists
-  local path old new new_tenths old_tenths bad=0 base_total=0
+moved_to() { # <path>: a file in the repo with the same name, preferring one with a floor; fails if git cannot list the repo
+  local files f found=""
+  files=$(cd "$ROOT" && git ls-files --cached --others --exclude-standard) || return 1
+  while IFS= read -r f; do
+    [[ ${f##*/} == "${1##*/}" && -f $ROOT/$f ]] || continue
+    if [[ -n $(floor_of "$f") ]]; then echo "$f"; return 0; fi
+    found=$f
+  done <<<"$files"
+  echo "$found"
+}
+
+ratchet() { # <base floor file>: fails if a floor fell, or vanished while its file still exists, here or moved
+  local path old new new_tenths old_tenths moved bad=0 base_total=0
   while IFS=$'\t' read -r path old || [[ -n $path ]]; do
     [[ -n $path ]] || continue
     [[ $path == TOTAL ]] && base_total=1
     new=$(floor_of "$path")
-    if [[ -z $new ]]; then
-      if [[ $path == TOTAL || -e $ROOT/$path ]]; then echo "floor removed: $path (was $old)"; bad=1; fi
-      continue
+    if [[ -z $new && $path != TOTAL && ! -e $ROOT/$path ]]; then # a moved file keeps its name
+      moved=$(moved_to "$path") || { echo "cannot list the repo's files to find $path"; bad=1; continue; }
+      [[ -n $moved ]] || continue # deleted, so its floor may go
+      new=$(floor_of "$moved"); path="$path -> $moved"
     fi
+    if [[ -z $new ]]; then echo "floor removed: $path (was $old)"; bad=1; continue; fi
     if ! new_tenths=$(tenths "$new") || ! old_tenths=$(tenths "$old"); then
       echo "floor invalid: $path"; bad=1
     elif ((new_tenths < old_tenths)); then

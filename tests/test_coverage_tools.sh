@@ -101,12 +101,15 @@ cov --update
 [[ $RC == 1 && $(floors) == *$'f.sh\t90.0'* ]] || fail no-lowering "rc=$RC, floors '$(floors)'"
 
 echo "--- the ratchet fails on a lowered or vanished floor, and passes otherwise"
-setup
+setup; git -C "$D" init -q
 printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
 printf '%s\t70.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 1 && $OUTPUT == *"floor lowered: $S"* ]] || fail ratchet-lowered "rc=$RC: $OUTPUT"
 printf '%s\t66.6\nplugins/p/lib/gone.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 0 ]] || fail ratchet-deleted-file "rc=$RC: $OUTPUT"
+echo 'kept' >"$D/plugins/p/lib/gone.sh"; git -C "$D" add plugins/p/lib/gone.sh; rm "$D/plugins/p/lib/gone.sh"
+cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-deleted-unstaged "rc=$RC: $OUTPUT"
 echo 'kept' >"$D/plugins/p/lib/gone.sh"; cov --ratchet "$D/base.tsv"
 [[ $RC == 1 && $OUTPUT == *"floor removed: plugins/p/lib/gone.sh"* ]] || fail ratchet-removed "rc=$RC: $OUTPUT"
 printf '%s\t60.0\nTOTAL\t60.0\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
@@ -114,6 +117,28 @@ printf '%s\t60.0\nTOTAL\t60.0\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv
 printf '%s\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
 printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 1 && $OUTPUT == *"floor removed: TOTAL"* ]] || fail ratchet-total "rc=$RC: $OUTPUT"
+
+echo "--- the ratchet fails on a floor whose file moved out of the measured paths"
+setup; git -C "$D" init -q; mkdir -p "$D/plugins/p/moved"; echo true >"$D/plugins/p/moved/m.sh"
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+printf '%s\t66.6\nplugins/p/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor removed: plugins/p/lib/m.sh -> plugins/p/moved/m.sh (was 50.0)"* ]] ||
+  fail ratchet-moved-out "rc=$RC: $OUTPUT"
+
+echo "--- the ratchet follows a floor whose file moved to another measured path, past an unmeasured namesake, and fails if it fell"
+setup; git -C "$D" init -q; mkdir -p "$D/plugins/q/lib"; echo true >"$D/plugins/q/lib/m.sh"; echo true >"$D/plugins/p/m.sh"
+printf '%s\t66.6\nplugins/p/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\nplugins/q/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-moved-measured "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nplugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor lowered: plugins/p/lib/m.sh -> plugins/q/lib/m.sh 50.0 -> 40.0"* ]] ||
+  fail ratchet-moved-lowered "rc=$RC: $OUTPUT"
+
+echo "--- the ratchet fails on a vanished floor when it cannot list the repo's files to look for it"
+setup
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+printf '%s\t66.6\nplugins/p/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"cannot list the repo's files"* ]] || fail ratchet-no-git "rc=$RC: $OUTPUT"
 
 echo "--- the ratchet fails on a base floor file that is missing or empty, so there is always a base to compare"
 setup; printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/missing.tsv"

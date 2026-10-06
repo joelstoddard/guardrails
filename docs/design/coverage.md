@@ -92,15 +92,21 @@ test that runs that line covers all of it. `shell-split.sh` reads 1 of 1 lines.
   no `TOTAL` row, such as an empty file from a failed `git show`, fails, so a missing
   base can never read as nothing to compare. A floor for a deleted file may go. This
   makes "floors only rise" a machine check and not a habit.
+- A file gone from its path counts as moved if another file in the repo has its name,
+  as `git ls-files` lists the repo: tracked files, and untracked ones git does not
+  ignore. Its floor must follow it to the new path and not fall there. A script moved
+  out of the globs, for example into a subdirectory of `hooks/scripts/`, loses its
+  floor on `--update`, so the ratchet fails with `floor removed: OLD -> NEW`. If git
+  cannot list the repo, the ratchet fails too.
 - `bash tests/coverage.sh --lines FILE` prints the lines of `FILE` that count.
 
-Known gap: a measured file that moves out of the globs, for example into a
-subdirectory of `hooks/scripts/`, loses its floor on `--update`, and the ratchet
-allows that because the old path is gone. Nothing then measures the file.
+Known limit: the ratchet finds a moved file by its name. A move that also renames the
+file reads as a deletion, so its floor may go. A deleted file whose name another file
+still has reads as moved to that file.
 
 Exit codes: 0 for success; 1 for a failed test, a missing, low or invalid floor, a
-missing argument after `--lines` or `--ratchet`, or an unreadable base file; 2 for an
-unknown option or a bash older than 4.1.
+missing argument after `--lines` or `--ratchet`, an unreadable base file, or a repo git
+cannot list; 2 for an unknown option or a bash older than 4.1.
 
 Output goes to `.coverage/`, which git ignores. `.coverage/hits.tsv` lists every traced
 line as `test<TAB>path<TAB>line`.
