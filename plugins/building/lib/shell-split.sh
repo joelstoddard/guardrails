@@ -215,6 +215,7 @@ _guardrails_shell_reads_stdin() {
 # _guardrails_names_shell <text> → rc 0 if a shell or eval appears in it as a word, as it must to run.
 _guardrails_names_shell() {
   local w
+  case "$1" in *sh* | *eval*) ;; *) return 1 ;; esac
   for w in sh bash zsh dash ksh eval; do
     case " $1 " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
   done
