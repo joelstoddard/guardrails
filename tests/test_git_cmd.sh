@@ -135,4 +135,29 @@ yes $'cat <<EOF\n$(git commit -m x)\nEOF'      commit "a substitution in an unqu
 no  $'cat <<\'EOF\'\n$(git commit -m x)\nEOF'  commit "a substitution in a quoted heredoc body is text"
 cwd $'cd /x && cat <<EOF\n`git commit -m y`\nEOF' commit /start /x "a body substitution runs where the heredoc does"
 
+# A keyword, a wrapper and its options, or a ( before git does not hide it (#90).
+yes "sudo git commit -m x"                 commit "behind sudo"
+yes "sudo -u root git commit -m x"         commit "behind sudo and an option"
+yes "env FOO=1 git commit -m x"            commit "behind env and an assignment"
+yes "nohup git push origin HEAD"           push   "behind nohup"
+yes "command git commit -m x"              commit "behind command"
+yes "time git commit -m x"                 commit "behind time"
+yes "if true; then git commit -m x; fi"    commit "after then"
+yes "{ git commit -m x; }"                 commit "in a group"
+yes "(git commit -m x)"                    commit "in a subshell"
+yes "sudo bash -c 'git commit -m x'"       commit "a shell behind sudo"
+for w in '!' '{' '(' 'if' 'then' 'elif' 'else' 'while' 'until' 'do' 'nohup' 'command' 'time' 'sudo -n' 'env -i' 'exec -c' 'xargs -0' \
+  'ssh -T h bash -c'; do
+  yes "$w git commit -m x"                 commit "seen through $w as a segment's first word"
+done
+yes "/usr/bin/time -p git commit -m x"     commit "seen through a wrapper by path"
+no  "env FOO=1 git status"                 commit "env before another subcommand"
+no  "command -v git commit"                commit "command -v runs nothing"
+cwd "sudo git -C /x commit"                       commit /start /x     "-C behind a wrapper"
+cwd "sudo bash -c 'cd /x && git commit -m y'"     commit /start /x     "a cd in a payload behind a wrapper"
+# A cd in a subshell does not last, and one behind a keyword may not run, so neither moves the guard.
+cwd "(cd /x); git commit -m y"                    commit /start /start "a subshell's cd does not last"
+cwd "if false; then cd /x; fi; git commit -m y"   commit /start /start "a cd behind a keyword is not followed"
+cwd "if false; then eval 'cd /x'; fi; git commit -m y" commit /start /start "eval's cd behind a keyword is not followed"
+
 finish "git-cmd"

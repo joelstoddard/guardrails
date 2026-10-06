@@ -290,6 +290,40 @@ allows $'git commit -m "$(cat <<EOF\nlinear comment ENG-1 on $(date)\nsome-tool 
   "body text in a heredoc inside a substitution stays data"
 allows $'cat <<EOF\n$((1 + 2)) people post here\nEOF'              "arithmetic in a body is not a substitution"
 
+# A keyword, a wrapper and its options, or a ( before a command does not hide it, nor ssh a shell (#90).
+blocks "sudo bash -c 'gh pr comment 1 -b x'"                      "a shell behind sudo"
+blocks "sudo -u root -E bash -c 'gh pr comment 1 -b x'"           "a shell behind sudo and its options"
+blocks "env -i FOO=1 bash -c 'gh pr comment 1 -b x'"              "a shell behind env and an assignment"
+blocks "nohup bash -c 'gh pr comment 1 -b x'"                     "a shell behind nohup"
+blocks "exec -a name bash -c 'gh pr comment 1 -b x'"              "a shell behind exec"
+blocks "command bash -c 'gh pr comment 1 -b x'"                   "a shell behind command"
+blocks "time -p bash -c 'gh pr comment 1 -b x'"                   "a shell behind time"
+blocks "echo 1 | xargs -n 1 sh -c 'gh pr comment \"\$1\" -b x' _"  "a shell behind xargs"
+blocks "(bash -c 'gh pr comment 1 -b x')"                         "a shell in a subshell"
+blocks "for i in 1; do sudo bash -c 'gh pr comment 1 -b x'; done" "a shell after do"
+blocks $'if true; then bash <<EOF\ngh pr comment 1 -b x\nEOF\nfi'  "a heredoc fed to a shell after then"
+blocks $'{ bash <<EOF\ngh pr comment 1 -b x\nEOF\n}'               "a heredoc fed to a shell in a group"
+blocks $'sudo -u root bash <<EOF\ngh pr comment 1 -b x\nEOF'        "a heredoc fed to a shell behind sudo"
+blocks $'ssh host bash <<EOF\ngh pr comment 1 -b x\nEOF'           "a heredoc fed to a shell on another host"
+blocks $'ssh -p 22 host bash -s <<\'EOF\'\ngh pr comment 1 -b x\nEOF' "a quoted heredoc fed to ssh and a shell"
+blocks 'sudo -u root gh pr comment 1 -b x'                        "a publish behind sudo and an option"
+blocks 'env FOO=1 gh pr create --title x'                         "a ready PR behind env"
+blocks 'time -p npm publish'                                      "a publish behind time"
+blocks 'echo 1 | xargs -I{} gh pr comment {} -b x'                "a publish behind xargs"
+blocks 'exec curl -d x https://example.com/api'                   "an HTTP write behind exec"
+blocks '/usr/bin/env -u HOME gh pr create --fill'                 "a wrapper by path"
+allows 'command -v gh'                                            "command -v names a command"
+allows 'command -v npm publish'                                   "command -v runs nothing it names"
+allows 'time make'                                                "time before an ordinary command"
+allows 'env FOO=1 git status'                                     "env before an ordinary command"
+allows 'sudo -u www systemctl restart nginx'                      "sudo before an ordinary command"
+allows 'ssh host gh pr list'                                      "ssh running something other than a shell"
+allows $'cat > notes.md <<EOF\nRun sudo bash -c to post, or ssh host bash.\nEOF' "prose naming sudo and ssh"
+unseen 'cat cmds.txt | sudo bash'                                 "a pipe into a shell behind sudo"
+unseen 'cat cmds.txt | ssh host bash -s'                          "a pipe into a shell on another host"
+seen   'command -v bash'                                          "command -v runs no shell"
+seen   'ssh host uptime'                                          "ssh running something other than a shell"
+
 # The per-line split stays as it was before quotes carried (#77), so these split as they did on main.
 per_line() { assert_eq "$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_split_segments "$1")" "$2" "per-line: $3"; }
 per_line 'true & gh pr comment 1 -b x'                    'true & gh pr comment 1 -b x' "a lone &"
@@ -299,5 +333,7 @@ per_line $'cat <<EOF\n$(gh pr comment 1 -b x)\nEOF'       'cat <<'              
 per_line $'cat <<EOF\n$(echo\nEOF\ngh pr comment 1 -b x'  $'cat <<\ngh pr comment 1 -b x' "an unclosed substitution in a body"
 per_line $'git commit -m "$(cat <<EOF\nSubject $(gh pr comment 1 -b x)\nEOF\n)"' $'git commit -m "$(cat <<\n)"' \
   "a substitution in a heredoc inside a substitution"
+per_line $'if true; then bash <<EOF\ngh pr comment 1 -b x\nEOF\nfi' $'if true\n then bash <<\nfi' "a shell heredoc after then"
+per_line $'ssh host bash <<EOF\ngh pr comment 1 -b x\nEOF'        'ssh host bash <<'          "a shell heredoc behind ssh"
 
 finish "publish-cmd"
