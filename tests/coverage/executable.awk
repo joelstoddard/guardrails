@@ -44,6 +44,7 @@ BEGIN { sq = 0; dq = 0; here = ""; cont = 0; ar = 0; cur = 0 }
   if (line ~ /# coverage: ignore [^ ]/) next
   gsub(/^[ \t]+|[ \t]+$/, "", code)
   if (code == "") next
+  if (code ~ /^[^ \t()]+([ \t]*\|[ \t]*[^ \t()]+)*[ \t]*\|[ \t]*\\$/) { cont = 0; next }   # a case label continued: read the next line on its own
   if (code ~ /^(then|else|fi|do|done|esac|in|;;|;&|;;&|\{|\}|\))([ \t;|&<>].*)?$/) next
   if (code ~ /^(function[ \t]+)?[A-Za-z_][A-Za-z0-9_:-]*[ \t]*\(\)[ \t]*\{?$/) next
   if (code ~ /^[^ \t()]+([ \t]*\|[ \t]*[^ \t()]+)*[ \t]*\)([ \t]*(;;&|;;|;&))?$/) next   # a case label, with or without an empty arm

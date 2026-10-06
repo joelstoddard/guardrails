@@ -76,6 +76,21 @@ f() {
 EOF
 assert_eq "2 3 5 8 10 12 18 " "$(bash "$TOOL" --lines "$D/h.sh" | tr '\n' ' ')" "heuristic"
 
+echo "--- a case label continued with a backslash is not executable, and the line it continues to is read on its own"
+D="$(scratch_dir)"
+cat >"$D/c.sh" <<'EOF'
+case $1 in
+  -a | -b | \
+    -c) echo abc ;;
+  -d | \
+    -e | \
+    -f)
+    echo def
+    ;;
+esac
+EOF
+assert_eq "1 3 7 " "$(bash "$TOOL" --lines "$D/c.sh" | tr '\n' ' ')" "continued-case-label"
+
 echo "--- a shift inside (( )) or \$(( )) opens no heredoc, and a heredoc after a closing )) still does"
 D="$(scratch_dir)"
 cat >"$D/a.sh" <<'EOF'

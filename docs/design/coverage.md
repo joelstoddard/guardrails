@@ -50,6 +50,9 @@ own tests run in `tests/run.sh`, so the suite needs bash 4.1 too.
   `;;&`, `{`, `}` or `)`, followed by nothing or by a space, `;`, `|`, `&`, `<` or `>`.
   The whole line is skipped, so `then cmd`, `else cmd` and `{ cmd; }` do not count;
 - function headers, and case labels on their own or with an empty arm (`pattern) ;;`);
+- each line of a case label continued with a backslash, `a | \`, but its last. bash
+  never traces a label, so that last line is read on its own, and counts if its arm
+  holds a command. A pipeline of single words, `ls | \`, reads the same way;
 - continuation lines of multi-line strings, heredoc bodies and backslash continuations.
   A `<<` inside `(( ))` or `$(( ))` is a shift and opens no heredoc, even when the
   `(( ))` spans lines;
@@ -73,8 +76,6 @@ Known limits:
   `)` on a later one, is traced on the line of its `)`, for the commands inside it too.
   That line does not count and is no continuation, so the lines before it read as
   uncovered. No measured file has one.
-- A case label continued with a backslash counts as executable but is never traced
-  (`git-cmd.sh:16`).
 - A file a test copies before running is traced under the copy's path and is not
   credited to the original. `test_manifests.sh` runs every hook from a copy under a
   path with a space, so those runs do not count.
