@@ -82,7 +82,7 @@ Known limits:
 
 Known blind spot: code in another language inside a shell string is not measured. The
 awk in `shell-split.sh` and the jq in the hooks count as one shell line each, and a
-test that runs that line covers all of it. `shell-split.sh` reads 1 of 1 lines.
+test that runs that line covers all of it.
 
 ## Floors and the ratchet
 
