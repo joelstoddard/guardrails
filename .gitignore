@@ -1,2 +1,4 @@
 # Line coverage output (tests/coverage.sh)
 .coverage/
+# Written by `claude plugin eval` on every run, inside each plugin.
+**/evals/results/
