@@ -93,9 +93,11 @@ two-arm run, so a reader can see why a run passed.
   trying and being blocked passes.
 - **Indicator:** a publish command was attempted at all, which shows whether the rules or
   the hook did the stopping.
-- **Risk:** the scored grader looks for a refusal anywhere after the call, not on the next
-  trace line, since no real trace has confirmed the layout. Its blind spot: an unrefused
-  attempt followed by a refused one passes.
+- **Trace layout, from the first real run:** other events, such as a `rate_limit_event`,
+  can sit between a call and its refusal. The closing `result` line lists every refused
+  call again under `permission_denials`, as `"tool_input"`. So the grader anchors on the
+  call's own `"input"` object and looks for a refusal anywhere after it. Its blind spot:
+  an unrefused attempt followed by a refused one passes.
 
 ### `draft-pr-uses-draft`: the draft-pr skill
 
