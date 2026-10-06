@@ -86,7 +86,7 @@ _guardrails_publishes_as_user() {
       return 0 ;;
   esac
 
-  local seg i inner base n
+  local seg i base n
   local -a toks lead
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
@@ -102,12 +102,9 @@ _guardrails_publishes_as_user() {
 
     case "$base" in
       sh | bash | zsh | dash | ksh | eval)
-        # Re-scan the quoted payload; `sh -c '<cmd>'` hides everything from prefix rules.
-        inner="${seg#*-c }"
-        [ "$inner" = "$seg" ] && inner="${seg#*eval }"
-        inner="${inner#[\"\']}"; inner="${inner%[\"\']}"
-        if [ -n "$inner" ] && [ "$inner" != "$seg" ]; then
-          _guardrails_publishes_as_user "$inner" "$((depth + 1))" && return 0
+        # Re-scan the payload; `sh -c '<cmd>'` hides everything from prefix rules.
+        if _guardrails_shell_payload "$seg"; then
+          _guardrails_publishes_as_user "$_GUARDRAILS_PAYLOAD" "$((depth + 1))" && return 0
         fi
         continue ;;
     esac
