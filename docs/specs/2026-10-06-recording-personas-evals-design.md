@@ -38,13 +38,16 @@ show whether a skill body or only the rules did the work.
 
 - **Routing is graded on the dispatch's `subagent_type`, not on a tool name.** Traces name
   the dispatch tool `Task`, while the docs call it `Agent`.
-- **personas loads only with its dependencies.** It declares `building` and `recording`.
-  A run against the working tree has neither, so Claude Code skips personas, without any
-  warning: the first run listed no personas agents and ran none of its hooks. A case cannot
-  add them through `plugins:`, because the eval refuses entries outside the case's own
-  plugin. So run these cases against the installed copy, `bash tests/evals.sh
-  personas@guardrails`, after they merge. Whether that target loads the dependencies is not
-  yet verified.
+- **Eval never loads a plugin's dependencies, and skips a plugin whose dependencies are
+  missing.** personas declares `building` and `recording`. In a run, Claude Code skipped it
+  without any warning, both from the working tree and from the installed copy: the runs
+  listed no personas agents and ran none of its hooks. A case cannot add the dependencies
+  through `plugins:`, because the eval refuses entries outside the case's own plugin. A
+  copy with only the `dependencies` field removed loaded and routed, which proves the cause.
+  So `tests/evals.sh` runs any plugin that declares dependencies from such a copy, with
+  `--trust-plugin` for that copy and results written back to the plugin's own
+  `evals/results/`. The rules of `building` and `recording` are absent in these runs either
+  way.
 - **`small-edit-stays-local` should pass in both arms.** It guards against over-delegation,
   so a `Δ` near zero is the expected result, not a weak case.
 - **Personas inherit the session's model,** so the persona in the migration case also runs
@@ -59,8 +62,11 @@ One `--runs 1` pass per suite on Haiku 4.5, 2026-10-06, with no run errors:
 | `adr-writes-design-doc` | 1.00 | 0.00 | +1.00 | `adr` fired and wrote `docs/design/` |
 | `track-findings-footer` | 0.50 | 0.50 | 0.00 | `track-findings` did not fire; Claude ran `gh issue create` bare (#97) |
 | `findings-listed-with-refs` | 0.00 | 0.00 | 0.00 | Claude fixed the bug and never mentioned the `/tmp` log |
-| `migration-routes-to-data-engineer` | 0.00 | 0.00 | 0.00 | personas did not load (see above) |
-| `small-edit-stays-local` | 1.00 | 1.00 | 0.00 | personas did not load, so this pass means nothing yet |
+| `migration-routes-to-data-engineer` | 1.00 | 0.00 | +1.00 | Claude dispatched `personas:data-engineer` |
+| `small-edit-stays-local` | 1.00 | 1.00 | 0.00 | All seven personas loaded, and none was dispatched |
+
+The personas rows are from the run through the no-dependencies copy. The first personas
+run, before that, loaded no personas at all.
 
 ## Verification
 
