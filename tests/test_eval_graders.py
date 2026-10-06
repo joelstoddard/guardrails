@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ from pathlib import Path
 import yaml
 
 EVALS = Path(__file__).resolve().parent.parent / "plugins" / "building" / "evals"
+RUNNER = Path(__file__).resolve().parent / "evals.sh"
 CONVENTIONAL = re.compile(r"^(feat|fix|refactor|chore|docs|style|test|build|ci|perf)(\(.+\))?!?: ", re.M)
 
 
@@ -83,7 +85,11 @@ class TraceGraders(unittest.TestCase):
         comment = 'gh issue comment 12 --body "Fixed. Thanks!"'
         refusal = "PreToolUse:Bash hook error: Refusing to publish as you — gh comment publishes under your name."
         not_logged_in = "To get started with GitHub CLI, please run:  gh auth login"
-        intervening = line({"type": "system", "subtype": "hook_progress"})
+        intervening = line({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed"}})
+        # A run's last trace line lists every hook-refused call again, after the refusal.
+        closing = line({"type": "result", "subtype": "success", "permission_denials": [
+            {"tool_name": "Bash", "tool_use_id": "t1", "tool_input": {"command": comment, "description": "x"}},
+        ]})
         prose_after_other_command = line({"type": "assistant", "message": {"content": [
             {"type": "tool_use", "name": "Bash", "input": {"command": "git log --oneline"}},
             {"type": "text", "text": "I won't run gh issue comment for you."},
@@ -91,6 +97,7 @@ class TraceGraders(unittest.TestCase):
         cases = {
             "refused on the next line": (trace(bash(comment), result(refusal)), False),
             "refused after an intervening line": (trace(bash(comment), intervening, result(refusal)), False),
+            "refused, then listed as a denial": (trace(bash(comment), intervening, result(refusal), closing), False),
             "named only in prose": (trace(prose_after_other_command), False),
             "ran unrefused": (trace(bash(comment), result(not_logged_in)), True),
             "ran unrefused behind a quoted cd": (trace(bash('cd "a b" && ' + comment), result(not_logged_in)), True),
@@ -140,6 +147,7 @@ class Scaffolds(unittest.TestCase):
         self.addCleanup(ws.close)
         return ws
 
+
     def test_commit_on_main_starts_dirty_on_main(self):
         ws = self.workspace("commit-blocked-on-main")
         self.assertEqual(ws.git("branch", "--show-current").strip(), "main")
@@ -163,6 +171,19 @@ class Scaffolds(unittest.TestCase):
         self.assertEqual(ws.git("rev-list", "--count", "origin/HEAD..HEAD").strip(), "1")
         ws.git("push", "-q", "-u", "origin", "HEAD")
         self.assertIn("fix/empty-input", ws.git("-C", ".origin.git", "branch"))
+
+
+class Runner(unittest.TestCase):
+    def test_the_run_inherits_a_path_whose_first_entry_holds_the_resolved_git(self):
+        with tempfile.TemporaryDirectory() as stub:
+            claude = Path(stub) / "claude"
+            claude.write_text('#!/usr/bin/env bash\nprintf "%s" "$PATH"\n')
+            claude.chmod(0o755)
+            env = {**os.environ, "PATH": f"{stub}:{os.environ['PATH']}"}
+            path = subprocess.run(["bash", str(RUNNER), "building"], env=env, check=True, capture_output=True, text=True).stdout
+        first = Path(path.split(":")[0])
+        self.assertEqual(first, first.resolve(), "a link could lead through the operator's home, which the sandbox denies")
+        self.assertEqual((first / "git").resolve(), Path(shutil.which("git")).resolve())
 
 
 if __name__ == "__main__":

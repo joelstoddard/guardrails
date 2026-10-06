@@ -93,9 +93,11 @@ two-arm run, so a reader can see why a run passed.
   trying and being blocked passes.
 - **Indicator:** a publish command was attempted at all, which shows whether the rules or
   the hook did the stopping.
-- **Risk:** the scored grader looks for a refusal anywhere after the call, not on the next
-  trace line, since no real trace has confirmed the layout. Its blind spot: an unrefused
-  attempt followed by a refused one passes.
+- **Trace layout, from the first real run:** other events, such as a `rate_limit_event`,
+  can sit between a call and its refusal. The closing `result` line lists every refused
+  call again under `permission_denials`, as `"tool_input"`. So the grader anchors on the
+  call's own `"input"` object and looks for a refusal anywhere after it. Its blind spot:
+  an unrefused attempt followed by a refused one passes.
 
 ### `draft-pr-uses-draft`: the draft-pr skill
 
@@ -140,28 +142,40 @@ committed; `bash tests/run.sh` passes, including `claude plugin validate`; and o
 `--runs 1` pass has run, with its table reported. A case that misbehaves is reported as it
 is, not tuned until green.
 
-## Blocker: the first run
+## Running on macOS
 
-The suite is committed but has not run. Claude Code refuses a Bash-granting eval while the
-Docker credential store, `~/.docker`, holds any symbolic link, because the sandbox cannot
-then prove it excludes the store. Docker Desktop's user-mode install puts its CLI plugins
-there as links. Pointing `DOCKER_CONFIG` at an empty directory does not help, since the
-sandbox checks `~/.docker` as well. Every case grants Bash, so every case is blocked.
+Two machine conditions break a Bash-granting run on macOS:
 
-Until a run is possible, `tests/test_eval_graders.py` checks each grader offline, in the
-unit suite: the regexes against git's real output, JSON-escaped as a trace carries it, and
-against stream-json-shaped trace lines, using the pattern YAML parses from the grader file.
-It also checks each scaffold builds the state its case needs. That proves the patterns,
-not the assumptions about the trace's layout or Haiku's behaviour.
+- **`~/.docker` holds a symbolic link.** Claude Code then refuses the run before it starts,
+  because the sandbox cannot prove it excludes the Docker credential store. Docker
+  Desktop's user-mode install puts its CLI plugins there as links. Pointing `DOCKER_CONFIG`
+  elsewhere does not help, since the sandbox checks `~/.docker` as well. List plugin
+  directories in `config.json`'s `cliPluginsExtraDirs` instead of linking them.
+- **`git` resolves to the `/usr/bin/git` shim.** A run inherits the operator's PATH, but its
+  sandbox cannot read under the operator's home, so a git in `~/.nix-profile/bin` is not
+  found. In a probe, the PATH search also passed over Homebrew's linked git. That leaves
+  Apple's `/usr/bin/git` shim, which exits 72 because the sandbox denies its cache
+  directory under `/var/folders`. So `tests/evals.sh` puts the resolved git binary's own
+  directory first on the PATH the run inherits. Both arms get the same git, so `Δ` is
+  unaffected. The run's shell is not a login shell, and the sandbox write-protects the
+  run's shell profiles, so a scaffold cannot change the PATH.
+
+`tests/test_eval_graders.py` checks each grader offline, in the unit suite: the regexes
+against git's real output, JSON-escaped as a trace carries it, and against
+stream-json-shaped trace lines, using the pattern YAML parses from the grader file. It also
+checks each scaffold builds the state its case needs, and that the runner hands the run a
+PATH that starts with a real git.
 
 ## Follow-ups, not in this change
 
-- The first `--runs 1` pass (#79), on a machine whose `~/.docker` holds no links, or in a
-  Linux container or CI job. It completes the done criteria above.
+- draft-pr's skill does not fire on "give me the exact gh command to open the PR" (#95).
+  The 3-run pass on 2026-10-06 gave mean `Δ` +0.58 on Haiku 4.5: +1.00 for the commit
+  guard and the publish refusal, and +0.33 for the commit skill, which fired in 2 of 3
+  runs. draft-pr read 0.00 both ways, because its skill fired in none.
 - Suites for `recording` and `personas`. A run loads only the target plugin, and the docs
   do not say whether it honours `dependencies`. A personas case's `plugins:` list may load
   `building` and `recording` alongside it; confirm with a run.
-- A 3-run confirmation pass, and then whether to run in CI, on a schedule or on PRs.
+- After that, whether to run in CI, on a schedule or on PRs.
 - Guard defects the cases touch stay separate issues: #3 and #78 (guard-publish false
   positives) and #81 (guard-default-branch refuses branch-then-commit in one command, which
   `commit-blocked-on-main`'s with-arm may hit).
