@@ -95,4 +95,9 @@ run_hook "$S" "$(printf '%s' "$long" | jq -cRs --arg cwd "$r12" '{cwd:$cwd,tool_
 assert_eq "$OUT" "" "the override asks nothing about an unreadable command"
 unset ALLOW_DEFAULT_COMMIT
 
+# A commit in a heredoc fed to a shell is a commit (#63).
+r13="$(make_repo main)"
+run_hook "$S" "$(jq -cn --arg cwd "$r13" --arg c $'bash <<EOF\ngit commit -m x\nEOF' '{cwd:$cwd,tool_input:{command:$c}}')"
+assert_rc 2 "a commit in a heredoc fed to bash blocked"
+
 finish "guard-default-branch"

@@ -218,4 +218,12 @@ blocks 'ksh <<< "gh pr comment 1 -b x"'                                   "a spa
 blocks $'bash <<<\'set -e\ngh pr comment 1 -b x\''                         "a multi-line here-string fed to bash"
 blocks "bash -lc 'gh pr comment 1 -b x'"                                  "a -c inside a cluster of flags"
 
+# A heredoc fed to a shell is the script it runs (#63).
+blocks $'bash <<EOF\ngh pr comment 1 -b x\nEOF'                          "a heredoc fed to bash"
+blocks $'sh -s <<\'EOF\'\ngh pr comment 1 -b x\nEOF'                      "a quoted heredoc fed to sh -s"
+blocks $'cd /tmp && /bin/zsh - <<EOF\nset -e\ngh pr comment 1 -b x\nEOF'  "a heredoc fed to a shell by path"
+blocks $'FOO=1 dash <<-EOF\n\tgh pr comment 1 -b x\n\tEOF'                "a heredoc fed to a shell after an assignment"
+blocks $'bash <<A\ncat <<B\nprose\nB\ngh pr comment 1 -b x\nA'            "a command after a heredoc nested in one"
+allows $'bash <<A\ncat <<B\ngh pr comment is only prose here\nB\nA'       "prose in a heredoc nested in a shell heredoc"
+
 finish "publish-cmd"

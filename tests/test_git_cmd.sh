@@ -97,4 +97,8 @@ yes $'echo "`echo \'"\'`"\ngit commit -m x\n# \''     commit "a commit after a m
 cwd $'echo "`echo \'"\'`"\ncd /evil\n# \'\ngit commit -m x' commit /start $'/start\n/evil' \
   "both directories when the splits disagree"
 
+# A heredoc fed to a shell is the script it runs (#63).
+yes $'bash <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to bash"
+no  $'cat <<EOF\ngit commit -m x\nEOF'            commit "a heredoc fed to cat is data"
+
 finish "git-cmd"

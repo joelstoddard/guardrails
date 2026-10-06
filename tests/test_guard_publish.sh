@@ -99,4 +99,8 @@ run_hook "$S" "$(jsonin "echo $(printf '%0263000d' 0)")"
 assert_eq "$OUT" "" "environment hatch asks nothing about an unreadable command"
 unset ALLOW_PUBLISH_AS_ME
 
+# A heredoc fed to a shell is checked as the script it runs (#63).
+run_hook "$S" "$(jsonc $'bash <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a heredoc fed to bash blocked"
+
 finish "guard-publish"
