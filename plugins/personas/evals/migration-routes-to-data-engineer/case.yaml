@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: migration-routes-to-data-engineer
+description: A production schema migration is delegated to the data-engineer persona.
+context:
+  scaffold_script: scaffold.sh
