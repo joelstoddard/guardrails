@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: findings-listed-with-refs
+description: An out-of-scope problem noticed during a task ends up under "Findings outside scope" with a reference.
+context:
+  scaffold_script: scaffold.sh

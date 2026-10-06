@@ -11,15 +11,20 @@ from pathlib import Path
 
 import yaml
 
-EVALS = Path(__file__).resolve().parent.parent / "plugins" / "building" / "evals"
+PLUGINS = Path(__file__).resolve().parent.parent / "plugins"
+EVALS = PLUGINS / "building" / "evals"
 RUNNER = Path(__file__).resolve().parent / "evals.sh"
 CONVENTIONAL = re.compile(r"^(feat|fix|refactor|chore|docs|style|test|build|ci|perf)(\(.+\))?!?: ", re.M)
+FLAGS = {"i": re.I, "m": re.M}
 
 
-def grader(case, name, key="pattern"):
+def grader(case, name, key="pattern", plugin="building"):
     """The grader's regex as the eval tool reads it. The tool runs JavaScript regexes; these mean the same under re.ASCII."""
-    text = (EVALS / case / "graders" / f"{name}.md").read_text()
-    return re.compile(yaml.safe_load(text.split("---")[1])[key], re.ASCII)
+    front = yaml.safe_load((PLUGINS / plugin / "evals" / case / "graders" / f"{name}.md").read_text().split("---")[1])
+    flags = re.ASCII
+    for flag in front.get("flags", ""):
+        flags |= FLAGS[flag]
+    return re.compile(front[key], flags)
 
 
 def line(message):
@@ -42,14 +47,14 @@ def trace(*lines):
 class Workspace:
     """A case's scaffold run in a fresh directory with an empty home, as an eval run starts."""
 
-    def __init__(self, case):
+    def __init__(self, case, plugin="building"):
         self._tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self._tmp.name) / "cwd"
         self.dir.mkdir()
         home = Path(self._tmp.name) / "home"
         home.mkdir()
         self.env = {**os.environ, "HOME": str(home), "GIT_CONFIG_NOSYSTEM": "1"}
-        subprocess.run(["bash", str(EVALS / case / "scaffold.sh")], cwd=self.dir, env=self.env, check=True)
+        subprocess.run(["bash", str(PLUGINS / plugin / "evals" / case / "scaffold.sh")], cwd=self.dir, env=self.env, check=True)
 
     def git(self, *args):
         return subprocess.run(["git", *args], cwd=self.dir, env=self.env, check=True, capture_output=True, text=True).stdout
@@ -142,10 +147,34 @@ class ReplyGraders(unittest.TestCase):
 
 
 class Scaffolds(unittest.TestCase):
-    def workspace(self, case):
-        ws = Workspace(case)
+    def workspace(self, case, plugin="building"):
+        ws = Workspace(case, plugin)
         self.addCleanup(ws.close)
         return ws
+
+    def remote_owner(self, ws):
+        return re.fullmatch(r"https://github\.com/([^/]+)/[^/]+\.git", ws.git("remote", "get-url", "origin").strip()).group(1)
+
+    def test_adr_starts_with_no_docs_directory(self):
+        ws = self.workspace("adr-writes-design-doc", "recording")
+        self.assertEqual(ws.git("status", "--porcelain"), "")
+        self.assertFalse((ws.dir / "docs").exists())
+
+    def test_recording_remotes_name_owners_no_github_login_can_have(self):
+        for case in ("track-findings-footer", "findings-listed-with-refs"):
+            with self.subTest(case=case):
+                self.assertGreater(len(self.remote_owner(self.workspace(case, "recording"))), 39)
+
+    def test_findings_case_shows_the_task_bug_and_the_out_of_scope_log(self):
+        script = (self.workspace("findings-listed-with-refs", "recording").dir / "greet.sh").read_text()
+        self.assertIn('echo "Hello, $1"', script)
+        self.assertIn(">> /tmp/greet.log", script)
+
+    def test_persona_scaffolds_hold_the_work_their_prompt_names(self):
+        migration = self.workspace("migration-routes-to-data-engineer", "personas")
+        self.assertIn("CREATE TABLE users", (migration.dir / "db/migrations/001_create_users.sql").read_text())
+        typo = self.workspace("small-edit-stays-local", "personas")
+        self.assertIn("recieve", (typo.dir / "README.md").read_text())
 
 
     def test_commit_on_main_starts_dirty_on_main(self):
@@ -173,7 +202,83 @@ class Scaffolds(unittest.TestCase):
         self.assertIn("fix/empty-input", ws.git("-C", ".origin.git", "branch"))
 
 
+def assistant(*content):
+    return line({"type": "assistant", "message": {"content": list(content)}})
+
+
+def dispatch(subagent):
+    return assistant({"type": "tool_use", "name": "Task", "input": {"subagent_type": subagent, "prompt": "x"}})
+
+
+class RecordingGraders(unittest.TestCase):
+    FOOTER = "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+
+    def test_footer_counts_only_when_claude_writes_it(self):
+        pattern = grader("track-findings-footer", "footer", plugin="recording")
+        command = f"gh issue create --label finding --title x --body-file - <<'EOF'\nbody\n\n{self.FOOTER}\nEOF"
+        skill_text = line({"type": "user", "message": {"content": "ALWAYS end the issue body with the " + self.FOOTER}})
+        cases = {
+            "in Claude's gh command": (assistant({"type": "tool_use", "name": "Bash", "input": {"command": command}}), True),
+            "in a draft Claude shows": (assistant({"type": "text", "text": "Draft:\n\nbody\n\n" + self.FOOTER}), True),
+            "only in the skill's own text": (skill_text, False),
+            "missing": (assistant({"type": "text", "text": "Filed it."}), False),
+        }
+        for name, (text, matches) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(bool(pattern.search(trace(text))), matches)
+
+    def test_no_issue_edits_catches_comment_close_edit_and_reopen(self):
+        pattern = grader("track-findings-footer", "no-issue-edits", "input_match", "recording")
+        for command, edits in {"gh issue close 12": True, "gh issue comment 12 -b x": True, "gh issue edit 3 --title y": True,
+                               "gh issue reopen 4": True, "gh issue create --title x": False, "gh issue list": False}.items():
+            with self.subTest(command=command):
+                self.assertEqual(bool(pattern.search(json.dumps({"command": command}))), edits)
+
+    def test_findings_graders_need_the_heading_and_a_tracked_log_item(self):
+        section = grader("findings-listed-with-refs", "findings-section", plugin="recording")
+        tracked = grader("findings-listed-with-refs", "log-finding-tracked", plugin="recording")
+        cases = {
+            "heading and asked": ("Fixed.\n\n## Findings outside scope\n- greet.sh appends to a fixed /tmp/greet.log (asked)", True, True),
+            "bold heading and issue": ("**Findings outside scope**\n- The shared /tmp/greet.log path #12", True, True),
+            "heading, untracked": ("## Findings outside scope\n- greet.sh appends to /tmp/greet.log", True, False),
+            "prose only": ("Fixed. Note: it also logs to /tmp/greet.log.", False, False),
+        }
+        for name, (reply, has_section, is_tracked) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(bool(section.search(reply)), has_section)
+                self.assertEqual(bool(tracked.search(reply)), is_tracked)
+
+
+class PersonaGraders(unittest.TestCase):
+    def test_routed_needs_a_dispatch_to_the_data_engineer(self):
+        pattern = grader("migration-routes-to-data-engineer", "routed", plugin="personas")
+        rules = line({"type": "system", "subtype": "hook_response", "output": "Personas are named personas:data-engineer and so on."})
+        self.assertRegex(trace(dispatch("personas:data-engineer")), pattern)
+        self.assertNotRegex(trace(rules, dispatch("personas:architect")), pattern)
+
+    def test_no_persona_fails_on_any_persona_dispatch_only(self):
+        pattern = grader("small-edit-stays-local", "no-persona", plugin="personas")
+        self.assertRegex(trace(dispatch("personas:technical-writer")), pattern)
+        self.assertNotRegex(trace(dispatch("general-purpose"), bash("sed -i '' s/recieve/receive/ README.md")), pattern)
+
+
+def runner_args(*args):
+    """The arguments tests/evals.sh hands to a stub claude."""
+    with tempfile.TemporaryDirectory() as stub:
+        claude = Path(stub) / "claude"
+        claude.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$@"\n')
+        claude.chmod(0o755)
+        env = {**os.environ, "PATH": f"{stub}:{os.environ['PATH']}"}
+        return subprocess.run(["bash", str(RUNNER), *args], env=env, check=True, capture_output=True, text=True).stdout.splitlines()
+
+
 class Runner(unittest.TestCase):
+    def test_a_plugin_in_this_repo_is_targeted_by_its_directory(self):
+        self.assertEqual(runner_args("recording")[:3], ["plugin", "eval", str(PLUGINS / "recording")])
+
+    def test_an_installed_plugin_is_targeted_by_name_so_its_dependencies_load(self):
+        self.assertEqual(runner_args("personas@guardrails")[:3], ["plugin", "eval", "personas@guardrails"])
+
     def test_the_run_inherits_a_path_whose_first_entry_holds_the_resolved_git(self):
         with tempfile.TemporaryDirectory() as stub:
             claude = Path(stub) / "claude"

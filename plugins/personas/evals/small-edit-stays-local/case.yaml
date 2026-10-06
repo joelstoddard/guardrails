@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: small-edit-stays-local
+description: A typo fix stays with the main session; no persona is dispatched.
+context:
+  scaffold_script: scaffold.sh
