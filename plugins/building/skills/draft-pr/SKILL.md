@@ -1,6 +1,6 @@
 ---
 name: draft-pr
-description: Create a draft pull request with a standardized What/Why/How body and conventional-commit title. Follow this skill whenever opening a pull request — the draft PR is the human review checkpoint, so the body format is fixed, the title is conventional-commit, and the PR is always marked draft. Main agents only; sub-agents return their work to the main agent to PR.
+description: Create a draft pull request with a standardized What/Why/How body and conventional-commit title, or hand the user the exact `gh pr create --draft` command to run. Follow this skill whenever opening a pull request, or when the user asks for the command to open one — the draft PR is the human review checkpoint, so the body format is fixed, the title is conventional-commit, and the PR is always marked draft. Main agents only; sub-agents return their work to the main agent to PR.
 allowed-tools: Bash(git *), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr create --draft:*), Bash(gh auth status:*), Bash(gh repo view:*), Agent
 ---
 
@@ -73,7 +73,6 @@ Stop and report if any check fails:
 - Current branch is **not** the default branch. Detect default via `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`, fall back to `main`.
 - Working tree is clean (`git status --porcelain` empty). If dirty, point the user to the `commit` skill.
 - At least one commit ahead of the base. Prefer `origin/<default>` when that ref exists, otherwise local `<default>`. Check with `git rev-list --count <base>..HEAD`.
-- `gh` CLI is authenticated (`gh auth status` succeeds).
 - No open PR already exists for this branch — the **Existing PR** line in Current state above already answers this. If it names a PR, stop and surface its URL.
 
 ### 2. Gather content
@@ -108,6 +107,12 @@ In order:
 
 If step 1 fails, stop — do not attempt step 2.
 
+**Hand-back mode.** Use it when `gh auth status` fails, or when the user asks for the
+command instead of the PR. Run step 1 as above. Then, instead of steps 2–4, give the user
+the exact `gh pr create --draft --base <default-branch> --title <title> --body <body>`
+command, with the title and body from step 2 filled in, ready to paste. There is no PR yet,
+so do not start the watcher.
+
 ## Body template
 
 ```markdown
@@ -130,14 +135,14 @@ If step 1 fails, stop — do not attempt step 2.
 | Dirty working tree | Refuse. Point to the `commit` skill. |
 | No commits ahead of base | Refuse. Nothing to PR. |
 | Open PR already exists for branch | Refuse. Surface the existing PR URL. |
-| `gh` not authenticated | Refuse. Tell user to run `gh auth login`. |
+| `gh` not authenticated | Use hand-back mode. Push, then give the exact `gh pr create --draft` command. |
 | Missing Why/How context | Ask the user. Do not fabricate. |
 | `git push` fails | Surface the error. Do not attempt `gh pr create`. |
 | CI still red after the watcher's three rounds | Surface the watcher's report. Do not retry. |
 
 ## Red flags — stop and re-check
 
-- About to run `gh pr create` without `--draft`.
+- About to run, or hand back, `gh pr create` without `--draft`.
 - About to force-push or use `--no-verify`.
 - About to create a second PR when one already exists.
 - About to invent a "Why" or "How" because conversation context is thin.
