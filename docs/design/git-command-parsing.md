@@ -22,10 +22,11 @@ which point it protects nothing.
 
 ## Design
 
-For each chained simple command — split on `&&`, `||`, `;`, `|` and newlines —
+For each chained simple command — split on `&&`, `||`, `;`, `|`, a lone `&` and
+newlines, but not the `&` of a redirect such as `2>&1` or `&>` —
 `_guardrails_invokes_git`:
 
-1. skips leading `VAR=value` assignments,
+1. finds the command word, past what can come before it (see below),
 2. requires the command word itself to be `git`,
 3. skips git's global options before matching the subcommand.
 
@@ -37,9 +38,52 @@ advance the index by one token or two.
 A command that runs a script of its own is read as one too. `bash -c '…'` (or `-c` in a
 cluster such as `-lc`), a here-string fed to a shell, and `eval '…'` are re-scanned to
 four levels deep, as `publish-cmd.sh` does; a heredoc fed to a shell is split as script
-lines by `shell-split.sh`. A `cd` inside `sh -c` ends with that child shell, while one
-inside `eval` lasts. A pipe into a shell runs commands no guard can see, so
-`guard-default-branch` asks when the directory it would run in is on its default branch.
+lines by `shell-split.sh`, as are the `$( )` and backticks in an unquoted heredoc body.
+A `cd` inside `sh -c` ends with that child shell, while one inside `eval` lasts. A pipe
+into a shell runs commands no guard can see, so `guard-default-branch` asks when the
+directory it would run in is on its default branch.
+
+## Finding the command word
+
+A word before the command can hide it: `sudo bash -c '…'`, `env FOO=1 git commit`,
+`then bash <<EOF`, `(bash -c …)`. So every reader of a segment, in the publish guard,
+the git guards and the shell readers, finds the command word through one lookup,
+`_guardrails_command_at` in `shell-split.sh` (#90). It skips:
+
+- `NAME=value` assignments;
+- the keywords `!`, `{`, `(`, `if`, `then`, `elif`, `else`, `while`, `until` and `do`,
+  and a `(` fused to the next word;
+- the wrappers `sudo`, `env`, `nohup`, `exec`, `command`, `time` and `xargs`, with
+  their short options. In a cluster such as `-Eu`, the first option that takes a value
+  takes the rest of the word, or the next word if none is left, as getopt does.
+
+`command -v` and `-V` name a command without running it, so there `command` is the
+command word. `ssh host` runs its command on another host, as you. The lookup sees through
+it only to a shell, which is then read like a shell here. `ssh host gh …` keeps `ssh` as
+its command word, as before.
+
+The lookup is on the guards' slowest path: a command at the caps can make them read some
+65,000 segments. Two measured costs shape it:
+
+- It reads the caller's `toks` array in place. Passing the words as arguments copies
+  them on every call, which cost about 8 µs a segment against 3 µs.
+- A call to a large function costs more in bash. So `_guardrails_command_at` is a small
+  check that every segment pays, and only a first word that can come before a command
+  goes on to the loop in `_guardrails_command_skip`. With the guards' functions loaded,
+  that cut its cost from about 14 µs a segment to about 7 µs. The check names every word the loop skips, and
+  `tests/test_git_cmd.sh` puts each of them first in a segment, so the two cannot drift.
+
+Two readers use the lookup with care:
+
+- **The splitter's awk cannot call it.** To decide whether a heredoc is a shell's script,
+  it asks whether a shell's name is a word anywhere before the `<<` in the segment. That
+  is a superset of the lookup, so no wrapper hides a shell. It also catches wrappers the
+  lookup does not know, such as `docker exec -i c bash <<EOF`. The cost is a false
+  positive when a shell's name is a plain argument, as in `grep -w bash <<EOF`.
+- **The directory walk follows only a plain `cd`.** A `cd` in a subshell, `(cd /x)`, does
+  not last, and one after a keyword, `if false; then cd /x; fi`, may not run. Following
+  either could judge a repo other than the one the commit lands in, which is weaker than
+  not following it. The same holds for the `cd` in an `eval` behind a keyword.
 
 ## Which repository the command acts on
 
@@ -87,7 +131,13 @@ that the per-line split's false positives remain for the git guards.
 Tokens are split on whitespace with no quote handling, so
 `git -C '/path with spaces' commit` is not parsed correctly. This is consistent
 with the tripwire framing: the failure is fail-open, and the guard lets the command
-through rather than blocking it wrongly.
+through rather than blocking it wrongly. For the same reason a quoted or escaped command
+word, such as `"bash"` or `ba\sh`, is not recognised, and a long option that takes a
+separate value, such as `sudo --user root`, reads its value as the command word.
+
+A shell that runs on another host, as in `ssh host bash <<EOF`, has its script read like
+a local one. So `guard-default-branch` judges a `git commit` in it against the local
+checkout, and refuses it when that checkout is on its default branch.
 
 ## Failure mode if you change this
 
