@@ -12,7 +12,7 @@ allowed-tools: Bash(git *)
 ## Rules
 
 ### Never push
-NEVER run `git push`. Pushing is always the user's decision.
+You MUST NOT run `git push`. Pushing is always the user's decision.
 
 ### Atomic changes
 Each commit must be the smallest meaningful unit of change. If a diff touches two unrelated concerns, split into separate commits. One logical change per commit.
@@ -34,7 +34,7 @@ Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0
 
 **Types:** `feat`, `fix`, `refactor`, `chore`, `docs`, `style`, `test`, `build`, `ci`, `perf`
 
-**Scope:** Single atomic identifier only — NEVER comma-separate scopes. If a change spans two scopes it isn't atomic; split the commit.
+**Scope:** Single atomic identifier only — you MUST NOT comma-separate scopes. If a change spans two scopes it isn't atomic; split the commit.
 - Bad: `fix(auth, session): ...`
 - Good: split into `fix(auth): ...` and `fix(session): ...`
 

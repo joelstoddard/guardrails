@@ -26,6 +26,6 @@ while IFS= read -r line; do
   trimmed="${line#"${line%%[![:space:]]*}"}"
   msg="$msg"$'\n'"  ${file}${n:+:$n} — ${trimmed:0:80}"
 done <<< "$hits"
-msg="$msg"$'\n'"NEVER skip a test OR suppress a finding to get past a gate. Keep it ONLY for a proven false positive, scoped to that one finding, with a comment saying WHY."
+msg="$msg"$'\n'"You MUST NOT skip a test OR suppress a finding to get past a gate. Keep it ONLY for a proven false positive, scoped to that one finding, with a comment saying WHY."
 jq -n --arg c "$msg" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}'
 exit 0
