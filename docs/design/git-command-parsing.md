@@ -104,10 +104,15 @@ text read again. A 5,000-line script fed to bash counts 5,004 segments and 23 ch
 `bash -c` over a 100 KiB script reads 102,000 characters again, and every other command
 counts at most 140 characters. A shell in a shell over more than 64 KiB asks.
 
-Within the caps, the slowest input measured took 2.6 s of the 10 s budget: 32,000 assignments
-before a `git commit`, read by guard-default-branch on macOS at load 6. The exception is the
-publish guard on `curl`, `wget`, `http` and `gh api -X` lines, which forks per line, so about
-600 of them still run it past the timeout (#126).
+The publish guard checks `curl`, `wget`, `http` and `gh api` lines without starting a process
+(#126). It started about seven for each `curl` line, so 4,990 of them took it 180 s. Its URL
+scan now costs a regex per URL. So past 32 URLs in one segment a write is read as remote,
+which bounds a segment, while the length cap bounds the URLs in a command.
+
+Within the caps, the slowest input measured took 4.1 s of the 10 s budget: one `eval`
+re-reading 480 `curl -d` lines of 32 local hosts each, read by guard-publish on macOS at
+load 6. It took 3.4 s on Linux. The next slowest took 2.6 to 3.3 s: the same lines without the
+`eval`, one `eval` over 128 KiB of words, and 32,000 assignments before a `git commit`.
 
 ## What was rejected
 
