@@ -50,7 +50,12 @@ own tests run in `tests/run.sh`, so the suite needs bash 4.1 too.
   `;;&`, `{`, `}` or `)`, followed by nothing or by a space, `;`, `|`, `&`, `<` or `>`.
   The whole line is skipped, so `then cmd`, `else cmd` and `{ cmd; }` do not count;
 - function headers, and case labels on their own or with an empty arm (`pattern) ;;`);
-- continuation lines of multi-line strings, heredoc bodies and backslash continuations;
+- each line of a case label continued with a backslash, `a | \`, but its last. bash
+  never traces a label, so that last line is read on its own, and counts if its arm
+  holds a command. A pipeline of single words, `ls | \`, reads the same way;
+- continuation lines of multi-line strings, heredoc bodies and backslash continuations.
+  A `<<` inside `(( ))` or `$(( ))` is a shift and opens no heredoc, even when the
+  `(( ))` spans lines;
 - lines ending in `# coverage: ignore <reason>`. The reason is required. Use the marker
   only for lines that cannot run.
 
@@ -58,22 +63,26 @@ The rules are a heuristic. They need to be consistent, not exact: floors start a
 measured values, so each run compares like with like. A line miscounted the same way
 every time changes no result.
 
+A multi-line command counts on its first line, but bash credits its hit to a later
+line, and which line differs between bash 5.2 and 5.3. So a traced hit on a
+continuation line of a counted command, inside a string or after a backslash, is
+credited to the command's counted line. `executable.awk -v spans=1` prints each such
+continuation line with its counted line, and `hits()` rewrites `hits.tsv` with it. When
+the floors were first set, nine of the fifteen uncovered lines were such first lines.
+
 Known limits:
 
-- A multi-line command counts on its first line, but bash credits a hit to a later
-  line, so that first line reads as uncovered. When the floors were set, nine of the
-  fifteen uncovered lines were such first lines.
-- A case label continued with a backslash counts as executable but is never traced
-  (`git-cmd.sh:16`).
+- A command substitution that spans lines outside quotes, as in `x=$(` on one line and
+  `)` on a later one, is traced on the line of its `)`, for the commands inside it too.
+  That line does not count and is no continuation, so the lines before it read as
+  uncovered. No measured file has one.
 - A file a test copies before running is traced under the copy's path and is not
   credited to the original. `test_manifests.sh` runs every hook from a copy under a
   path with a space, so those runs do not count.
-- A `<<` followed by a word starts a heredoc, even inside `(( ))`, so `(( x << y ))`
-  would hide every later line of the file. No measured file has one.
 
 Known blind spot: code in another language inside a shell string is not measured. The
 awk in `shell-split.sh` and the jq in the hooks count as one shell line each, and a
-test that runs that line covers all of it. `shell-split.sh` reads 1 of 1 lines.
+test that runs that line covers all of it.
 
 ## Floors and the ratchet
 
@@ -92,18 +101,24 @@ test that runs that line covers all of it. `shell-split.sh` reads 1 of 1 lines.
   no `TOTAL` row, such as an empty file from a failed `git show`, fails, so a missing
   base can never read as nothing to compare. A floor for a deleted file may go. This
   makes "floors only rise" a machine check and not a habit.
+- A file gone from its path counts as moved if another file in the repo has its name,
+  as `git ls-files` lists the repo: tracked files, and untracked ones git does not
+  ignore. Its floor must follow it to the new path and not fall there. A script moved
+  out of the globs, for example into a subdirectory of `hooks/scripts/`, loses its
+  floor on `--update`, so the ratchet fails with `floor removed: OLD -> NEW`. If git
+  cannot list the repo, the ratchet fails too.
 - `bash tests/coverage.sh --lines FILE` prints the lines of `FILE` that count.
 
-Known gap: a measured file that moves out of the globs, for example into a
-subdirectory of `hooks/scripts/`, loses its floor on `--update`, and the ratchet
-allows that because the old path is gone. Nothing then measures the file.
+Known limit: the ratchet finds a moved file by its name. A move that also renames the
+file reads as a deletion, so its floor may go. A deleted file whose name another file
+still has reads as moved to that file.
 
 Exit codes: 0 for success; 1 for a failed test, a missing, low or invalid floor, a
-missing argument after `--lines` or `--ratchet`, or an unreadable base file; 2 for an
-unknown option or a bash older than 4.1.
+missing argument after `--lines` or `--ratchet`, an unreadable base file, or a repo git
+cannot list; 2 for an unknown option or a bash older than 4.1.
 
 Output goes to `.coverage/`, which git ignores. `.coverage/hits.tsv` lists every traced
-line as `test<TAB>path<TAB>line`.
+line as `test<TAB>path<TAB>line`, with a continuation line's hit on its counted line.
 
 ## In CI
 
