@@ -147,6 +147,24 @@ assert_eq "$OUT" "" "segments within the cap are read"
 run_hook "$S" "$(jsonin "$(printf 'eval x\n%.0s' {1..16})")"
 assert_eq "$OUT" "" "shells and evals within the cap are read"
 
+# A hook past its 10 s timeout lets the command through, and stripping the quotes from this payload took 20 s in a
+# UTF-8 locale. So the guard must decide on it, to block or to ask, within half that budget (#107).
+run_hook_within() {  # <seconds> <script> <json> → as run_hook, with RC 124 if the hook still runs after <seconds>
+  local out err pid t=0
+  out="$(scratch_file)"; err="$(scratch_file)"
+  # Its own process group, so a kill also stops the subshells it runs in.
+  set -m; bash "$2" <<<"$3" >"$out" 2>"$err" & pid=$!; set +m
+  while kill -0 "$pid" 2>/dev/null && [ "$t" -lt "$(($1 * 10))" ]; do sleep 0.1; t=$((t + 1)); done
+  if kill -0 "$pid" 2>/dev/null; then kill -- "-$pid"; wait "$pid" 2>/dev/null; RC=124; else wait "$pid"; RC=$?; fi
+  OUT="$(cat "$out")"; ERR="$(cat "$err")"
+}
+padded="eval eval eval eval gh pr comment 1 -b x $(printf 'a b %.0s' {1..32690})"
+LC_ALL=C.UTF-8 run_hook_within 5 "$S" "$(jsonin "$padded")"
+case "$RC/$OUT" in
+  2/* | 0/*'"permissionDecision":"ask"'*) ;;
+  *) echo "  FAIL [a padded publish behind four evals is decided in half the hook budget]: rc=$RC (124 is still running)"; FAILS=1 ;;
+esac
+
 # The segments an eval or sh -c re-reads count against the cap too, at every depth (#107).
 unreadable "eval 'eval \"eval eval $(printf 'a b;%.0s' {1..32700})\"'" "nested eval payloads past the segment cap ask"
 assert_out 'segments are too many' "the question names the segments in the payloads"

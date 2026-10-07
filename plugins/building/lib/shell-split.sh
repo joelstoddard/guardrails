@@ -255,7 +255,9 @@ _guardrails_shell_payload() {
       [ -n "$inner" ] || { [[ $seg =~ $here ]] && inner="${BASH_REMATCH[1]}"; } ;;
     *) return 1 ;;
   esac
-  inner="${inner#[\"\']}"; inner="${inner%[\"\']}"
+  # Slices, as ${inner#["']} and ${inner%["']} are quadratic on a long payload in a UTF-8 locale (#107).
+  case "${inner:0:1}" in [\"\']) inner="${inner:1}" ;; esac
+  case "${inner: -1}" in [\"\']) inner="${inner:0:${#inner}-1}" ;; esac
   [ -n "$inner" ] && [ "$inner" != "$seg" ] || return 1
   _GUARDRAILS_PAYLOAD="$inner"
 }
