@@ -58,9 +58,11 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 ### Quality gates & metrics
 *Tier: CHANGE*
 
-* ALWAYS satisfy EVERY gate the project HAS configured (build, types, lint, format, tests, coverage floor, mutation score floor, security scans, performance budgets). NEVER skip one. IF one you would expect is missing, say so as a finding.
+* ALWAYS satisfy EVERY gate the project HAS configured (build, types, lint, format, tests, coverage floor, mutation score floor, complexity limits, security scans, performance budgets). NEVER skip one. IF one you would expect is missing, say so as a finding.
 * NEVER lower a threshold. Thresholds are ratchets: they may rise, NEVER fall.
 * ALWAYS keep cyclomatic complexity, cognitive complexity, duplication, coupling, AND file/function size from regressing.
+    * WHERE the project measures cyclomatic complexity OR CRAP, ALWAYS measure each function you touch, before AND after, with the project's own tooling. Its complexity may rise ONLY by the branches the task requires, AND its coverage MUST NOT fall. Report each touched function's complexity AND coverage, before AND after.
+    * IF the project measures neither, say so as a finding. NEVER install OR run a tool to measure them unasked.
 * NEVER treat any single metric as proof of quality. Combine them.
 * NEVER game a metric (assertion-free tests, trivial mutants killed, code split only to lower a number).
 
