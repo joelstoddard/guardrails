@@ -179,5 +179,11 @@ assert_eq "$OUT" "" "a 300-line commit message naming shells is read"
 py="$(printf 'for name in sorted(names):\n    print(f"{name}: {len(name)}")\n%.0s' {1..150})"
 run_hook "$S" "$(jsonin $'python3 - <<\'EOF\'\nimport sys\n'"$py"$'\nEOF')"
 assert_eq "$OUT" "" "a 300-line Python script is read"
+run_hook "$S" "$(jsonin "bash -c '$(printf 'cp "src/file.txt" "out/dir/file.txt"\n%.0s' {1..2760})'")"
+assert_eq "$OUT" "" "a 100 KiB script run by bash -c is read"
+
+# Each depth splits the text again, so the characters a shell or eval reads again count against the length cap (#107).
+unreadable "eval eval eval eval $(printf 'a b %.0s' {1..32700})" "four evals over 128 KiB ask"
+assert_out 'read again' "the question names the text read again"
 
 finish "guard-publish"

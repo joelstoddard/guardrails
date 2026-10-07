@@ -285,4 +285,13 @@ too_much $'cat <<\\EOF\neval "'"$(printf 'a;%.0s' {1..11000})"$'"\nEOF' "a paylo
 in_time  "eval \"$(printf 'a;%.0s' {1..4000})\""                     "an eval payload within the segment cap"
 in_time  "git commit -m \"$(printf 'a;%.0s' {1..6000})\" && bash ./x.sh" "text before a shell is not its payload"
 
+# Each depth splits the text again, so the characters a shell or eval reads again count against the length cap (#107).
+words="$(printf 'a b %.0s' {1..32700})"
+too_much "eval eval eval eval $words"                                 "four evals over 128 KiB read again"
+too_much "bash -c 'bash -c \"$(printf 'a b %.0s' {1..17500})\"'"        "a shell in a shell over 70 KiB read again"
+too_much $'cat <<\\EOF\neval eval "'"$(printf 'a b %.0s' {1..17500})"$'"\nEOF' "a re-read only the per-line split makes"
+in_time  "bash -c '$(printf 'cp "src/file.txt" "out/dir/file.txt"\n%.0s' {1..2760})'" "one shell over a 100 KiB script"
+in_time  "git commit -m \"$(printf 'Why bash and sh read this; see the doc.\n%.0s' {1..8})$(printf 'a b %.0s' {1..25000})\"" \
+  "prose naming shells is no payload"
+
 finish "publish-cmd"

@@ -77,28 +77,32 @@ A hook that runs past its 10 s timeout lets the command through, so `_guardrails
 asks about a command the guards could not read in time. It has three caps: 128 KiB of text,
 10,000 segments, and 16 shells and evals.
 
-The segment cap counts every segment a guard will split, not only those at the top level
-(#107). A shell or eval splits its payload again, at up to four more depths, and four nested
-`eval`s over 32,700 `;`-joined commands took the publish guard 6.6 s while the top-level
-count saw two segments.
+A shell or eval splits its payload again, at up to four more depths, so both the segment and
+the length caps count what the guards read again, not only the command (#107). Four nested
+`eval`s over 32,700 `;`-joined commands took the publish guard 6.6 s, while the top-level count
+saw two segments. Four `eval`s over 128 KiB of words took it 58 s, with no `;` at all.
 
 Splitting every payload to count it would cost as much as the reading it bounds. So the
-count is a bound, made in one awk pass over both splits:
+counts are bounds, made in one awk pass over both splits:
 
 - each line of a split is one segment;
-- each shell or eval word adds one segment for every place after it in its line where a
-  split could cut (`;`, `|`, `&`, a backtick, `$(`, `<(`, `>(`), and one for the rest.
+- a word that can take a payload adds one segment for every place after it in its line where
+  a split could cut (`;`, `|`, `&`, a backtick, `$(`, `<(`, `>(`), and one for the rest;
+- it also adds the characters after it in its line to the text read again. The larger of the
+  two splits' totals counts against the 128 KiB cap, as each pass reads one split.
 
-It is a bound because a payload is always text after its shell or eval word in the same
-segment: a `-c` argument, a here-string, or the words after `eval`. A nested payload is
-counted again through its own shell word. It does not depend on which word is the command,
-so a wrapper before the shell cannot hide one.
+A word can take a payload if `_guardrails_shell_payload` could read one from it: `eval`
+always, and `sh`, `bash`, `zsh`, `dash` or `ksh` when a `-c`, alone or in a cluster such
+as `-lc`, or a `<<<` follows it in its line. That payload is always text after the word in
+the same segment, so these are bounds. A nested payload is counted again through its own
+word. Neither depends on which word is the command, so a wrapper before the shell cannot
+hide one.
 
-It over-counts a shell's name used as a plain word. In a multi-line double-quoted argument,
-such as a `git commit -m "…"` message, each line break is a place to cut. So the command asks
-only when its shell words, times the line breaks and separators after them, pass about 10,000.
-A 300-line message naming shells 12 times counts 3,932. The suites' other commands count at
-most 100, and a 5,000-line script fed to bash counts 5,004.
+They over-count a shell's name in prose that a `-c` or `<<<` follows, and `eval` in any prose.
+In the suites, a 300-line commit message naming shells 12 times counts 306 segments and no
+text read again. A 5,000-line script fed to bash counts 5,004 segments and 23 characters, a
+`bash -c` over a 100 KiB script reads 102,000 characters again, and every other command
+counts at most 140 characters. A shell in a shell over more than 64 KiB asks.
 
 ## What was rejected
 

@@ -195,7 +195,7 @@ _GUARDRAILS_SPLIT_MAX_SHELLS=16
 # _guardrails_unreadable <cmdline> → rc 0 and a reason if a guard cannot read the command in full:
 # too much to read in time, or a split whose awk aborted, as BSD awk does on invalid bytes (#76).
 _guardrails_unreadable() {
-  local rc carried per_line n s
+  local rc carried per_line n s r
   if [ "${#1}" -gt "$_GUARDRAILS_SPLIT_MAX" ]; then
     printf '%s characters is too long to read in time' "${#1}"; return 0
   fi
@@ -203,23 +203,31 @@ _guardrails_unreadable() {
   [ "$rc" = 0 ] || [ "$rc" = 3 ] || { printf 'splitting it failed (awk exit %s)' "$rc"; return 0; }
   per_line="$(_guardrails_split_awk 0 "$1" 2>/dev/null)"; rc=$?
   [ "$rc" = 0 ] || { printf 'splitting it line by line failed (awk exit %s)' "$rc"; return 0; }
-  # n counts the segments of both splits, and s the shells and evals that could make the guards split again,
-  # nested ones too, in the carried split, which drops heredoc bodies as data. See docs/design/git-command-parsing.md
-  read -r n s < <(LC_ALL=C awk '
+  # n counts the segments of both splits, s the shells and evals in the carried split, which drops heredoc bodies as
+  # data, and r the characters the larger split reads again. See docs/design/git-command-parsing.md
+  read -r n s r < <(LC_ALL=C awk '
     FNR == 1 { f++ }
     {
-      # A shell or eval splits the rest of its segment again, so each place after it a split could cut counts (#107).
-      n++; k = 0; np = split($0, part, /[;|&`]|[$<>][(]/)
+      # A shell reads what follows its -c or <<< as a script, and eval what follows it, so each place after one where
+      # a split could cut is a segment, and each character after one is read again (#107).
+      L = length($0); np = split($0, part, /[;|&`]|[$<>][(]/)
+      for (last = np; last > 0 && part[last] !~ /(^|[ \t])-([^ \t-][^ \t]*)?c|<<</; last--) ;
+      n++; k = 0; pre = 0
       for (i = 1; i <= np; i++) {
-        nw = split(part[i], w, /[^A-Za-z0-9_.-]+/)
-        for (j = 1; j <= nw; j++) if (w[j] == "sh" || w[j] == "bash" || w[j] == "zsh" || w[j] == "dash" || w[j] == "ksh" || w[j] == "eval") { k++; if (f == 1) s++ }
-        n += k
+        nw = split(part[i], w, /[^A-Za-z0-9_.-]+/); at = pre
+        for (j = 1; j <= nw; j++) {
+          at += length(w[j]); sh = (w[j] == "sh" || w[j] == "bash" || w[j] == "zsh" || w[j] == "dash" || w[j] == "ksh")
+          if (f == 1 && (sh || w[j] == "eval")) s++
+          if (w[j] == "eval" || (sh && i <= last)) { k++; r[f] += L - at }
+        }
+        n += k; pre += length(part[i]) + 1
       }
     }
-    END { print n + 0, s + 0 }' <(printf '%s\n' "$carried") <(printf '%s\n' "$per_line"))
+    END { print n + 0, s + 0, (r[1] > r[2] ? r[1] : r[2]) + 0 }' <(printf '%s\n' "$carried") <(printf '%s\n' "$per_line"))
   # A count the awk could not make compares as unreadable, as test fails on an empty number.
   [ "$n" -le "$_GUARDRAILS_SPLIT_MAX_SEGMENTS" ] 2>/dev/null || { printf '%s segments are too many to read in time' "$n"; return 0; }
   [ "$s" -le "$_GUARDRAILS_SPLIT_MAX_SHELLS" ] 2>/dev/null || { printf '%s shells and evals are too many to re-read in time' "$s"; return 0; }
+  [ "$r" -le "$_GUARDRAILS_SPLIT_MAX" ] 2>/dev/null || { printf '%s characters its shells and evals would read again are too many to read in time' "$r"; return 0; }
   return 1
 }
 

@@ -143,5 +143,9 @@ assert_out '"permissionDecision":"ask"' "nested eval payloads past the segment c
 assert_out 'segments are too many' "the question names the segments in the payloads"
 run_hook "$S" "$(jsonat "$r13" $'bash <<\'EOF\'\n'"$(printf 'cp "src/a b.txt" out/\n%.0s' {1..4998})"$'\ngit commit -m x\nEOF')"
 assert_rc 2 "a commit at the end of a 5,000-line script fed to bash is read and refused"
+# Each depth splits the text again, so the characters a shell or eval reads again count against the length cap (#107).
+run_hook "$S" "$(jsonat "$r13" "eval eval eval eval git commit -m x $(printf 'a b %.0s' {1..32690})")"
+assert_out '"permissionDecision":"ask"' "four evals over 128 KiB ask"
+assert_out 'read again' "the question names the text read again"
 
 finish "guard-default-branch"
