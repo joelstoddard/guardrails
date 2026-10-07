@@ -262,22 +262,41 @@ class PersonaGraders(unittest.TestCase):
         self.assertNotRegex(trace(dispatch("general-purpose"), bash("sed -i '' s/recieve/receive/ README.md")), pattern)
 
 
-def runner_args(*args):
-    """The arguments tests/evals.sh hands to a stub claude."""
+STUB_CLAUDE = """#!/usr/bin/env bash
+printf "%s\\n" "$@"
+printf "MANIFEST %s\\n" "$(tr -d '\\n' < "$3/.claude-plugin/plugin.json")"
+printf "CASES %s\\n" "$(ls "$3/evals" | tr '\\n' ' ')"
+"""
+
+
+def runner_output(*args):
+    """What a stub claude sees from tests/evals.sh: its arguments, then the target's manifest and cases."""
     with tempfile.TemporaryDirectory() as stub:
         claude = Path(stub) / "claude"
-        claude.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$@"\n')
+        claude.write_text(STUB_CLAUDE)
         claude.chmod(0o755)
         env = {**os.environ, "PATH": f"{stub}:{os.environ['PATH']}"}
-        return subprocess.run(["bash", str(RUNNER), *args], env=env, check=True, capture_output=True, text=True).stdout.splitlines()
+        lines = subprocess.run(["bash", str(RUNNER), *args], env=env, check=True, capture_output=True, text=True).stdout.splitlines()
+    info = {line.split(" ", 1)[0]: line.split(" ", 1)[1] for line in lines if line.startswith(("MANIFEST ", "CASES "))}
+    return [line for line in lines if not line.startswith(("MANIFEST ", "CASES "))], info
 
 
 class Runner(unittest.TestCase):
-    def test_a_plugin_in_this_repo_is_targeted_by_its_directory(self):
-        self.assertEqual(runner_args("recording")[:3], ["plugin", "eval", str(PLUGINS / "recording")])
+    def test_a_plugin_without_dependencies_is_evaluated_in_place_and_not_trusted(self):
+        args, _ = runner_output("recording")
+        self.assertEqual(args[:3], ["plugin", "eval", str(PLUGINS / "recording")])
+        self.assertNotIn("--trust-plugin", args)
 
-    def test_an_installed_plugin_is_targeted_by_name_so_its_dependencies_load(self):
-        self.assertEqual(runner_args("personas@guardrails")[:3], ["plugin", "eval", "personas@guardrails"])
+    def test_a_plugin_with_dependencies_is_evaluated_from_a_copy_without_them(self):
+        args, info = runner_output("personas")
+        target = Path(args[2])
+        self.assertNotEqual(target, PLUGINS / "personas")
+        self.assertNotIn("dependencies", json.loads(info["MANIFEST"]))
+        self.assertEqual(json.loads(info["MANIFEST"])["name"], "personas")
+        self.assertIn("migration-routes-to-data-engineer", info["CASES"])
+        self.assertIn("--trust-plugin", args)
+        self.assertTrue(args[args.index("--output-dir") + 1].startswith(str(PLUGINS / "personas" / "evals" / "results")))
+        self.assertFalse(target.exists(), "the copy is removed after the run")
 
     def test_the_run_inherits_a_path_whose_first_entry_holds_the_resolved_git(self):
         with tempfile.TemporaryDirectory() as stub:
