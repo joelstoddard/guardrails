@@ -6,13 +6,13 @@ allowed-tools: Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh repo view:*
 
 # Track findings
 
-A finding is anything outside the task's scope that you noticed AND did not change. It is NEVER left only in chat: it becomes an issue, OR the user declines it.
+A finding is anything outside the task's scope that you noticed AND did not change. It MUST NOT be left only in chat: it becomes an issue, OR the user declines it.
 
 ## Which tracker
 
 * IF the session context names a tracker skill (a work project does), use that skill. It is a shared tracker, so the "Shared" rule below applies.
 * OTHERWISE use GitHub issues, in the repo the finding belongs to. That is NOT always the current repo.
-* NEVER route a finding to the user's personal Notion. There is no integration.
+* You MUST NOT route a finding to the user's personal Notion. There is no integration.
 
 ## Personal OR shared
 
@@ -28,7 +28,7 @@ Other developers may not want AI-filed issues, so ask BEFORE filing anywhere tha
 2. **Look for a duplicate.** Run `gh issue list --repo <owner>/<repo> --state open --search "<key words>"`. IF an open issue already covers it, use that issue's URL AND do NOT file another.
 3. **Ensure the label.** IF `gh label list --repo <owner>/<repo> --search finding` shows no `finding` label:
    * **Personal**: ask the user to approve `gh label create finding --repo <owner>/<repo> --description "Noticed outside a task's scope"`.
-   * **Shared**: NEVER create a label. File the issue without one.
+   * **Shared**: You MUST NOT create a label. File the issue without one.
 4. **File it**, one issue per finding. In a personal repo, the permission prompt is the user's approval. In a shared repo, file ONLY after the user's explicit yes in chat for that issue. IF the repo has no `finding` label, because it is shared OR the user declined to create one, leave out `--label finding`:
 
    ```bash
@@ -50,10 +50,10 @@ Other developers may not want AI-filed issues, so ask BEFORE filing anywhere tha
    ```
 
 5. **Record the reference.** In your findings list, end the finding's line with the issue URL.
-6. **IF the user declines** at the prompt OR in chat, end the line with `(declined)` instead. NEVER retry a declined finding.
+6. **IF the user declines** at the prompt OR in chat, end the line with `(declined)` instead. You MUST NOT retry a declined finding.
 
 ## Rules
 
-* ALWAYS end the issue body with the `🤖 Generated with [Claude Code]` footer. An issue without it reads as written by the user.
-* NEVER comment on, edit, OR close an issue. Filing is the ONE exception to never publishing as the user: in a personal repo it needs the user's approval at the prompt, AND anywhere else an explicit yes in chat first.
-* ALWAYS list findings under a heading containing "Findings outside scope", one list item each, each line ending with the issue URL, `(asked)`, OR `(declined)`.
+* You MUST end the issue body with the `🤖 Generated with [Claude Code]` footer. An issue without it reads as written by the user.
+* You MUST NOT comment on, edit, OR close an issue. Filing is the ONE exception to never publishing as the user: in a personal repo it needs the user's approval at the prompt, AND anywhere else an explicit yes in chat first.
+* You MUST list findings under a heading containing "Findings outside scope", one list item each, each line ending with the issue URL, `(asked)`, OR `(declined)`.

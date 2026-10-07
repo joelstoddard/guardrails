@@ -18,7 +18,7 @@ _GUARDRAILS_PUBLISH_CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _GUARDRAILS_PUBLISH_VERBS=' comment publish post send send-email reply review announce notify message msg tweet toot dm broadcast note '
 
 # Tools that take arbitrary words as arguments; a verb here is data, not an action.
-_GUARDRAILS_TEXT_TOOLS=' echo printf cat grep egrep fgrep rg ag sed awk ls find jq yq head tail wc sort uniq cut tr diff man which type test true false xargs tee '
+_GUARDRAILS_TEXT_TOOLS=' echo printf cat grep egrep fgrep rg ag sed awk ls find jq yq head tail wc sort uniq cut tr diff man which type test true false tee '
 
 # Mail transports publish as the user by definition.
 _GUARDRAILS_MAIL_TOOLS=' mail mailx sendmail msmtp mutt neomutt s-nail '
@@ -92,17 +92,8 @@ _guardrails_publishes_as_user() {
   local -a toks lead
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
-    i=0
-    while [ "$i" -lt "${#toks[@]}" ]; do
-      case "${toks[$i]}" in
-        [A-Za-z_]*=*) i=$((i + 1)) ;;
-        *) break ;;
-      esac
-    done
+    _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; base="$_GUARDRAILS_CMD"
     [ "$i" -lt "${#toks[@]}" ] || continue
-    # ${word##*/} is quadratic on a long word, enough to time the hook out; this regex is linear.
-    base="${toks[$i]}"
-    [[ $base == */* && $base =~ /([^/]*)$ ]] && base="${BASH_REMATCH[1]}"
 
     case "$base" in
       sh | bash | zsh | dash | ksh | eval)

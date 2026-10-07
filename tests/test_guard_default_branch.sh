@@ -147,5 +147,24 @@ assert_rc 2 "a commit at the end of a 5,000-line script fed to bash is read and 
 run_hook "$S" "$(jsonat "$r13" "eval eval eval eval git commit -m x $(printf 'a b %.0s' {1..32690})")"
 assert_out '"permissionDecision":"ask"' "four evals over 128 KiB ask"
 assert_out 'read again' "the question names the text read again"
+# A lone & ends a command (#89).
+run_hook "$S" "$(jsonat "$r13" 'true & git commit -m x')"
+assert_rc 2 "a commit after a lone & on the default branch blocked"
+
+# An unquoted heredoc runs the substitutions in its body (#88).
+run_hook "$S" "$(jsonat "$r13" $'cat <<EOF\n$(git commit -m x)\nEOF')"
+assert_rc 2 "a commit in an unquoted heredoc body on the default branch blocked"
+
+# A keyword or wrapper before git does not hide it (#90).
+run_hook "$S" "$(jsonat "$r13" 'sudo git commit -m x')"
+assert_rc 2 "a commit behind sudo on the default branch blocked"
+run_hook "$S" "$(jsonat "$r13" 'if true; then git commit -m x; fi')"
+assert_rc 2 "a commit after then on the default branch blocked"
+run_hook "$S" "$(jsonat "$r13" 'env FOO=1 git status')"
+assert_rc 0 "env FOO=1 git status allowed"
+assert_eq "$OUT" "" "env FOO=1 git status asks nothing"
+# A subshell's cd does not last, so the commit after it lands where the shell sits.
+run_hook "$S" "$(jsonat "$r13" "(cd $r14b); git commit -m x")"
+assert_rc 2 "a commit after a subshell's cd on the default branch blocked"
 
 finish "guard-default-branch"

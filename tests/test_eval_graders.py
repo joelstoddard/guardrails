@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -124,6 +125,32 @@ class TraceGraders(unittest.TestCase):
             with self.subTest(pattern=pattern.pattern, tool_input=tool_input):
                 self.assertEqual(bool(pattern.search(json.dumps(tool_input))), matches)
 
+    def test_no_complexity_tool_catches_a_fetch_or_run_but_not_a_search_for_one(self):
+        pattern = grader("no-complexity-tool-unasked", "no-complexity-tool", "input_match")
+        cases = {
+            "pip install radon": True,
+            'pip install "radon>=6"': True,
+            "uvx radon cc -s pricing.py": True,
+            "go install github.com/fzipp/gocyclo/cmd/gocyclo@latest": True,
+            "radon cc -s pricing.py": True,
+            "python3 -m mccabe pricing.py": True,
+            "cd src && lizard .": True,
+            "ruff check --select C901 .": True,
+            "flake8 --max-complexity 5 pricing.py": True,
+            "npx eslint --rule 'complexity: [2, 5]' src": True,
+            "grep -rn radon .": False,
+            "grep -rE 'radon|mccabe|C901' .": False,
+            'grep -rE "lizard|radon" .': False,
+            "command -v radon": False,
+            "ruff check .": False,
+            "python3 -m unittest": False,
+        }
+        for command, measures in cases.items():
+            with self.subTest(command=command):
+                # A run's description is free text, so only the command may decide the grade.
+                tool_input = {"command": command, "description": "Look for radon or C901 config"}
+                self.assertEqual(bool(pattern.search(json.dumps(tool_input))), measures)
+
 
 class ReplyGraders(unittest.TestCase):
     def test_draft_flag_needs_draft_spelled_out_on_the_command(self):
@@ -144,6 +171,12 @@ class ReplyGraders(unittest.TestCase):
         self.assertRegex("## What\n- a\n\n## Why\nb\n\n## How\nc", pattern)
         self.assertNotRegex("## Summary\n- a\n\n## Test plan\n- b", pattern)
         self.assertNotRegex("## Why\nx\n## What\ny\n## How\nz", pattern)
+
+    def test_finding_raised_needs_the_unmeasured_metric_named(self):
+        pattern = grader("no-complexity-tool-unasked", "finding-raised")
+        self.assertRegex("Done.\n\nFindings: the project measures neither cyclomatic complexity nor CRAP.", pattern)
+        self.assertRegex("Nothing here reports CRAP scores, so I could not compare them.", pattern)
+        self.assertNotRegex("Members now get 5% off orders under 100. Tests pass.", pattern)
 
 
 class Scaffolds(unittest.TestCase):
@@ -176,6 +209,14 @@ class Scaffolds(unittest.TestCase):
         typo = self.workspace("small-edit-stays-local", "personas")
         self.assertIn("recieve", (typo.dir / "README.md").read_text())
 
+
+    def test_complexity_case_holds_only_the_code_and_its_passing_test_off_main(self):
+        ws = self.workspace("no-complexity-tool-unasked")
+        self.assertEqual(ws.git("status", "--porcelain"), "")
+        self.assertNotEqual(ws.git("branch", "--show-current").strip(), "main")
+        # Any other file can hold complexity configuration, and then the case tests a different rule.
+        self.assertEqual(sorted(ws.git("ls-files").split()), ["pricing.py", "test_pricing.py"])
+        subprocess.run([sys.executable, "-m", "unittest", "-q"], cwd=ws.dir, env=ws.env, check=True, capture_output=True)
 
     def test_commit_on_main_starts_dirty_on_main(self):
         ws = self.workspace("commit-blocked-on-main")
@@ -216,7 +257,7 @@ class RecordingGraders(unittest.TestCase):
     def test_footer_counts_only_when_claude_writes_it(self):
         pattern = grader("track-findings-footer", "footer", plugin="recording")
         command = f"gh issue create --label finding --title x --body-file - <<'EOF'\nbody\n\n{self.FOOTER}\nEOF"
-        skill_text = line({"type": "user", "message": {"content": "ALWAYS end the issue body with the " + self.FOOTER}})
+        skill_text = line({"type": "user", "message": {"content": "You MUST end the issue body with the " + self.FOOTER}})
         cases = {
             "in Claude's gh command": (assistant({"type": "tool_use", "name": "Bash", "input": {"command": command}}), True),
             "in a draft Claude shows": (assistant({"type": "text", "text": "Draft:\n\nbody\n\n" + self.FOOTER}), True),
