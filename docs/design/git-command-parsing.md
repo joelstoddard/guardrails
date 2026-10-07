@@ -104,6 +104,11 @@ text read again. A 5,000-line script fed to bash counts 5,004 segments and 23 ch
 `bash -c` over a 100 KiB script reads 102,000 characters again, and every other command
 counts at most 140 characters. A shell in a shell over more than 64 KiB asks.
 
+Within the caps, the slowest input measured took 2.6 s of the 10 s budget: 32,000 assignments
+before a `git commit`, read by guard-default-branch on macOS at load 6. The exception is the
+publish guard on `curl`, `wget`, `http` and `gh api -X` lines, which forks per line, so about
+600 of them still run it past the timeout (#126).
+
 ## What was rejected
 
 - **Substring matching.** The original approach; produced the `gh pr create` false

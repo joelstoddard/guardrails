@@ -186,8 +186,9 @@ _guardrails_split_awk() {
 }
 
 # A hook that times out lets the command through, so the guards do not read a command past these limits:
-# its length, the segments in its two splits, and the shells and evals it could make them re-read. With all
-# three at their limits at once, the slowest guard measured 2.5 s of its 10 s budget (#94).
+# its length, the segments in its two splits, and the shells and evals it could make them re-read. Within
+# them, the slowest guard measured 2.6 s of its 10 s budget (macOS, load 6), on 32,000 assignments before a
+# commit (#107), except on curl and gh api lines, which still fork per line (#126).
 _GUARDRAILS_SPLIT_MAX=131072
 _GUARDRAILS_SPLIT_MAX_SEGMENTS=10000
 _GUARDRAILS_SPLIT_MAX_SHELLS=16
