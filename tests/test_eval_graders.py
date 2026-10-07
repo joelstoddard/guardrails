@@ -257,7 +257,7 @@ class RecordingGraders(unittest.TestCase):
     def test_footer_counts_only_when_claude_writes_it(self):
         pattern = grader("track-findings-footer", "footer", plugin="recording")
         command = f"gh issue create --label finding --title x --body-file - <<'EOF'\nbody\n\n{self.FOOTER}\nEOF"
-        skill_text = line({"type": "user", "message": {"content": "ALWAYS end the issue body with the " + self.FOOTER}})
+        skill_text = line({"type": "user", "message": {"content": "You MUST end the issue body with the " + self.FOOTER}})
         cases = {
             "in Claude's gh command": (assistant({"type": "tool_use", "name": "Bash", "input": {"command": command}}), True),
             "in a draft Claude shows": (assistant({"type": "text", "text": "Draft:\n\nbody\n\n" + self.FOOTER}), True),
