@@ -257,4 +257,15 @@ allows "echo '\$(gh pr comment 1 -b x)'"                          "a substitutio
 allows 'echo "\$(gh pr comment 1 -b x)"'                          "an escaped substitution is text"
 allows $'git commit -F - <<\'EOF\'\n$(gh pr comment 1 -b x)\nEOF'  "a substitution in a quoted heredoc is text"
 
+# A shell or eval splits its payload again, at every depth, so the payload's segments count against the
+# segment cap too, in both splits (#107).
+too_much() { _guardrails_unreadable "$1" >/dev/null || { echo "  FAIL [$2]: expected unreadable"; FAILS=1; }; }
+in_time()  { if _guardrails_unreadable "$1" >/dev/null; then echo "  FAIL [$2]: expected readable"; FAILS=1; fi; }
+too_much "eval \"$(printf 'a;%.0s' {1..6000})\""                     "an eval payload past the segment cap"
+too_much "eval 'eval \"eval eval $(printf 'a b;%.0s' {1..2000})\"'"   "nested eval payloads past the segment cap"
+too_much "bash -c '$(printf '$(a)%.0s' {1..6000})'"                  "substitutions in a payload past the segment cap"
+too_much $'cat <<\\EOF\neval "'"$(printf 'a;%.0s' {1..11000})"$'"\nEOF' "a payload only the per-line split reads"
+in_time  "eval \"$(printf 'a;%.0s' {1..4000})\""                     "an eval payload within the segment cap"
+in_time  "git commit -m \"$(printf 'a;%.0s' {1..6000})\" && bash ./x.sh" "text before a shell is not its payload"
+
 finish "publish-cmd"

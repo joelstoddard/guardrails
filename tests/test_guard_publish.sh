@@ -147,4 +147,19 @@ assert_eq "$OUT" "" "segments within the cap are read"
 run_hook "$S" "$(jsonin "$(printf 'eval x\n%.0s' {1..16})")"
 assert_eq "$OUT" "" "shells and evals within the cap are read"
 
+# The segments an eval or sh -c re-reads count against the cap too, at every depth (#107).
+unreadable "eval 'eval \"eval eval $(printf 'a b;%.0s' {1..32700})\"'" "nested eval payloads past the segment cap ask"
+assert_out 'segments are too many' "the question names the segments in the payloads"
+# Real commands stay well within it: a 5,000-line script fed to bash, a long commit message, a Python script.
+script=$'set -euo pipefail\n'"$(printf 'cp "src/a b.txt" out/\n%.0s' {1..4996})"$'\nbash ./scripts/check.sh\nsh -c "echo done; exit 0"'
+run_hook "$S" "$(jsonin $'bash <<\'EOF\'\n'"$script"$'\nEOF')"
+assert_rc 0 "a 5,000-line script fed to bash allowed"
+assert_eq "$OUT" "" "a 5,000-line script fed to bash is read"
+msg="$(printf 'The guards now read bash and sh payloads; see the design doc.\n%.0s' {1..6})"$'\n'"$(printf 'A line of prose that explains the change in plain words.\n%.0s' {1..294})"
+run_hook "$S" "$(jsonin "git commit -m \"$msg\"")"
+assert_eq "$OUT" "" "a 300-line commit message naming shells is read"
+py="$(printf 'for name in sorted(names):\n    print(f"{name}: {len(name)}")\n%.0s' {1..150})"
+run_hook "$S" "$(jsonin $'python3 - <<\'EOF\'\nimport sys\n'"$py"$'\nEOF')"
+assert_eq "$OUT" "" "a 300-line Python script is read"
+
 finish "guard-publish"

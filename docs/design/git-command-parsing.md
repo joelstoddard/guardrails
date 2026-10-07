@@ -71,6 +71,35 @@ sees it. When the two disagree on the directory, `_guardrails_git_effective_cwd`
 both and `guard-default-branch` refuses if either is on its default branch. The cost is
 that the per-line split's false positives remain for the git guards.
 
+## Reading in time
+
+A hook that runs past its 10 s timeout lets the command through, so `_guardrails_unreadable`
+asks about a command the guards could not read in time. It has three caps: 128 KiB of text,
+10,000 segments, and 16 shells and evals.
+
+The segment cap counts every segment a guard will split, not only those at the top level
+(#107). A shell or eval splits its payload again, at up to four more depths, and four nested
+`eval`s over 32,700 `;`-joined commands took the publish guard 6.6 s while the top-level
+count saw two segments.
+
+Splitting every payload to count it would cost as much as the reading it bounds. So the
+count is a bound, made in one awk pass over both splits:
+
+- each line of a split is one segment;
+- each shell or eval word adds one segment for every place after it in its line where a
+  split could cut (`;`, `|`, `&`, a backtick, `$(`, `<(`, `>(`), and one for the rest.
+
+It is a bound because a payload is always text after its shell or eval word in the same
+segment: a `-c` argument, a here-string, or the words after `eval`. A nested payload is
+counted again through its own shell word. It does not depend on which word is the command,
+so a wrapper before the shell cannot hide one.
+
+It over-counts a shell's name used as a plain word. In a multi-line double-quoted argument,
+such as a `git commit -m "…"` message, each line break is a place to cut. So the command asks
+only when its shell words, times the line breaks and separators after them, pass about 10,000.
+A 300-line message naming shells 12 times counts 3,932. The suites' other commands count at
+most 100, and a 5,000-line script fed to bash counts 5,004.
+
 ## What was rejected
 
 - **Substring matching.** The original approach; produced the `gh pr create` false
