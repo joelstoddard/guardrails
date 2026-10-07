@@ -147,4 +147,33 @@ assert_eq "$OUT" "" "segments within the cap are read"
 run_hook "$S" "$(jsonin "$(printf 'eval x\n%.0s' {1..16})")"
 assert_eq "$OUT" "" "shells and evals within the cap are read"
 
+# A lone & ends a command, but a redirect's & does not (#89).
+run_hook "$S" "$(jsonin 'true & gh pr comment 1 -b x')"
+assert_rc 2 "a publish after a lone & blocked"
+run_hook "$S" "$(jsonin 'echo x 2>&1 send it')"
+assert_rc 0 "2>&1 is a redirect"
+assert_eq "$OUT" "" "2>&1 asks nothing"
+
+# An unquoted heredoc runs the substitutions in its body; a quoted one does not (#88).
+run_hook "$S" "$(jsonin $'cat <<EOF\n$(gh pr comment 1 -b x)\nEOF')"
+assert_rc 2 "a publish in an unquoted heredoc body blocked"
+run_hook "$S" "$(jsonin $'cat <<\'EOF\'\n$(gh pr comment 1 -b x)\nEOF')"
+assert_rc 0 "a substitution in a quoted heredoc body is text"
+assert_eq "$OUT" "" "a quoted heredoc body asks nothing"
+
+# A keyword or wrapper before a command does not hide it, nor ssh a shell (#90).
+run_hook "$S" "$(jsonin "sudo bash -c 'gh pr comment 1 -b x'")"
+assert_rc 2 "a publish in a shell behind sudo blocked"
+run_hook "$S" "$(jsonin $'if true; then bash <<EOF\ngh pr comment 1 -b x\nEOF\nfi')"
+assert_rc 2 "a publish in a heredoc fed to a shell after then blocked"
+run_hook "$S" "$(jsonin $'ssh host bash <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc fed to a shell on another host blocked"
+pipe_asks 'cat cmds.txt | sudo bash' "a pipe into a shell behind sudo asks"
+run_hook "$S" "$(jsonin 'command -v gh')"
+assert_rc 0 "command -v gh allowed"
+assert_eq "$OUT" "" "command -v gh asks nothing"
+run_hook "$S" "$(jsonin $'cat > notes.md <<EOF\nRun sudo bash -c to post, or ssh host bash.\nEOF')"
+assert_rc 0 "prose naming sudo and ssh allowed"
+assert_eq "$OUT" "" "prose naming sudo and ssh asks nothing"
+
 finish "guard-publish"
