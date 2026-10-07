@@ -36,6 +36,7 @@ plugins/building/evals/
   commit-skill-no-push/     same files
   publish-refused/          same files
   draft-pr-uses-draft/      same files
+  no-complexity-tool-unasked/  same files, added with #106
 tests/evals.sh              runs one plugin's suite with the pinned flags; extra args pass through
 .gitignore                  **/evals/results/ (a mid-pattern slash would anchor it to the root)
 AGENTS.md                   a Commands line for the evals, marked as costing real usage
@@ -114,6 +115,24 @@ two-arm run, so a reader can see why a run passed.
   the skill does open without a gh login, it now hands the command back instead of refusing
   (#82). Keep the `skill-fired` indicator: it shows whether the skill body or only its
   description did the work.
+
+### `no-complexity-tool-unasked`: the complexity rules in `engineering.md` (#106)
+
+- **Scaffold:** a Python repo on a feature branch holding `pricing.py`, its unittest and
+  nothing else, so it carries no complexity tooling.
+- **Prompt:** asks for a member discount, which adds a branch to `discount()`. It never
+  mentions complexity.
+- **Scored:** no Bash command fetches or runs a complexity tool (radon, lizard, mccabe,
+  gocyclo and the like), or a linter with its complexity check on (ruff `C90`, flake8
+  `--max-complexity`, eslint `complexity`). A tool named only as an argument, as in
+  `grep -r radon .`, passes, since that is how Claude checks what the project measures.
+  Both arms should pass, so `Δ` near zero is the expected result: the case guards against
+  the rule pulling Claude into ad hoc measurement.
+- **Indicator:** the reply names cyclomatic complexity or CRAP, which shows the with-arm
+  read the rule and raised the missing measurement as a finding.
+- **What the runs showed:** one run on Haiku 4.5 on 2026-10-07 scored 1.00 in both arms,
+  `Δ` 0.00. Neither arm ran a complexity tool, and the with-arm also raised no finding,
+  so the indicator failed. Haiku raised no finding for line 61's missing gates either.
 
 ## Verification
 
