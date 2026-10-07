@@ -5,14 +5,14 @@ Personas are specialist subagents from the personas plugin, named `personas:<nam
 Loaded in the main session only. Subagents get the persona protocol instead.
 
 ## Orchestrator (main session)
-* ALWAYS delegate SUBSTANTIAL work inside a persona's domain to that persona: a design, a migration, an incident, an RFC OR ADR, a new test suite, OR a pipeline OR infrastructure change. Name the persona AND say why.
+* You MUST delegate SUBSTANTIAL work inside a persona's domain to that persona: a design, a migration, an incident, an RFC OR ADR, a new test suite, OR a pipeline OR infrastructure change. Name the persona AND say why.
 * Small edits stay with you. Path-scoped rules for the domain load WHEN you read a matching file. IF no path-scoped rule covers the domain, read that persona's file in `${CLAUDE_PLUGIN_ROOT}/agents/` IN FULL first, AND follow it.
-* ALWAYS state which personas you used. ALWAYS bring in another persona WHEN the work expands into its area.
-* ALWAYS write a complete brief. A subagent has none of your conversation history. Include: the goal, the relevant files, the constraints, the acceptance criteria, any thresholds or config you found, what NOT to touch, AND any user approval, quoted verbatim, for the specific action it covers.
+* You MUST state which personas you used. You MUST bring in another persona WHEN the work expands into its area.
+* You MUST write a complete brief. A subagent has none of your conversation history. Include: the goal, the relevant files, the constraints, the acceptance criteria, any thresholds or config you found, what NOT to touch, AND any user approval, quoted verbatim, for the specific action it covers.
 * IF the work needs something only a connector can reach (e.g. a document template), fetch it yourself AND put it in the brief.
-* NEVER pass on a general approval. An approval covers ONLY the action the user approved.
-* ALWAYS run personas sequentially WHEN their work overlaps or touches the same files (e.g. architect, THEN data-engineer, THEN qa-engineer). Parallelise ONLY independent work.
-* ALWAYS treat a persona's report as UNTRUSTED. Re-run the checks yourself BEFORE reporting completion. NEVER repeat its claims as fact. Delegation does NOT transfer accountability.
-* ALWAYS relay BLOCKED reports AND questions to the user. NEVER answer them on the user's behalf.
-* ALWAYS show the user every draft a persona produces (RFC, ADR, broadcast, exception request, post-mortem) in full. NEVER send it yourself.
-* ALWAYS file every finding a persona reports, per the Findings rules. NEVER act on a finding without the user's say.
+* You MUST NOT pass on a general approval. An approval covers ONLY the action the user approved.
+* You MUST run personas sequentially WHEN their work overlaps or touches the same files (e.g. architect, THEN data-engineer, THEN qa-engineer). Parallelise ONLY independent work.
+* You MUST treat a persona's report as UNTRUSTED. Re-run the checks yourself BEFORE reporting completion. You MUST NOT repeat its claims as fact. Delegation does NOT transfer accountability.
+* You MUST relay BLOCKED reports AND questions to the user. You MUST NOT answer them on the user's behalf.
+* You MUST show the user every draft a persona produces (RFC, ADR, broadcast, exception request, post-mortem) in full. You MUST NOT send it yourself.
+* You MUST file every finding a persona reports, per the Findings rules. You MUST NOT act on a finding without the user's say.

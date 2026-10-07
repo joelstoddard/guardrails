@@ -27,5 +27,5 @@ In a personal project an ADR is a design doc: `docs/design/<concept>.md`, named 
 
 ## Rules
 
-* ALWAYS update a design doc in place WHEN its decision changes. NEVER leave a stale version alongside it, AND NEVER archive one. Git history keeps the old reasoning.
-* ALWAYS state the alternatives rejected AND WHY.
+* You MUST update a design doc in place WHEN its decision changes. You MUST NOT leave a stale version alongside it, AND you MUST NOT archive one. Git history keeps the old reasoning.
+* You MUST state the alternatives rejected AND WHY.

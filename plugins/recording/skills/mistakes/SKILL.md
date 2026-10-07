@@ -10,7 +10,7 @@ A mistake is told once, plainly, with the fix and the constraint that stops it r
 ## Protocol
 
 1. **Stop the impact FIRST.** IF impact is ongoing, propose the mitigation (rollback, flag off, revert) BEFORE writing anything. Execute it ONLY with explicit approval.
-2. **Gather evidence.** Collect the actual commands, outputs, commits, AND timestamps. NEVER reconstruct them from memory.
+2. **Gather evidence.** Collect the actual commands, outputs, commits, AND timestamps. You MUST NOT reconstruct them from memory.
 3. **Draft the broadcast** with exactly these three headings:
 
    ```markdown
@@ -28,14 +28,14 @@ A mistake is told once, plainly, with the fix and the constraint that stops it r
    ```
 
 4. **Name the audience** above the draft: who it is for, AND what it needs to achieve.
-5. **Hand it over.** Show the full draft to the user. NEVER send, post, OR publish it.
+5. **Hand it over.** Show the full draft to the user. You MUST NOT send, post, OR publish it.
 6. **Record the lesson.** A lesson about this repo → `recording:project-memory`. A lesson about a skill → `recording:self-improvement`.
-7. **Track the prevention.** Each prevention NOT built in this change is a finding. File it with `recording:track-findings`. IF you are a subagent, list it under "Findings outside scope" in your report instead, AND NEVER file it.
+7. **Track the prevention.** Each prevention NOT built in this change is a finding. File it with `recording:track-findings`. IF you are a subagent, list it under "Findings outside scope" in your report instead, AND you MUST NOT file it.
 
 ## Rules
 
-* NEVER write "be more careful" as a prevention. A prevention a machine does not check is NOT a prevention.
-* NEVER assign blame to a person. Describe the system that allowed the mistake.
-* NEVER present a hypothesis as the root cause.
-* NEVER declare it resolved while a prevention is neither in place NOR tracked. A prevention is tracked ONLY once the main session has filed it, OR marked it `(asked)` OR `(declined)`; a subagent listing it in its report is NOT enough.
+* You MUST NOT write "be more careful" as a prevention. A prevention a machine does not check is NOT a prevention.
+* You MUST NOT assign blame to a person. Describe the system that allowed the mistake.
+* You MUST NOT present a hypothesis as the root cause.
+* You MUST NOT declare it resolved while a prevention is neither in place NOR tracked. A prevention is tracked ONLY once the main session has filed it, OR marked it `(asked)` OR `(declined)`; a subagent listing it in its report is NOT enough.
 * IF the session context names a post-mortem skill AND the incident is above the project's severity threshold, ALSO draft that post-mortem. IF the threshold is undefined, ask.
