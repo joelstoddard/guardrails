@@ -69,6 +69,20 @@ blocks 'gh api repos/o/r/issues/1/comments -f body=x'          "gh api -f implie
 allows 'gh api repos/o/r/pulls/1'                              "gh api GET"
 allows 'gh api --method GET repos/o/r/issues'                  "gh api explicit GET"
 
+# The checks run per segment without starting a process (#126). httpie uppercases its method as Python does, so the
+# long s in poſt makes a POST.
+blocks 'http poſt api.example.com text=hi'                     "httpie with a long s in POST"
+blocks 'gh api -X pOſt repos/o/r/issues'                        "gh api with a long s in POST"
+allows 'curl -d x http://localhost.local:x/http://example.org' "a local URL holding another in its path"
+blocks "curl -d x $(printf 'http://localhost/ %.0s' {1..33})"   "past 32 URLs in a segment, a write is read as remote"
+allows "curl -d x $(printf 'http://localhost/ %.0s' {1..32})"   "32 local URLs in a segment are read"
+# In a UTF-8 locale a regex misses what follows an invalid byte, and on macOS what precedes it, so such text is bytes.
+utf8() { LC_ALL=C.UTF-8 bash -c '. "$1"; shift; "$@"' _ "$DIR/../plugins/building/lib/publish-cmd.sh" "$@"; }
+utf8 _guardrails_http_has_body $'curl -d=x\xff https://api.example.com/hook' || {
+  echo "  FAIL [a body flag before an invalid byte]: not found"; FAILS=1; }
+utf8 _guardrails_has_remote_target $'curl \xc3 -d x https://api.example.com/hook' || {
+  echo "  FAIL [a remote URL after an invalid byte]: not found"; FAILS=1; }
+
 # ---------------------------------------------------------------------------
 # Opening a review request is hands-off, but only as a draft: a ready PR pings
 # reviewers, and promotion is the human's call. Flag position must not matter.

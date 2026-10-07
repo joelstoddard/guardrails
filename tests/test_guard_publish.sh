@@ -186,4 +186,9 @@ assert_eq "$OUT" "" "a 100 KiB script run by bash -c is read"
 unreadable "eval eval eval eval $(printf 'a b %.0s' {1..32700})" "four evals over 128 KiB ask"
 assert_out 'read again' "the question names the text read again"
 
+# Each curl line started about seven processes, so 1,000 of them kept the guard from the publish after them until
+# well past its timeout (#126). It must refuse it within half that budget.
+run_hook_within 5 "$S" "$(jsonin "$(printf 'curl -d x localhost\n%.0s' {1..1000})"$'\n''gh pr comment 1 -b x')"
+assert_rc 2 "a publish after 1,000 curl lines is refused in half the hook budget"
+
 finish "guard-publish"

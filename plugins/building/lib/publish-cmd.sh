@@ -23,9 +23,10 @@ _GUARDRAILS_TEXT_TOOLS=' echo printf cat grep egrep fgrep rg ag sed awk ls find 
 # Mail transports publish as the user by definition.
 _GUARDRAILS_MAIL_TOOLS=' mail mailx sendmail msmtp mutt neomutt s-nail '
 
+# Case patterns rather than tr, which forks; ſ is the one letter a locale uppercases to an ASCII S.
 _guardrails_is_write_verb() {
-  case "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')" in
-    POST | PUT | PATCH | DELETE) return 0 ;;
+  case "$1" in
+    [Pp][Oo][Ss][Tt] | [Pp][Oo]ſ[Tt] | [Pp][Uu][Tt] | [Pp][Aa][Tt][Cc][Hh] | [Dd][Ee][Ll][Ee][Tt][Ee]) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -49,18 +50,31 @@ _guardrails_gh_api_writes() {
   return 1
 }
 
+# A regex fails on text holding an invalid byte in a UTF-8 locale, on macOS even before the byte, so such text is
+# read as bytes.
 _guardrails_http_has_body() {
-  printf '%s' "$1" | grep -qE -- '(^|[[:space:]])(-X|--request)[[:space:]]*=?[[:space:]]*"?(POST|PUT|PATCH|DELETE)' && return 0
-  printf '%s' "$1" | grep -qE -- '(^|[[:space:]])(-d|-F|--data|--data-raw|--data-binary|--data-urlencode|--json|--form|--upload-file|--post-data|--post-file)([[:space:]]|=)' && return 0
-  return 1
+  local method='(^|[[:space:]])(-X|--request)[[:space:]]*=?[[:space:]]*"?(POST|PUT|PATCH|DELETE)'
+  local data='(^|[[:space:]])(-d|-F|--data|--data-raw|--data-binary|--data-urlencode|--json|--form|--upload-file|--post-data|--post-file)([[:space:]]|=)'
+  [[ $1 =~ ^.*$ ]] || local LC_ALL=C
+  [[ $1 =~ $method || $1 =~ $data ]]
 }
 
 # True when the command names a host that is not this machine. Loopback and .local
 # are development, not publishing — that distinction is the deliberate hole here.
 _guardrails_has_remote_target() {
-  local seg="$1" url host bracketed='^[^]]*' plain='^[^/:]*'
-  while IFS= read -r url; do
-    [ -n "$url" ] || continue
+  local seg="$1" rest url host re n bracketed='^[^]]*' plain='^[^/:]*' lead='^[[:space:]]*(.*)$'
+  local first='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
+  local next='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
+  case "$seg" in *.* | *://*) ;; *) return 1 ;; esac
+  [[ $seg =~ ^.*$ ]] || local LC_ALL=C   # bytes, as in _guardrails_http_has_body
+  # The URLs in turn, as grep -o finds them: leftmost, longest, each after the last, with ^ only at the start. Of
+  # equal matches glibc takes the first alternative, so those that run to a blank come first, as they are the longest.
+  rest="$seg"; re="$first"; n=0
+  while [[ $rest =~ ($re)(.*)$ ]]; do
+    # Each URL costs a regex over the rest of the segment, so past 32 of them it is read as remote.
+    n=$((n + 1)); [ "$n" -le 32 ] || return 0
+    url="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[${#BASH_REMATCH[@]} - 1]}"; re="$next"
+    case "$url" in [[:space:]]*) [[ $url =~ $lead ]] && url="${BASH_REMATCH[1]}" ;; esac
     # Regexes and a guarded ${url#*://}, as ${host%%/*} and an unmatched ${url#*://} are quadratic.
     host="$url"
     case "$url" in *://*) host="${url#*://}" ;; esac
@@ -72,7 +86,7 @@ _guardrails_has_remote_target() {
       localhost | localhost:* | 127.* | 0.0.0.0 | \[::1\] | ::1 | *.local | *.localhost) ;;
       *) return 0 ;;
     esac
-  done < <(printf '%s' "$seg" | grep -oE '(https?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?|https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*' | sed 's/^[[:space:]]*//')
+  done
   return 1
 }
 
