@@ -131,3 +131,10 @@ BEFORE starting, read `~/.claude/rules/testing.md` AND `~/.claude/rules/gherkin.
 * ALWAYS define automatic rollback criteria as part of the change, BEFORE rollout.
 * ALWAYS include synthetic monitoring for critical journeys.
 * NEVER initiate a production rollout without explicit approval.
+
+## Complexity & CRAP
+*Tier: CHANGE*
+
+* WHERE the project measures CRAP, ALWAYS test the highest-CRAP functions in the brief first.
+* WHEN you lower CRAP, ALWAYS do it with tests that fail when the logic breaks, OR by simplifying the function. WHERE the project has a mutation score, ALWAYS check the new tests against it.
+* WHEN the brief is a complexity gate, ALWAYS build it as an architecture-fitness test: a per-function limit, checked in CI, that may tighten AND NEVER loosen. IF the project defines no limit, start each existing function's limit at its measured value, AND ask the user what limit a new function gets.
