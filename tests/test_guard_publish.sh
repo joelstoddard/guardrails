@@ -214,4 +214,9 @@ run_hook "$S" "$(jsonin $'cat > notes.md <<EOF\nRun sudo bash -c to post, or ssh
 assert_rc 0 "prose naming sudo and ssh allowed"
 assert_eq "$OUT" "" "prose naming sudo and ssh asks nothing"
 
+# Each curl line started about seven processes, so 1,000 of them kept the guard from the publish after them until
+# well past its timeout (#126). It must refuse it within half that budget.
+run_hook_within 5 "$S" "$(jsonin "$(printf 'curl -d x localhost\n%.0s' {1..1000})"$'\n''gh pr comment 1 -b x')"
+assert_rc 2 "a publish after 1,000 curl lines is refused in half the hook budget"
+
 finish "guard-publish"
