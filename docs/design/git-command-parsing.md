@@ -115,6 +115,44 @@ sees it. When the two disagree on the directory, `_guardrails_git_effective_cwd`
 both and `guard-default-branch` refuses if either is on its default branch. The cost is
 that the per-line split's false positives remain for the git guards.
 
+## Reading in time
+
+A hook that runs past its 10 s timeout lets the command through, so `_guardrails_unreadable`
+asks about a command the guards could not read in time. It has three caps: 128 KiB of text,
+10,000 segments, and 16 shells and evals.
+
+A shell or eval splits its payload again, at up to four more depths, so both the segment and
+the length caps count what the guards read again, not only the command (#107). Four nested
+`eval`s over 32,700 `;`-joined commands took the publish guard 6.6 s, while the top-level count
+saw two segments. Four `eval`s over 128 KiB of words took it 58 s, with no `;` at all.
+
+Splitting every payload to count it would cost as much as the reading it bounds. So the
+counts are bounds, made in one awk pass over both splits:
+
+- each line of a split is one segment;
+- a word that can take a payload adds one segment for every place after it in its line where
+  a split could cut (`;`, `|`, `&`, a backtick, `$(`, `<(`, `>(`), and one for the rest;
+- it also adds the characters after it in its line to the text read again. The larger of the
+  two splits' totals counts against the 128 KiB cap, as each pass reads one split.
+
+A word can take a payload if `_guardrails_shell_payload` could read one from it: `eval`
+always, and `sh`, `bash`, `zsh`, `dash` or `ksh` when a `-c`, alone or in a cluster such
+as `-lc`, or a `<<<` follows it in its line. That payload is always text after the word in
+the same segment, so these are bounds. A nested payload is counted again through its own
+word. Neither depends on which word is the command, so a wrapper before the shell cannot
+hide one.
+
+They over-count a shell's name in prose that a `-c` or `<<<` follows, and `eval` in any prose.
+In the suites, a 300-line commit message naming shells 12 times counts 306 segments and no
+text read again. A 5,000-line script fed to bash counts 5,004 segments and 23 characters, a
+`bash -c` over a 100 KiB script reads 102,000 characters again, and every other command
+counts at most 140 characters. A shell in a shell over more than 64 KiB asks.
+
+Within the caps, the slowest input measured took 3.5 s of the 10 s budget: 32,000 `env`
+wrappers before a `git commit`, read by guard-default-branch on macOS at load 7. The exception is the
+publish guard on `curl`, `wget`, `http` and `gh api -X` lines, which forks per line, so about
+600 of them still run it past the timeout (#126).
+
 ## What was rejected
 
 - **Substring matching.** The original approach; produced the `gh pr create` false

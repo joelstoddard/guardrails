@@ -257,6 +257,42 @@ allows "echo '\$(gh pr comment 1 -b x)'"                          "a substitutio
 allows 'echo "\$(gh pr comment 1 -b x)"'                          "an escaped substitution is text"
 allows $'git commit -F - <<\'EOF\'\n$(gh pr comment 1 -b x)\nEOF'  "a substitution in a quoted heredoc is text"
 
+# A payload loses one quote at each end, if it has one, and nothing else.
+payload() {
+  if _guardrails_shell_payload "$1"; then assert_eq "$_GUARDRAILS_PAYLOAD" "$2" "$3"; else assert_eq "(none)" "$2" "$3"; fi
+}
+payload "bash -c 'x y'"     "x y"    "a single-quoted payload loses its quotes"
+payload 'eval "x y"'        "x y"    "a double-quoted payload loses its quotes"
+payload "eval x'"           "x"      "a payload loses a closing quote alone"
+payload "eval 'x"           "x"      "a payload loses an opening quote alone"
+payload "eval \"'\""        "'"      "a payload keeps a quote inside its quotes"
+payload "eval ''"           "(none)" "a payload of two quotes is empty"
+payload "eval '"            "(none)" "a payload of one quote is empty"
+payload "eval 'é ü'"        "é ü"    "a payload keeps its multibyte characters"
+# In a UTF-8 locale, bash's ${x#pattern} and ${x%pattern} cut a string at an invalid byte before a backslash.
+got="$(LC_ALL=C.UTF-8 bash -c '. "$1"; _guardrails_shell_payload "$2" && printf %s "$_GUARDRAILS_PAYLOAD"' _ \
+  "$DIR/../plugins/building/lib/shell-split.sh" $'eval \'\\\xc3\\ x\'')"
+assert_eq "$got" $'\\\xc3\\ x' "a payload keeps an invalid byte and all after it"
+
+# A shell or eval splits its payload again, at every depth, so the payload's segments count against the
+# segment cap too, in both splits (#107).
+too_much() { _guardrails_unreadable "$1" >/dev/null || { echo "  FAIL [$2]: expected unreadable"; FAILS=1; }; }
+in_time()  { if _guardrails_unreadable "$1" >/dev/null; then echo "  FAIL [$2]: expected readable"; FAILS=1; fi; }
+too_much "eval \"$(printf 'a;%.0s' {1..6000})\""                     "an eval payload past the segment cap"
+too_much "eval 'eval \"eval eval $(printf 'a b;%.0s' {1..2000})\"'"   "nested eval payloads past the segment cap"
+too_much "bash -c '$(printf '$(a)%.0s' {1..6000})'"                  "substitutions in a payload past the segment cap"
+too_much $'cat <<\\EOF\neval "'"$(printf 'a;%.0s' {1..11000})"$'"\nEOF' "a payload only the per-line split reads"
+in_time  "eval \"$(printf 'a;%.0s' {1..4000})\""                     "an eval payload within the segment cap"
+in_time  "git commit -m \"$(printf 'a;%.0s' {1..6000})\" && bash ./x.sh" "text before a shell is not its payload"
+
+# Each depth splits the text again, so the characters a shell or eval reads again count against the length cap (#107).
+words="$(printf 'a b %.0s' {1..32700})"
+too_much "eval eval eval eval $words"                                 "four evals over 128 KiB read again"
+too_much "bash -c 'bash -c \"$(printf 'a b %.0s' {1..17500})\"'"        "a shell in a shell over 70 KiB read again"
+too_much $'cat <<\\EOF\neval eval "'"$(printf 'a b %.0s' {1..17500})"$'"\nEOF' "a re-read only the per-line split makes"
+in_time  "bash -c '$(printf 'cp "src/file.txt" "out/dir/file.txt"\n%.0s' {1..2760})'" "one shell over a 100 KiB script"
+in_time  "git commit -m \"$(printf 'Why bash and sh read this; see the doc.\n%.0s' {1..8})$(printf 'a b %.0s' {1..25000})\"" \
+  "prose naming shells is no payload"
 # A lone & ends a command as ; does, but &&, &>, >&, <& and |& are other operators (#89).
 splits() { assert_eq "$(_guardrails_split_segments "$1")" "$2" "$3"; }
 blocks 'true & gh pr comment 1 -b x'                    "a command after a lone &"

@@ -147,6 +147,44 @@ assert_eq "$OUT" "" "segments within the cap are read"
 run_hook "$S" "$(jsonin "$(printf 'eval x\n%.0s' {1..16})")"
 assert_eq "$OUT" "" "shells and evals within the cap are read"
 
+# A hook past its 10 s timeout lets the command through, and stripping the quotes from this payload took 20 s in a
+# UTF-8 locale. So the guard must decide on it, to block or to ask, within half that budget (#107).
+run_hook_within() {  # <seconds> <script> <json> → as run_hook, with RC 124 if the hook still runs after <seconds>
+  local out err pid t=0
+  out="$(scratch_file)"; err="$(scratch_file)"
+  # Its own process group, so a kill also stops the subshells it runs in.
+  set -m; bash "$2" <<<"$3" >"$out" 2>"$err" & pid=$!; set +m
+  while kill -0 "$pid" 2>/dev/null && [ "$t" -lt "$(($1 * 10))" ]; do sleep 0.1; t=$((t + 1)); done
+  if kill -0 "$pid" 2>/dev/null; then kill -- "-$pid"; wait "$pid" 2>/dev/null; RC=124; else wait "$pid"; RC=$?; fi
+  OUT="$(cat "$out")"; ERR="$(cat "$err")"
+}
+padded="eval eval eval eval gh pr comment 1 -b x $(printf 'a b %.0s' {1..32690})"
+LC_ALL=C.UTF-8 run_hook_within 5 "$S" "$(jsonin "$padded")"
+case "$RC/$OUT" in
+  2/* | 0/*'"permissionDecision":"ask"'*) ;;
+  *) echo "  FAIL [a padded publish behind four evals is decided in half the hook budget]: rc=$RC (124 is still running)"; FAILS=1 ;;
+esac
+
+# The segments an eval or sh -c re-reads count against the cap too, at every depth (#107).
+unreadable "eval 'eval \"eval eval $(printf 'a b;%.0s' {1..32700})\"'" "nested eval payloads past the segment cap ask"
+assert_out 'segments are too many' "the question names the segments in the payloads"
+# Real commands stay well within it: a 5,000-line script fed to bash, a long commit message, a Python script.
+script=$'set -euo pipefail\n'"$(printf 'cp "src/a b.txt" out/\n%.0s' {1..4996})"$'\nbash ./scripts/check.sh\nsh -c "echo done; exit 0"'
+run_hook "$S" "$(jsonin $'bash <<\'EOF\'\n'"$script"$'\nEOF')"
+assert_rc 0 "a 5,000-line script fed to bash allowed"
+assert_eq "$OUT" "" "a 5,000-line script fed to bash is read"
+msg="$(printf 'The guards now read bash and sh payloads; see the design doc.\n%.0s' {1..6})"$'\n'"$(printf 'A line of prose that explains the change in plain words.\n%.0s' {1..294})"
+run_hook "$S" "$(jsonin "git commit -m \"$msg\"")"
+assert_eq "$OUT" "" "a 300-line commit message naming shells is read"
+py="$(printf 'for name in sorted(names):\n    print(f"{name}: {len(name)}")\n%.0s' {1..150})"
+run_hook "$S" "$(jsonin $'python3 - <<\'EOF\'\nimport sys\n'"$py"$'\nEOF')"
+assert_eq "$OUT" "" "a 300-line Python script is read"
+run_hook "$S" "$(jsonin "bash -c '$(printf 'cp "src/file.txt" "out/dir/file.txt"\n%.0s' {1..2760})'")"
+assert_eq "$OUT" "" "a 100 KiB script run by bash -c is read"
+
+# Each depth splits the text again, so the characters a shell or eval reads again count against the length cap (#107).
+unreadable "eval eval eval eval $(printf 'a b %.0s' {1..32700})" "four evals over 128 KiB ask"
+assert_out 'read again' "the question names the text read again"
 # A lone & ends a command, but a redirect's & does not (#89).
 run_hook "$S" "$(jsonin 'true & gh pr comment 1 -b x')"
 assert_rc 2 "a publish after a lone & blocked"

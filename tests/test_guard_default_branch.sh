@@ -137,6 +137,16 @@ assert_out '"permissionDecision":"ask"' "too many shells and evals to re-read as
 run_hook "$S" "$(jsonat "$r13" "$(printf 'true\n%.0s' {1..4998})"$'\n''git commit -m x')"
 assert_rc 2 "a commit within the segment cap is still read and refused"
 
+# The segments an eval or sh -c re-reads count against the cap too, at every depth (#107).
+run_hook "$S" "$(jsonat "$r13" "eval 'eval \"eval eval $(printf 'a b;%.0s' {1..32700})\"'"$'\n''git commit -m x')"
+assert_out '"permissionDecision":"ask"' "nested eval payloads past the segment cap ask"
+assert_out 'segments are too many' "the question names the segments in the payloads"
+run_hook "$S" "$(jsonat "$r13" $'bash <<\'EOF\'\n'"$(printf 'cp "src/a b.txt" out/\n%.0s' {1..4998})"$'\ngit commit -m x\nEOF')"
+assert_rc 2 "a commit at the end of a 5,000-line script fed to bash is read and refused"
+# Each depth splits the text again, so the characters a shell or eval reads again count against the length cap (#107).
+run_hook "$S" "$(jsonat "$r13" "eval eval eval eval git commit -m x $(printf 'a b %.0s' {1..32690})")"
+assert_out '"permissionDecision":"ask"' "four evals over 128 KiB ask"
+assert_out 'read again' "the question names the text read again"
 # A lone & ends a command (#89).
 run_hook "$S" "$(jsonat "$r13" 'true & git commit -m x')"
 assert_rc 2 "a commit after a lone & on the default branch blocked"
