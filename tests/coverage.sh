@@ -59,7 +59,15 @@ hits() { # writes "test<TAB>path<TAB>line" for each traced line of a file under 
   done < <(cut -f2 "$OUT/raw-hits.tsv" | LC_ALL=C sort -u)
   while IFS=$'\t' read -r t raw ln; do
     if [[ -n ${rel_of[$raw]:-} ]]; then printf '%s\t%s\t%s\n' "$t" "${rel_of[$raw]}" "$ln"; fi
-  done <"$OUT/raw-hits.tsv" | LC_ALL=C sort -u >"$OUT/hits.tsv"
+  done <"$OUT/raw-hits.tsv" | credit_spans | LC_ALL=C sort -u >"$OUT/hits.tsv"
+}
+
+credit_spans() { # stdin "test<TAB>path<TAB>line"; moves a hit on a command's later line to its counted line
+  local f
+  while IFS= read -r f; do
+    awk -v spans=1 -f "$HERE/coverage/executable.awk" "$ROOT/$f" | awk -v p="$f" '{ print p "\t" $0 }'
+  done < <(measured) >"$OUT/spans.tsv"
+  awk -F'\t' -v OFS='\t' 'FILENAME == ARGV[1] { first[$1 FS $2] = $3; next } { k = $2 FS $3; if (k in first) $3 = first[k]; print }' "$OUT/spans.tsv" -
 }
 
 floor_of() { awk -F'\t' -v p="$1" '$1 == p { print $2 }' "$FLOORS" 2>/dev/null || true; }
@@ -107,16 +115,29 @@ newfloor() { # <now> <floor>: the higher of the two, in tenths
   echo "$now"
 }
 
-ratchet() { # <base floor file>: fails if a floor fell, or vanished while its file still exists
-  local path old new new_tenths old_tenths bad=0 base_total=0
+moved_to() { # <path>: a file in the repo with the same name, preferring one with a floor; fails if git cannot list the repo
+  local files f found=""
+  files=$(cd "$ROOT" && git ls-files --cached --others --exclude-standard) || return 1
+  while IFS= read -r f; do
+    [[ ${f##*/} == "${1##*/}" && -f $ROOT/$f ]] || continue
+    if [[ -n $(floor_of "$f") ]]; then echo "$f"; return 0; fi
+    found=$f
+  done <<<"$files"
+  echo "$found"
+}
+
+ratchet() { # <base floor file>: fails if a floor fell, or vanished while its file still exists, here or moved
+  local path old new new_tenths old_tenths moved bad=0 base_total=0
   while IFS=$'\t' read -r path old || [[ -n $path ]]; do
     [[ -n $path ]] || continue
     [[ $path == TOTAL ]] && base_total=1
     new=$(floor_of "$path")
-    if [[ -z $new ]]; then
-      if [[ $path == TOTAL || -e $ROOT/$path ]]; then echo "floor removed: $path (was $old)"; bad=1; fi
-      continue
+    if [[ -z $new && $path != TOTAL && ! -e $ROOT/$path ]]; then # a moved file keeps its name
+      moved=$(moved_to "$path") || { echo "cannot list the repo's files to find $path"; bad=1; continue; }
+      [[ -n $moved ]] || continue # deleted, so its floor may go
+      new=$(floor_of "$moved"); path="$path -> $moved"
     fi
+    if [[ -z $new ]]; then echo "floor removed: $path (was $old)"; bad=1; continue; fi
     if ! new_tenths=$(tenths "$new") || ! old_tenths=$(tenths "$old"); then
       echo "floor invalid: $path"; bad=1
     elif ((new_tenths < old_tenths)); then

@@ -76,6 +76,83 @@ f() {
 EOF
 assert_eq "2 3 5 8 10 12 18 " "$(bash "$TOOL" --lines "$D/h.sh" | tr '\n' ' ')" "heuristic"
 
+echo "--- a case label continued with a backslash is not executable, and the line it continues to is read on its own"
+D="$(scratch_dir)"
+cat >"$D/c.sh" <<'EOF'
+case $1 in
+  -a | -b | \
+    -c) echo abc ;;
+  -d | \
+    -e | \
+    -f)
+    echo def
+    ;;
+esac
+EOF
+assert_eq "1 3 7 " "$(bash "$TOOL" --lines "$D/c.sh" | tr '\n' ' ')" "continued-case-label"
+
+echo "--- a shift inside (( )) or \$(( )) opens no heredoc, and a heredoc after a closing )) still does"
+D="$(scratch_dir)"
+cat >"$D/a.sh" <<'EOF'
+(( x << y ))
+echo after-arith
+z=$(( x << y ))
+echo after-expansion
+(( x )) && cat <<BODY
+not code
+BODY
+d=$(dirname $(pwd)) && cat <<BODY
+not code
+BODY
+echo after-heredocs
+(( x +
+  y << z ))
+echo after-two-lines
+EOF
+assert_eq "1 2 3 4 5 8 11 12 13 14 " "$(bash "$TOOL" --lines "$D/a.sh" | tr '\n' ' ')" "arith-shift"
+
+echo "--- a hit on a later line of a multi-line command is credited to the command's counted line"
+setup
+cat >"$D/$S" <<'EOF'
+x=$(printf '%s' "a
+b")
+echo one \
+  two
+echo "c
+d" | cat
+EOF
+echo 'bash "$(dirname "$0")/../plugins/p/hooks/scripts/f.sh" >/dev/null' >"$D/tests/test_f.sh"
+cov --update
+assert_eq "3/3 100.0 NO" "$(row "$S")" "span-credit"
+assert_eq "1 3 5 " "$(awk -F'\t' -v p="$S" '$2 == p { print $3 }' "$D/.coverage/hits.tsv" | tr '\n' ' ')" "span-hits"
+
+echo "--- a multi-line command the test never reaches stays uncovered"
+setup
+cat >"$D/$S" <<'EOF'
+if [[ ${1:-} == yes ]]; then
+  echo "took yes"
+else
+  echo "took no \
+  twice"
+fi
+EOF
+cov --update
+assert_eq "2/3 66.6 NO" "$(row "$S")" "span-uncovered"
+
+echo "--- a hit on the continuation of a line that does not count credits no earlier command"
+setup
+cat >"$D/$S" <<'EOF'
+if [[ ${1:-} == yes ]]; then
+  echo "took yes"
+else x="took
+no"
+fi
+EOF
+echo 'bash "$(dirname "$0")/../plugins/p/hooks/scripts/f.sh" no' >"$D/tests/test_f.sh"
+cov --update
+assert_eq "1/2 50.0 NO" "$(row "$S")" "span-uncounted"
+assert_eq "1 4 " "$(awk -F'\t' -v p="$S" '$2 == p { print $3 }' "$D/.coverage/hits.tsv" | tr '\n' ' ')" "span-uncounted-hits"
+
 echo "--- a measured file with no executable lines counts as fully covered"
 setup; echo '# only a comment' >"$D/plugins/p/lib/empty.sh"; cov --update
 assert_eq "0/0 100.0 NO" "$(row plugins/p/lib/empty.sh)" "empty"
@@ -101,12 +178,15 @@ cov --update
 [[ $RC == 1 && $(floors) == *$'f.sh\t90.0'* ]] || fail no-lowering "rc=$RC, floors '$(floors)'"
 
 echo "--- the ratchet fails on a lowered or vanished floor, and passes otherwise"
-setup
+setup; git -C "$D" init -q
 printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
 printf '%s\t70.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 1 && $OUTPUT == *"floor lowered: $S"* ]] || fail ratchet-lowered "rc=$RC: $OUTPUT"
 printf '%s\t66.6\nplugins/p/lib/gone.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 0 ]] || fail ratchet-deleted-file "rc=$RC: $OUTPUT"
+echo 'kept' >"$D/plugins/p/lib/gone.sh"; git -C "$D" add plugins/p/lib/gone.sh; rm "$D/plugins/p/lib/gone.sh"
+cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-deleted-unstaged "rc=$RC: $OUTPUT"
 echo 'kept' >"$D/plugins/p/lib/gone.sh"; cov --ratchet "$D/base.tsv"
 [[ $RC == 1 && $OUTPUT == *"floor removed: plugins/p/lib/gone.sh"* ]] || fail ratchet-removed "rc=$RC: $OUTPUT"
 printf '%s\t60.0\nTOTAL\t60.0\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
@@ -114,6 +194,28 @@ printf '%s\t60.0\nTOTAL\t60.0\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv
 printf '%s\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
 printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 1 && $OUTPUT == *"floor removed: TOTAL"* ]] || fail ratchet-total "rc=$RC: $OUTPUT"
+
+echo "--- the ratchet fails on a floor whose file moved out of the measured paths"
+setup; git -C "$D" init -q; mkdir -p "$D/plugins/p/moved"; echo true >"$D/plugins/p/moved/m.sh"
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+printf '%s\t66.6\nplugins/p/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor removed: plugins/p/lib/m.sh -> plugins/p/moved/m.sh (was 50.0)"* ]] ||
+  fail ratchet-moved-out "rc=$RC: $OUTPUT"
+
+echo "--- the ratchet follows a floor whose file moved to another measured path, past an unmeasured namesake, and fails if it fell"
+setup; git -C "$D" init -q; mkdir -p "$D/plugins/q/lib"; echo true >"$D/plugins/q/lib/m.sh"; echo true >"$D/plugins/p/m.sh"
+printf '%s\t66.6\nplugins/p/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\nplugins/q/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-moved-measured "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nplugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor lowered: plugins/p/lib/m.sh -> plugins/q/lib/m.sh 50.0 -> 40.0"* ]] ||
+  fail ratchet-moved-lowered "rc=$RC: $OUTPUT"
+
+echo "--- the ratchet fails on a vanished floor when it cannot list the repo's files to look for it"
+setup
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+printf '%s\t66.6\nplugins/p/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"cannot list the repo's files"* ]] || fail ratchet-no-git "rc=$RC: $OUTPUT"
 
 echo "--- the ratchet fails on a base floor file that is missing or empty, so there is always a base to compare"
 setup; printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/missing.tsv"
