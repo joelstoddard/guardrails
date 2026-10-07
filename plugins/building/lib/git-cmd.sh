@@ -51,16 +51,9 @@ _guardrails_invokes_git() {
   [ "$per_line" != "$carried" ] || per_line=""
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
-    i=0
-    # Skip leading environment assignments (NAME=value ...).
-    while [ "$i" -lt "${#toks[@]}" ]; do
-      case "${toks[$i]}" in
-        [A-Za-z_]*=*) i=$((i + 1)) ;;
-        *) break ;;
-      esac
-    done
-    case "${toks[$i]:-}" in
-      git | */git)
+    _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"
+    case "$_GUARDRAILS_CMD" in
+      git)
         _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"; i="$_GUARDRAILS_GIT_AT"
         [ "${toks[$i]:-}" = "$want" ] && return 0
         ;;
@@ -88,20 +81,16 @@ _guardrails_git_effective_cwd() {
 
 # Prints the cwd, with rc 0 once the matching git command is reached and rc 1 if it never is.
 _guardrails_git_walk_cwd() {
-  local cmdline="$1" want="$2" cur="$3" depth="${4:-0}" seg i j k d v
+  local cmdline="$1" want="$2" cur="$3" depth="${4:-0}" seg i j k d v wrapped
   local -a toks
   [ "$depth" -gt 4 ] && { printf '%s' "$cur"; return 1; }
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
-    i=0
-    while [ "$i" -lt "${#toks[@]}" ]; do
-      case "${toks[$i]}" in
-        [A-Za-z_]*=*) i=$((i + 1)) ;;
-        *) break ;;
-      esac
-    done
-    case "${toks[$i]:-}" in
+    _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; wrapped="$_GUARDRAILS_CMD_WRAPPED"
+    case "$_GUARDRAILS_CMD" in
       cd)
+        # A cd in a subshell does not last and one after a keyword may not run, so following either could miss a commit.
+        [ "$wrapped" = 0 ] || continue
         d="${toks[$((i + 1))]:-}"
         # `cd` alone (home) and `cd -` (previous) are not worth guessing at; leave cur be.
         case "$d" in
@@ -110,7 +99,7 @@ _guardrails_git_walk_cwd() {
           *) cur="$cur/$d" ;;
         esac
         ;;
-      git | */git)
+      git)
         _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"; j="$_GUARDRAILS_GIT_AT"
         if [ "${toks[$j]:-}" = "$want" ]; then
           k=$((i + 1))
@@ -136,7 +125,7 @@ _guardrails_git_walk_cwd() {
           printf '%s' "$d"
           return 0
         fi
-        [ "${toks[$i]}" = eval ] && cur="$d"
+        [ "${toks[$i]}" = eval ] && [ "$wrapped" = 0 ] && cur="$d"
         ;;
     esac
   done < <(_guardrails_split_segments "$cmdline")

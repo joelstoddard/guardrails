@@ -185,6 +185,34 @@ assert_eq "$OUT" "" "a 100 KiB script run by bash -c is read"
 # Each depth splits the text again, so the characters a shell or eval reads again count against the length cap (#107).
 unreadable "eval eval eval eval $(printf 'a b %.0s' {1..32700})" "four evals over 128 KiB ask"
 assert_out 'read again' "the question names the text read again"
+# A lone & ends a command, but a redirect's & does not (#89).
+run_hook "$S" "$(jsonin 'true & gh pr comment 1 -b x')"
+assert_rc 2 "a publish after a lone & blocked"
+run_hook "$S" "$(jsonin 'echo x 2>&1 send it')"
+assert_rc 0 "2>&1 is a redirect"
+assert_eq "$OUT" "" "2>&1 asks nothing"
+
+# An unquoted heredoc runs the substitutions in its body; a quoted one does not (#88).
+run_hook "$S" "$(jsonin $'cat <<EOF\n$(gh pr comment 1 -b x)\nEOF')"
+assert_rc 2 "a publish in an unquoted heredoc body blocked"
+run_hook "$S" "$(jsonin $'cat <<\'EOF\'\n$(gh pr comment 1 -b x)\nEOF')"
+assert_rc 0 "a substitution in a quoted heredoc body is text"
+assert_eq "$OUT" "" "a quoted heredoc body asks nothing"
+
+# A keyword or wrapper before a command does not hide it, nor ssh a shell (#90).
+run_hook "$S" "$(jsonin "sudo bash -c 'gh pr comment 1 -b x'")"
+assert_rc 2 "a publish in a shell behind sudo blocked"
+run_hook "$S" "$(jsonin $'if true; then bash <<EOF\ngh pr comment 1 -b x\nEOF\nfi')"
+assert_rc 2 "a publish in a heredoc fed to a shell after then blocked"
+run_hook "$S" "$(jsonin $'ssh host bash <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc fed to a shell on another host blocked"
+pipe_asks 'cat cmds.txt | sudo bash' "a pipe into a shell behind sudo asks"
+run_hook "$S" "$(jsonin 'command -v gh')"
+assert_rc 0 "command -v gh allowed"
+assert_eq "$OUT" "" "command -v gh asks nothing"
+run_hook "$S" "$(jsonin $'cat > notes.md <<EOF\nRun sudo bash -c to post, or ssh host bash.\nEOF')"
+assert_rc 0 "prose naming sudo and ssh allowed"
+assert_eq "$OUT" "" "prose naming sudo and ssh asks nothing"
 
 # Each curl line started about seven processes, so 1,000 of them kept the guard from the publish after them until
 # well past its timeout (#126). It must refuse it within half that budget.

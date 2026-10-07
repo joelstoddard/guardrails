@@ -33,9 +33,9 @@ In a personal project an RFC is a design spec: `docs/specs/YYYY-MM-DD-<topic>-de
    What this deliberately does not do.
    ```
 
-4. **List open questions** under "Questions for the user". NEVER answer them yourself.
+4. **List open questions** under "Questions for the user". You MUST NOT answer them yourself.
 
 ## Rules
 
-* ALWAYS hand the RFC to the user BEFORE implementation begins.
-* WHEN a spec is overtaken by what shipped, delete it. NEVER archive it.
+* You MUST hand the RFC to the user BEFORE implementation begins.
+* WHEN a spec is overtaken by what shipped, delete it. You MUST NOT archive it.
