@@ -270,7 +270,7 @@ _guardrails_command_at() {
 }
 
 _guardrails_command_skip() {
-  local i=0 w b="" vals o start ops sub remote=-1 rb
+  local i=0 w b="" vals longs o start ops sub remote=-1 rb
   local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
@@ -298,35 +298,45 @@ _guardrails_command_skip() {
     # ${w##*/} is quadratic on a long word, enough to time the hook out; this regex is linear.
     b="$w"; [[ $b == */* && $b =~ /([^/]*)$ ]] && b="${BASH_REMATCH[1]}"
     # A wrapper runs the command after its options and its operand, if it has one: a duration, root, host or
-    # container. vals are its short options that take a value.
-    ops=0; sub=0
+    # container. vals are its short options that take a value, and longs its long ones (#116).
+    ops=0; sub=0; longs=""
     case "$b" in
-      sudo) vals=CDghpRrTtUu ;;
-      env) vals=CPSu ;;
+      sudo) vals=CDghpRrTtUu; longs='--user --group --chdir --close-from --host --prompt --role --type --command-timeout --other-user --chroot' ;;
+      env) vals=CPSu; longs='--unset --chdir --split-string' ;;
       exec) vals=a ;;
-      time) vals=fo ;;
-      xargs) vals=adEIJLnPRSs ;;
-      timeout) vals=ks; ops=1 ;;
-      nice) vals=n ;;
-      stdbuf) vals=ioe ;;
+      time) vals=fo; longs='--output --format' ;;
+      xargs) vals=adEIJLnPRSs; longs='--arg-file --delimiter --max-args --max-procs --max-chars --process-slot-var' ;;
+      timeout) vals=ks; ops=1; longs='--signal --kill-after' ;;
+      nice) vals=n; longs='--adjustment' ;;
+      stdbuf) vals=ioe; longs='--input --output --error' ;;
       doas) vals=Cu ;;
-      chroot) vals=ugG; ops=1 ;;
+      chroot) vals=ugG; ops=1; longs='--userspec --groups' ;;
       nohup | command | setsid) vals="" ;;
       # These run their command elsewhere, as you, so only a shell there is read, like a shell here.
       ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; ops=1; remote="$i"; rb="$b" ;;
-      docker) [ "${toks[$((i + 1))]:-}" = exec ] || break; vals=euw; ops=1; sub=1; remote="$i"; rb="$b" ;;
-      kubectl) [ "${toks[$((i + 1))]:-}" = exec ] || break; vals=cfn; ops=1; sub=1; remote="$i"; rb="$b" ;;
+      docker)
+        [ "${toks[$((i + 1))]:-}" = exec ] || break
+        vals=euw; ops=1; sub=1; remote="$i"; rb="$b"; longs='--env --env-file --user --workdir --detach-keys' ;;
+      kubectl)
+        [ "${toks[$((i + 1))]:-}" = exec ] || break
+        vals=cfn; ops=1; sub=1; remote="$i"; rb="$b"; longs='--container --filename --namespace --pod-running-timeout' ;;
       *) break ;;
     esac
     start="$i"; _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1 + sub))
     while :; do
       for (( ; i < ${#toks[@]}; i++)); do
         o="${toks[$i]}"
-        case "$o" in --) i=$((i + 1)); break ;; -?*) ;; *) break ;; esac
-        # command -v and -V name a command without running it.
-        [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 3; }
-        # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
-        [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1))
+        case "$o" in
+          --) i=$((i + 1)); break ;;
+          # A long option written with = holds its value.
+          --*) case " $longs " in *" $o "*) i=$((i + 1)) ;; esac ;;
+          -?*)
+            # command -v and -V name a command without running it.
+            [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 3; }
+            # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
+            [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1)) ;;
+          *) break ;;
+        esac
       done
       [ "$ops" -gt 0 ] || break
       # kubectl takes options after its pod as well.

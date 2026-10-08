@@ -234,4 +234,8 @@ pipe_asks 'echo x | timeout 5 bash' "a pipe into a shell behind timeout asks"
 run_hook "$S" "$(jsonin 'timeout 5 make')"
 assert_eq "$OUT" "" "timeout 5 make asks nothing"
 
+# A wrapper's long option can take the next word as its value (#116).
+run_hook "$S" "$(jsonin 'sudo --user root bash -c "gh pr comment 1 -b x"')"
+assert_rc 2 "a publish in a shell behind sudo --user blocked"
+
 finish "guard-publish"

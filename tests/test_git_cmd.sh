@@ -179,4 +179,10 @@ no  'docker exec c git commit -m x'        commit "a commit in a container is no
 cwd 'timeout 5 cd /x; git commit -m y'     commit /start /start "a cd behind a new wrapper is not followed"
 cwd 'f() { cd /x; }; git commit -m y'      commit /start /start "a cd in a function body is not followed"
 
+# A wrapper's long option can take the next word as its value; written with = it takes none (#116).
+yes 'sudo --user root git commit -m x'     commit "behind sudo --user"
+yes 'env --chdir /x git push'              push   "behind env --chdir"
+yes 'sudo --user=root git commit -m x'     commit "behind sudo --user=root"
+no  'sudo --user git status'               commit "a long option's value is not the command"
+
 finish "git-cmd"

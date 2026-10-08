@@ -429,4 +429,19 @@ unseen 'echo x | timeout 5 bash'                                        "a pipe 
 unseen 'cat cmds.txt | docker exec -i c sh'                             "a pipe into a shell in a container"
 seen   'docker exec c ls'                                               "docker exec running something other than a shell"
 
+# A wrapper's long option can take the next word as its value; written with = it takes none (#116).
+blocks 'sudo --user root bash -c "gh pr comment 1 -b x"'                 "a shell behind sudo --user"
+blocks 'sudo --group wheel --chdir /tmp gh pr create --fill'             "a publish behind sudo --group and --chdir"
+blocks 'env --unset HOME --chdir /tmp gh pr create --fill'               "a publish behind env --unset and --chdir"
+blocks '/usr/bin/time --output t.txt gh pr create --fill'                "a publish behind time --output"
+blocks 'echo 1 | xargs --max-args 1 gh pr create --fill'                 "a publish behind xargs --max-args"
+blocks 'timeout --signal KILL --kill-after 2 5 gh pr create --fill'      "a publish behind timeout's long options"
+blocks 'nice --adjustment 5 gh pr create --fill'                         "a publish behind nice --adjustment"
+blocks 'stdbuf --output L gh pr create --fill'                           "a publish behind stdbuf --output"
+blocks 'chroot --userspec me:me /srv/jail gh pr create --fill'           "a publish behind chroot --userspec"
+blocks 'docker exec --user root c bash -c "gh pr comment 1 -b x"'        "a shell behind docker exec --user"
+blocks 'kubectl exec --container app pod -- bash -c "gh pr comment 1 -b x"' "a shell behind kubectl exec --container"
+blocks 'sudo --user=root gh pr create --fill'                            "--user=root takes no extra word"
+allows 'sudo --user root make'                                           "sudo --user before an ordinary command"
+
 finish "publish-cmd"

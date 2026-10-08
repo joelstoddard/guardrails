@@ -58,10 +58,11 @@ the git guards and the shell readers, finds the command word through one lookup,
 - a function's header (`f()`, `f ()`, `function f`), a case arm's pattern (a word ending in
   `)`, after `case … in`) and `coproc` with its name, so the body or arm is read (#110);
 - the wrappers `sudo`, `env`, `nohup`, `exec`, `command`, `time`, `xargs`, `timeout`,
-  `nice`, `stdbuf`, `doas`, `setsid` and `chroot`, with their short options, and the
-  duration of `timeout` and the root of `chroot`. In a cluster such as `-Eu`, the first
-  option that takes a value takes the rest of the word, or the next word if none is left,
-  as getopt does.
+  `nice`, `stdbuf`, `doas`, `setsid` and `chroot`, with their options, and the duration
+  of `timeout` and the root of `chroot`. In a cluster such as `-Eu`, the first option
+  that takes a value takes the rest of the word, or the next word if none is left, as
+  getopt does. A long option that takes a value, such as `sudo --user`, takes the next
+  word unless written with `=` (#116).
 
 `command -v` and `-V` name a command without running it, so there `command` is the
 command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
@@ -185,7 +186,7 @@ Tokens are split on whitespace with no quote handling, so
 with the tripwire framing: the failure is fail-open, and the guard lets the command
 through rather than blocking it wrongly. For the same reason a quoted or escaped command
 word, such as `"bash"` or `ba\sh`, is not recognised, and a long option that takes a
-separate value, such as `sudo --user root`, reads its value as the command word.
+separate value but is not in its wrapper's list reads its value as the command word.
 
 A shell that runs on another host, as in `ssh host bash <<EOF`, has its script read like
 a local one. So `guard-default-branch` judges a `git commit` in it against the local

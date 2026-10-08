@@ -177,4 +177,8 @@ assert_rc 2 "a commit in a function body on the default branch blocked"
 run_hook "$S" "$(jsonat "$r13" 'timeout 30 git commit -m x')"
 assert_rc 2 "a commit behind timeout on the default branch blocked"
 
+# A wrapper's long option can take the next word as its value (#116).
+run_hook "$S" "$(jsonat "$r13" 'sudo --user root git commit -m x')"
+assert_rc 2 "a commit behind sudo --user on the default branch blocked"
+
 finish "guard-default-branch"
