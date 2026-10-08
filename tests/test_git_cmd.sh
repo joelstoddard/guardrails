@@ -167,6 +167,9 @@ yes '> log git commit -m x'                commit "behind a separate redirect"
 yes '&>/dev/null git push'                 push   "behind &>"
 yes '<in 2>&1 git commit -F -'             commit "behind an input redirect and 2>&1"
 no  '2>/dev/null git status'               commit "a redirect before another subcommand"
+yes '10>/dev/null git commit -m x'         commit "behind a redirect of a two-digit fd"
+yes '{fd}> log git commit -m x'            commit "behind a redirect of a named fd"
+no  '2x>f git commit -m x'                 commit "a word with > that is not a redirect"
 cwd '2>/dev/null cd /x; git commit -m y'   commit /start /start "a cd behind a redirect is not followed"
 
 # A function body, a case arm or a coproc runs its command, as does a command behind more wrappers (#110).

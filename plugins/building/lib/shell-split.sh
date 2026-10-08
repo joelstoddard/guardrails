@@ -286,22 +286,35 @@ _guardrails_command_skip() {
   local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
+    # Most words hold none of < > ( ), so they skip these checks, which every word before the command pays for.
     # A ( opens a subshell, fused to the word after it or not; (( is arithmetic.
-    case "$w" in '(('*) ;; '('*) w="${w#(}"; _GUARDRAILS_CMD_WRAPPED=1 ;; esac
-    # A redirect can come before the command (#109); an operator alone takes the next word as its target.
-    if [[ $w == *[\<\>]* && $w =~ $redirect ]]; then
-      [ -n "${BASH_REMATCH[3]}" ] || i=$((i + 1))
-      i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue
-    fi
-    # A function's header and a case arm's pattern come before the command they run (#110).
     case "$w" in
-      *'()'*) [[ $w =~ \(\)(.*)$ ]]; w="${BASH_REMATCH[1]}"; w="${w#[{(]}"; _GUARDRAILS_CMD_WRAPPED=1 ;;
-      *')') _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
+      *[\<\>\(\)]*) case "$w" in '(('*) ;; '('*) w="${w#(}"; _GUARDRAILS_CMD_WRAPPED=1 ;; esac
+        # A redirect can come before the command (#109); an operator alone takes the next word as its target.
+        # Patterns sort the usual forms, as a regex per word costs more; a longer fd goes to the regex.
+        case "$w" in
+          \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \&\> | \&\>\> | \<\< | \<\<- | \<\<\< | [0-9]\< | [0-9]\> | \
+            [0-9]\>\> | [0-9]\>\| | [0-9]\<\> | [0-9]\>\& | [0-9]\<\& | [0-9]\<\< | [0-9]\<\<- | [0-9]\<\<\<)
+            i=$((i + 2)); _GUARDRAILS_CMD_WRAPPED=1; continue ;;
+          \<* | \>* | \&\>* | [0-9]\<* | [0-9]\>*) i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue ;;
+          [0-9]*[\<\>]* | \{*[\<\>]*)
+            if [[ $w =~ $redirect ]]; then
+              [ -n "${BASH_REMATCH[3]}" ] || i=$((i + 1))
+              i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue
+            fi ;;
+        esac
+        # A function's header and a case arm's pattern come before the command they run (#110).
+        case "$w" in
+          *'()'*) [[ $w =~ \(\)(.*)$ ]]; w="${BASH_REMATCH[1]}"; w="${w#[{(]}"; _GUARDRAILS_CMD_WRAPPED=1 ;;
+          *')') _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
+        esac ;;
     esac
-    case "$w" in [A-Za-z_]*=*) i=$((i + 1)); continue ;; esac
-    # The shell drops a command word's quotes and backslashes (#111). A name is short, and a long word would make
-    # the substitution slow, so only a short word is read this way.
-    case "$w" in *[\"\'\\]*) [ "${#w}" -gt 64 ] || { w="${w#\$}"; w="${w//[\"\'\\]/}"; _GUARDRAILS_CMD_WRAPPED=1; } ;; esac
+    case "$w" in
+      [A-Za-z_]*=*) i=$((i + 1)); continue ;;
+      # The shell drops a command word's quotes and backslashes (#111). A name is short, and a long word would
+      # make the substitution slow, so only a short word is read this way.
+      *[\"\'\\]*) [ "${#w}" -gt 64 ] || { w="${w#\$}"; w="${w//[\"\'\\]/}"; _GUARDRAILS_CMD_WRAPPED=1; } ;;
+    esac
     case "$w" in
       '' | '!' | '{' | if | then | elif | else | while | until | do | in) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
       function) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue ;;
@@ -309,7 +322,6 @@ _guardrails_command_skip() {
       coproc) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); case "${toks[$((i + 1))]:-}" in '{' | '('*) i=$((i + 1)) ;; esac; continue ;;
       case) _GUARDRAILS_CMD_WRAPPED=1; for ((i = i + 1; i < ${#toks[@]}; i++)); do [ "${toks[$i]}" = in ] && break; done; continue ;;
     esac
-    [ "${toks[$((i + 1))]:-}" != '()' ] || { _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue; }
     # ${w##*/} is quadratic on a long word, enough to time the hook out; this regex is linear.
     b="$w"; [[ $b == */* && $b =~ /([^/]*)$ ]] && b="${BASH_REMATCH[1]}"
     # A wrapper runs the command after its options and its operand, if it has one: a duration, root, host or
@@ -335,7 +347,8 @@ _guardrails_command_skip() {
       kubectl)
         [ "${toks[$((i + 1))]:-}" = exec ] || break
         vals=cfn; ops=1; sub=1; remote="$i"; rb="$b"; longs='--container --filename --namespace --pod-running-timeout' ;;
-      *) break ;;
+      # f () { ...; } names a function before its body.
+      *) [ "${toks[$((i + 1))]:-}" != '()' ] || { _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue; }; break ;;
     esac
     start="$i"; _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1 + sub))
     while :; do
