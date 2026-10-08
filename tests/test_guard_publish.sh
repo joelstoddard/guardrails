@@ -223,4 +223,15 @@ assert_rc 2 "a publish after 1,000 curl lines is refused in half the hook budget
 run_hook "$S" "$(jsonin '> out gh pr create --fill')"
 assert_rc 2 "a ready PR behind a separate redirect blocked"
 
+# A function body, a case arm or a coproc runs its command, as does a command behind more wrappers (#110).
+run_hook "$S" "$(jsonin 'f() { gh pr comment 1 -b x; }; f')"
+assert_rc 2 "a publish in a function body blocked"
+run_hook "$S" "$(jsonin 'case x in *) gh pr comment 1 -b x;; esac')"
+assert_rc 2 "a publish in a case arm blocked"
+run_hook "$S" "$(jsonin 'timeout 5 bash -c "gh pr comment 1 -b x"')"
+assert_rc 2 "a publish in a shell behind timeout blocked"
+pipe_asks 'echo x | timeout 5 bash' "a pipe into a shell behind timeout asks"
+run_hook "$S" "$(jsonin 'timeout 5 make')"
+assert_eq "$OUT" "" "timeout 5 make asks nothing"
+
 finish "guard-publish"

@@ -147,7 +147,8 @@ yes "{ git commit -m x; }"                 commit "in a group"
 yes "(git commit -m x)"                    commit "in a subshell"
 yes "sudo bash -c 'git commit -m x'"       commit "a shell behind sudo"
 for w in '!' '{' '(' 'if' 'then' 'elif' 'else' 'while' 'until' 'do' 'nohup' 'command' 'time' 'sudo -n' 'env -i' 'exec -c' 'xargs -0' \
-  'ssh -T h bash -c' '2>/dev/null' '> log'; do
+  'ssh -T h bash -c' '2>/dev/null' '> log' 'f()' 'f ()' 'function f' 'case x in *)' 'in a)' 'coproc' 'timeout 5' 'nice -n 5' \
+  'stdbuf -oL' 'doas -u r' 'setsid' 'chroot /j' 'docker exec -i c bash -c' 'kubectl exec p -- bash -c'; do
   yes "$w git commit -m x"                 commit "seen through $w as a segment's first word"
 done
 yes "/usr/bin/time -p git commit -m x"     commit "seen through a wrapper by path"
@@ -167,5 +168,15 @@ yes '&>/dev/null git push'                 push   "behind &>"
 yes '<in 2>&1 git commit -F -'             commit "behind an input redirect and 2>&1"
 no  '2>/dev/null git status'               commit "a redirect before another subcommand"
 cwd '2>/dev/null cd /x; git commit -m y'   commit /start /start "a cd behind a redirect is not followed"
+
+# A function body, a case arm or a coproc runs its command, as does a command behind more wrappers (#110).
+yes 'f() { git commit -m x; }; f'          commit "in a function body"
+yes 'case x in *) git push;; esac'         push   "in a case arm"
+yes 'coproc git commit -m x'               commit "in a coproc"
+yes 'timeout 30 git push'                  push   "behind timeout"
+yes 'nice -n 5 git commit -m x'            commit "behind nice"
+no  'docker exec c git commit -m x'        commit "a commit in a container is not here"
+cwd 'timeout 5 cd /x; git commit -m y'     commit /start /start "a cd behind a new wrapper is not followed"
+cwd 'f() { cd /x; }; git commit -m y'      commit /start /start "a cd in a function body is not followed"
 
 finish "git-cmd"

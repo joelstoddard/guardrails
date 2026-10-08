@@ -171,4 +171,10 @@ assert_rc 2 "a commit after a subshell's cd on the default branch blocked"
 run_hook "$S" "$(jsonat "$r13" '2>/dev/null git commit -m x')"
 assert_rc 2 "a commit behind a redirect on the default branch blocked"
 
+# A function body, a case arm or a coproc runs its command, as does a command behind more wrappers (#110).
+run_hook "$S" "$(jsonat "$r13" 'f() { git commit -m x; }; f')"
+assert_rc 2 "a commit in a function body on the default branch blocked"
+run_hook "$S" "$(jsonat "$r13" 'timeout 30 git commit -m x')"
+assert_rc 2 "a commit behind timeout on the default branch blocked"
+
 finish "guard-default-branch"

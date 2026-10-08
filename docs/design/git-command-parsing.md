@@ -53,16 +53,21 @@ the git guards and the shell readers, finds the command word through one lookup,
 - `NAME=value` assignments;
 - redirects, such as `2>/dev/null` or `> out`, where an operator alone takes the next word
   as its target (#109);
-- the keywords `!`, `{`, `(`, `if`, `then`, `elif`, `else`, `while`, `until` and `do`,
-  and a `(` fused to the next word;
-- the wrappers `sudo`, `env`, `nohup`, `exec`, `command`, `time` and `xargs`, with
-  their short options. In a cluster such as `-Eu`, the first option that takes a value
-  takes the rest of the word, or the next word if none is left, as getopt does.
+- the keywords `!`, `{`, `(`, `if`, `then`, `elif`, `else`, `while`, `until`, `do` and
+  `in`, and a `(` fused to the next word;
+- a function's header (`f()`, `f ()`, `function f`), a case arm's pattern (a word ending in
+  `)`, after `case … in`) and `coproc` with its name, so the body or arm is read (#110);
+- the wrappers `sudo`, `env`, `nohup`, `exec`, `command`, `time`, `xargs`, `timeout`,
+  `nice`, `stdbuf`, `doas`, `setsid` and `chroot`, with their short options, and the
+  duration of `timeout` and the root of `chroot`. In a cluster such as `-Eu`, the first
+  option that takes a value takes the rest of the word, or the next word if none is left,
+  as getopt does.
 
 `command -v` and `-V` name a command without running it, so there `command` is the
-command word. `ssh host` runs its command on another host, as you. The lookup sees through
-it only to a shell, which is then read like a shell here. `ssh host gh …` keeps `ssh` as
-its command word, as before.
+command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
+command elsewhere, as you. The lookup sees through them only to a shell, which is then
+read like a shell here. `ssh host gh …` and `docker exec c ls` keep `ssh` and `docker` as
+their command word, as before.
 
 The lookup is on the guards' slowest path: a command at the caps can make them read some
 65,000 segments. Two measured costs shape it:

@@ -261,13 +261,16 @@ _guardrails_command_at() {
   # Every segment pays for this call, and bash calls a small function faster, so only a word that can come before
   # the command goes on to the loop, which must skip each word named here.
   case "$_GUARDRAILS_CMD" in
-    *[=/\(\<\>]* | '' | '!' | '{' | if | then | elif | else | while | until | do) _guardrails_command_skip ;;
+    *[=/\(\)\<\>]* | '' | '!' | '{' | if | then | elif | else | while | until | do | in) _guardrails_command_skip ;;
+    function | coproc | case) _guardrails_command_skip ;;
     sudo | env | exec | time | xargs | ssh | nohup | command) _guardrails_command_skip ;;
+    timeout | nice | stdbuf | doas | setsid | chroot | docker | kubectl) _guardrails_command_skip ;;
+    *) [ "${toks[1]:-}" != '()' ] || _guardrails_command_skip ;;   # f () { ...; }
   esac
 }
 
 _guardrails_command_skip() {
-  local i=0 w b="" vals o start ssh=-1
+  local i=0 w b="" vals o start ops sub remote=-1 rb
   local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
@@ -278,37 +281,60 @@ _guardrails_command_skip() {
       [ -n "${BASH_REMATCH[3]}" ] || i=$((i + 1))
       i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue
     fi
+    # A function's header and a case arm's pattern come before the command they run (#110).
+    case "$w" in
+      *'()'*) [[ $w =~ \(\)(.*)$ ]]; w="${BASH_REMATCH[1]}"; w="${w#[{(]}"; _GUARDRAILS_CMD_WRAPPED=1 ;;
+      *')') _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
+    esac
     case "$w" in
       [A-Za-z_]*=*) i=$((i + 1)); continue ;;
-      '' | '!' | '{' | if | then | elif | else | while | until | do) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
+      '' | '!' | '{' | if | then | elif | else | while | until | do | in) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
+      function) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue ;;
+      # A coproc's name comes only before a compound command, and a case's word before its in.
+      coproc) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); case "${toks[$((i + 1))]:-}" in '{' | '('*) i=$((i + 1)) ;; esac; continue ;;
+      case) _GUARDRAILS_CMD_WRAPPED=1; for ((i = i + 1; i < ${#toks[@]}; i++)); do [ "${toks[$i]}" = in ] && break; done; continue ;;
     esac
+    [ "${toks[$((i + 1))]:-}" != '()' ] || { _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue; }
     # ${w##*/} is quadratic on a long word, enough to time the hook out; this regex is linear.
     b="$w"; [[ $b == */* && $b =~ /([^/]*)$ ]] && b="${BASH_REMATCH[1]}"
-    # A wrapper runs the command after its options; vals are its short options that take a value.
+    # A wrapper runs the command after its options and its operand, if it has one: a duration, root, host or
+    # container. vals are its short options that take a value.
+    ops=0; sub=0
     case "$b" in
       sudo) vals=CDghpRrTtUu ;;
       env) vals=CPSu ;;
       exec) vals=a ;;
       time) vals=fo ;;
       xargs) vals=adEIJLnPRSs ;;
-      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; ssh="$i" ;;
-      nohup | command) vals="" ;;
+      timeout) vals=ks; ops=1 ;;
+      nice) vals=n ;;
+      stdbuf) vals=ioe ;;
+      doas) vals=Cu ;;
+      chroot) vals=ugG; ops=1 ;;
+      nohup | command | setsid) vals="" ;;
+      # These run their command elsewhere, as you, so only a shell there is read, like a shell here.
+      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; ops=1; remote="$i"; rb="$b" ;;
+      docker) [ "${toks[$((i + 1))]:-}" = exec ] || break; vals=euw; ops=1; sub=1; remote="$i"; rb="$b" ;;
+      kubectl) [ "${toks[$((i + 1))]:-}" = exec ] || break; vals=cfn; ops=1; sub=1; remote="$i"; rb="$b" ;;
       *) break ;;
     esac
-    start="$i"; _GUARDRAILS_CMD_WRAPPED=1
-    for ((i = i + 1; i < ${#toks[@]}; i++)); do
-      o="${toks[$i]}"
-      case "$o" in --) i=$((i + 1)); break ;; -?*) ;; *) break ;; esac
-      # command -v and -V name a command without running it.
-      [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 2; }
-      # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
-      [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1))
+    start="$i"; _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1 + sub))
+    while :; do
+      for (( ; i < ${#toks[@]}; i++)); do
+        o="${toks[$i]}"
+        case "$o" in --) i=$((i + 1)); break ;; -?*) ;; *) break ;; esac
+        # command -v and -V name a command without running it.
+        [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 3; }
+        # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
+        [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1))
+      done
+      [ "$ops" -gt 0 ] || break
+      # kubectl takes options after its pod as well.
+      ops=0; i=$((i + 1)); [ "$b" = kubectl ] || break
     done
-    [ "$b" = ssh ] && i=$((i + 1))   # the host
   done
   [ "$i" -lt "${#toks[@]}" ] || b=""
-  # ssh runs its command on another host, as you; only a shell there is read, like a shell here.
-  if [ "$ssh" -ge 0 ]; then case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$ssh"; b=ssh ;; esac; fi
+  if [ "$remote" -ge 0 ]; then case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$remote"; b="$rb" ;; esac; fi
   _GUARDRAILS_CMD_AT="$i"; _GUARDRAILS_CMD="$b"
 }
 
