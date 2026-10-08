@@ -48,7 +48,7 @@ _guardrails_split_awk() {
       if (k > hb + 1) cs[k - 1] = e
     }
     # A shell word anywhere before a heredoc opener makes the body its script, so no wrapper hides one (#90).
-    function wordend() { if (index(" sh bash zsh dash ksh ", " " cw " ")) fsh = 1; cw = "" }
+    function wordend() { if (index(" sh bash zsh dash ksh ", " " cw " ")) fsh = 1; cw = ""; qd = 0 }
     # The shell ends a body at its delimiter line, even inside a substitution, which is then never closed.
     function bodyend() {
       for (; d > hb; d--) subemit(d, cs[d])
@@ -68,7 +68,7 @@ _guardrails_split_awk() {
       if (!carry) q = ""
       if (!cont) wb = 1
       # cw is the end of the word being read, and fsh notes a shell word before it in the segment.
-      if (carry && q == "" && !cont) { cw = ""; fsh = 0 }
+      if (carry && q == "" && !cont) { cw = ""; fsh = 0; qd = 0 }
       # Indexing the line split into characters keeps the scan linear: substr rescans the line on each call.
       cont = 0; ar = 0; n = split($0, chars, "")
       for (i = 1; i <= n; i++) {
@@ -80,6 +80,8 @@ _guardrails_split_awk() {
         # At the end of an unquoted line it joins the next line to this one.
         if (carry && c == bs && q != sq) {
           if (i == n) { if (q == "") cont = 1; else out = out c; break }
+          # The shell drops the backslash, so the character is part of the word, as in ba\sh (#111).
+          if (!qd) { if (chars[i + 1] == "/") cw = ""; else if (length(cw) < 5) cw = cw chars[i + 1] }
           out = out c chars[i + 1]; i++; wb = 0; continue
         }
 
@@ -87,21 +89,31 @@ _guardrails_split_awk() {
         # a <<WORD is a real opener. Depth outlives the line because the closing )
         # of a `-m "$(cat <<EOF ...)"` body lands on a later one.
         if (q != sq && q != "ansi" && q != "bt" && c == "$" && chars[i + 1] == "(" && chars[i + 2] != "(") {
-          st[++d] = q; sw[d] = cw; sf[d] = fsh; q = ""; cw = ""; fsh = 0; out = out "$("
+          st[++d] = q; sw[d] = cw; sf[d] = fsh; q = ""; cw = ""; fsh = 0; qd = 0; out = out "$("
           if (carry) { kind[d] = "$"; subopen(d, i + 2) }
           i++; wb = 1; continue
         }
         # A backtick substitution ends at the next unescaped backtick, whatever quotes it holds.
-        if (carry && c == "`" && q == "bt") { subclose(d, i); cw = sw[d]; fsh = sf[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (carry && c == "`" && q == "bt") { subclose(d, i); cw = sw[d]; fsh = sf[d]; qd = 1; q = st[d--]; out = out c; wb = 0; continue }
         if (carry && c == "`" && (q == "" || q == dq || q == "hd")) {
           st[++d] = q; sw[d] = cw; sf[d] = fsh; kind[d] = "`"; subopen(d, i + 1); q = "bt"; out = out c; continue
         }
         # An ANSI-C string ends only at a single quote, so its marker is longer than any character.
-        if (q != "") { out = out c; wb = 0; if (c == q || (q == "ansi" && c == sq)) q = ""; continue }
+        if (q != "") {
+          out = out c; wb = 0
+          if (c == q || (q == "ansi" && c == sq)) q = ""
+          else if (carry && !qd && q != "bt" && q != "hd") {
+            # A quoted first word is a shell when the quote ends with it or an option follows it, as when ssh
+            # is given bash -s in quotes (#111); a later word in the quote is prose, as in --title "bash fix".
+            if (c == " " || c == "\t") { if (chars[i + 1] == "-") wordend(); cw = ""; qd = 1 }
+            else if (c == "/") cw = ""; else if (length(cw) < 5) cw = cw c
+          }
+          continue
+        }
         if (carry && c == "$" && chars[i + 1] == sq) { q = "ansi"; out = out c sq; i++; continue }
         if (c == sq || c == dq) { q = c; out = out c; continue }
         if (carry && (c == "<" || c == ">") && chars[i + 1] == "(") {
-          st[++d] = q; sw[d] = cw; sf[d] = fsh; cw = ""; fsh = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
+          st[++d] = q; sw[d] = cw; sf[d] = fsh; cw = ""; fsh = 0; qd = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
         }
 
         # A word that starts with # comments out the rest of the line. wb marks a word start: after a
@@ -112,7 +124,7 @@ _guardrails_split_awk() {
         # Miscounting only suppresses heredoc detection, which is the safe way to err.
         if (c == "(" && chars[i + 1] == "(") { ad[++ar] = (chars[i - 1] == "$"); out = out "(("; i++; wb = 0; continue }
         if (c == ")" && chars[i + 1] == ")" && ar > 0) { wb = !ad[ar--]; out = out "))"; i++; continue }
-        if (c == ")" && d > 0) { if (carry) subclose(d, i); cw = sw[d]; fsh = sf[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (c == ")" && d > 0) { if (carry) subclose(d, i); cw = sw[d]; fsh = sf[d]; qd = 1; q = st[d--]; out = out c; wb = 0; continue }
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
         if (carry && c == "<" && (chars[i + 1] chars[i + 2]) == "<<") { out = out "<<<"; i += 2; wb = 1; continue }
@@ -157,7 +169,7 @@ _guardrails_split_awk() {
         if ((c == "&" && chars[i + 1] == "&") ||
             (c == "|" && chars[i + 1] == "|")) {
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
-          out = out "\n"; i++; wb = 1; cw = ""; fsh = 0; continue
+          out = out "\n"; i++; wb = 1; cw = ""; fsh = 0; qd = 0; continue
         }
         # A lone & ends a command as ; does, but the & in >&, <&, &> and |& belongs to a redirect or pipe.
         if (carry && ((index("<>", c) && chars[i + 1] == "&") || (c == "&" && chars[i + 1] == ">"))) {
@@ -167,7 +179,7 @@ _guardrails_split_awk() {
           j = (carry && c == "|" && chars[i + 1] == "&")
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 + j }
           i += j
-          out = out "\n"; wb = 1; cw = ""; fsh = 0; continue
+          out = out "\n"; wb = 1; cw = ""; fsh = 0; qd = 0; continue
         }
         if (carry) wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         # cw keeps only what a shell name needs, five characters after the last slash, so a long word stays linear.
@@ -228,7 +240,7 @@ _guardrails_unreadable() {
       for (last = np; last > 0 && part[last] !~ /(^|[ \t])-([^ \t-][^ \t]*)?c|<<</; last--) ;
       n++; k = 0; pre = 0
       for (i = 1; i <= np; i++) {
-        nw = split(part[i], w, /[^A-Za-z0-9_.-]+/); at = pre
+        t = part[i]; gsub(/["\047\\]/, "", t); nw = split(t, w, /[^A-Za-z0-9_.-]+/); at = pre
         for (j = 1; j <= nw; j++) {
           at += length(w[j]); sh = (w[j] == "sh" || w[j] == "bash" || w[j] == "zsh" || w[j] == "dash" || w[j] == "ksh")
           if (f == 1 && (sh || w[j] == "eval")) s++
@@ -261,7 +273,7 @@ _guardrails_command_at() {
   # Every segment pays for this call, and bash calls a small function faster, so only a word that can come before
   # the command goes on to the loop, which must skip each word named here.
   case "$_GUARDRAILS_CMD" in
-    *[=/\(\)\<\>]* | '' | '!' | '{' | if | then | elif | else | while | until | do | in) _guardrails_command_skip ;;
+    *[=/\(\)\<\>\"\'\\]* | '' | '!' | '{' | if | then | elif | else | while | until | do | in) _guardrails_command_skip ;;
     function | coproc | case) _guardrails_command_skip ;;
     sudo | env | exec | time | xargs | ssh | nohup | command) _guardrails_command_skip ;;
     timeout | nice | stdbuf | doas | setsid | chroot | docker | kubectl) _guardrails_command_skip ;;
@@ -286,8 +298,11 @@ _guardrails_command_skip() {
       *'()'*) [[ $w =~ \(\)(.*)$ ]]; w="${BASH_REMATCH[1]}"; w="${w#[{(]}"; _GUARDRAILS_CMD_WRAPPED=1 ;;
       *')') _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
     esac
+    case "$w" in [A-Za-z_]*=*) i=$((i + 1)); continue ;; esac
+    # The shell drops a command word's quotes and backslashes (#111). A name is short, and a long word would make
+    # the substitution slow, so only a short word is read this way.
+    case "$w" in *[\"\'\\]*) [ "${#w}" -gt 64 ] || { w="${w#\$}"; w="${w//[\"\'\\]/}"; _GUARDRAILS_CMD_WRAPPED=1; } ;; esac
     case "$w" in
-      [A-Za-z_]*=*) i=$((i + 1)); continue ;;
       '' | '!' | '{' | if | then | elif | else | while | until | do | in) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
       function) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue ;;
       # A coproc's name comes only before a compound command, and a case's word before its in.
@@ -354,7 +369,7 @@ _guardrails_command_skip() {
 _guardrails_shell_payload() {
   local seg="$1" i k inner="" here='<<<[[:space:]]*(.*)$'
   local -a toks
-  case "$seg" in *eval* | *'<<<'* | *-*c*) ;; *) return 1 ;; esac
+  case "$seg" in *eval* | *'<<<'* | *-*c* | *[\"\'\\]*) ;; *) return 1 ;; esac
   read -r -a toks <<<"$seg" || return 1
   _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"
   case "$_GUARDRAILS_CMD" in

@@ -181,4 +181,8 @@ assert_rc 2 "a commit behind timeout on the default branch blocked"
 run_hook "$S" "$(jsonat "$r13" 'sudo --user root git commit -m x')"
 assert_rc 2 "a commit behind sudo --user on the default branch blocked"
 
+# A quoted or escaped command word is read as itself (#111).
+run_hook "$S" "$(jsonat "$r13" '"git" commit -m x')"
+assert_rc 2 "a commit by a quoted git on the default branch blocked"
+
 finish "guard-default-branch"

@@ -148,7 +148,7 @@ yes "(git commit -m x)"                    commit "in a subshell"
 yes "sudo bash -c 'git commit -m x'"       commit "a shell behind sudo"
 for w in '!' '{' '(' 'if' 'then' 'elif' 'else' 'while' 'until' 'do' 'nohup' 'command' 'time' 'sudo -n' 'env -i' 'exec -c' 'xargs -0' \
   'ssh -T h bash -c' '2>/dev/null' '> log' 'f()' 'f ()' 'function f' 'case x in *)' 'in a)' 'coproc' 'timeout 5' 'nice -n 5' \
-  'stdbuf -oL' 'doas -u r' 'setsid' 'chroot /j' 'docker exec -i c bash -c' 'kubectl exec p -- bash -c'; do
+  'stdbuf -oL' 'doas -u r' 'setsid' 'chroot /j' 'docker exec -i c bash -c' 'kubectl exec p -- bash -c' '"env"' '\nohup'; do
   yes "$w git commit -m x"                 commit "seen through $w as a segment's first word"
 done
 yes "/usr/bin/time -p git commit -m x"     commit "seen through a wrapper by path"
@@ -184,5 +184,12 @@ yes 'sudo --user root git commit -m x'     commit "behind sudo --user"
 yes 'env --chdir /x git push'              push   "behind env --chdir"
 yes 'sudo --user=root git commit -m x'     commit "behind sudo --user=root"
 no  'sudo --user git status'               commit "a long option's value is not the command"
+
+# The shell drops the quotes and backslashes of a command word, so a quoted or escaped one is read as itself (#111).
+yes '"git" commit -m x'                    commit "a quoted git"
+yes '\git commit -m x'                     commit "an escaped git"
+yes "'bash' -c 'git commit -m x'"          commit "a quoted shell's payload"
+no  '"echo" git commit'                    commit "a quoted text tool"
+cwd '"cd" /x; git commit -m y'             commit /start /start "a quoted cd is not followed"
 
 finish "git-cmd"

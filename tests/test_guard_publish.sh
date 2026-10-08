@@ -238,4 +238,12 @@ assert_eq "$OUT" "" "timeout 5 make asks nothing"
 run_hook "$S" "$(jsonin 'sudo --user root bash -c "gh pr comment 1 -b x"')"
 assert_rc 2 "a publish in a shell behind sudo --user blocked"
 
+# A quoted or escaped command word is read as itself (#111).
+run_hook "$S" "$(jsonin '"bash" -c "gh pr comment 1 -b x"')"
+assert_rc 2 "a publish in a quoted shell's payload blocked"
+run_hook "$S" "$(jsonin $'ssh host \'bash -s\' <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc fed to a quoted shell on another host blocked"
+run_hook "$S" "$(jsonin '"echo" hi')"
+assert_eq "$OUT" "" "a quoted echo asks nothing"
+
 finish "guard-publish"

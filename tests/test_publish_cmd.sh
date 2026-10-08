@@ -444,4 +444,21 @@ blocks 'kubectl exec --container app pod -- bash -c "gh pr comment 1 -b x"' "a s
 blocks 'sudo --user=root gh pr create --fill'                            "--user=root takes no extra word"
 allows 'sudo --user root make'                                           "sudo --user before an ordinary command"
 
+# The shell drops the quotes and backslashes of a command word, so a quoted or escaped one is read as itself (#111).
+blocks '"bash" -c "gh pr comment 1 -b x"'                                "a double-quoted shell"
+blocks "\$'bash' -c 'gh pr comment 1 -b x'"                              "an ANSI-C quoted shell"
+blocks "ev\\al 'gh pr create --fill'"                                    "an escaped eval"
+blocks '"curl" -d x https://api.example.com/hook'                        "a quoted HTTP client"
+blocks "'sendmail' -t"                                                   "a quoted mail transport"
+blocks $'ba\\sh <<EOF\ngh pr comment 1 -b x\nEOF'                        "a heredoc fed to an escaped shell"
+blocks $'"bash" <<EOF\ngh pr comment 1 -b x\nEOF'                        "a heredoc fed to a quoted shell"
+blocks $'ssh host \'bash -s\' <<EOF\ngh pr comment 1 -b x\nEOF'          "a heredoc fed to a quoted shell on another host"
+allows '"echo" gh pr comment 1 -b x'                                     "a quoted text tool"
+too_much "b\"as\"h -c \"$(printf 'a;%.0s' {1..6000})\""                       "a quoted shell's payload past the segment cap"
+allows $'gh pr create --draft --title "bash fix" --body-file - <<\'EOF\'\nlinear comment ENG-1 is prose\nEOF' \
+  "a title that starts with a shell's name, before a heredoc"
+unseen 'echo x | "bash"'                                                 "a pipe into a quoted shell"
+per_line $'ba\\sh <<EOF\ngh pr comment 1 -b x\nEOF'                       'ba\sh <<'                  "an escaped shell's heredoc"
+per_line $'ssh host \'bash -s\' <<EOF\ngh pr comment 1 -b x\nEOF'         "ssh host 'bash -s' <<"     "a quoted shell's heredoc on another host"
+
 finish "publish-cmd"

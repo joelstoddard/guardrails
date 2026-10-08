@@ -64,6 +64,11 @@ the git guards and the shell readers, finds the command word through one lookup,
   getopt does. A long option that takes a value, such as `sudo --user`, takes the next
   word unless written with `=` (#116).
 
+The shell drops a command word's quotes and backslashes, so the lookup does too before it
+matches a word: `"bash"`, `'gh'`, `ba\sh` and `$'bash'` are read as `bash`, `gh` and `bash`
+(#111). Only a word of 64 characters or fewer is read this way, which any name it matches
+is, as the substitution is slow on a long word.
+
 `command -v` and `-V` name a command without running it, so there `command` is the
 command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
 command elsewhere, as you. The lookup sees through them only to a shell, which is then
@@ -87,7 +92,11 @@ Two readers use the lookup with care:
   it asks whether a shell's name is a word anywhere before the `<<` in the segment. That
   is a superset of the lookup, so no wrapper hides a shell. It also catches wrappers the
   lookup does not know, such as `docker exec -i c bash <<EOF`. The cost is a false
-  positive when a shell's name is a plain argument, as in `grep -w bash <<EOF`.
+  positive when a shell's name is a plain argument, as in `grep -w bash <<EOF`. A word
+  counts with its quotes and backslashes dropped, as `ba\sh` does. Inside quotes, only
+  the first word counts, and only when the quote ends with it or an option follows it,
+  as in `ssh host 'bash -s' <<EOF`. So prose such as `--title "bash fix"` does not make a
+  heredoc after it a script.
 - **The directory walk follows only a plain `cd`.** A `cd` in a subshell, `(cd /x)`, does
   not last, and one after a keyword, `if false; then cd /x; fi`, may not run. Following
   either could judge a repo other than the one the commit lands in, which is weaker than
@@ -184,9 +193,9 @@ of words.
 Tokens are split on whitespace with no quote handling, so
 `git -C '/path with spaces' commit` is not parsed correctly. This is consistent
 with the tripwire framing: the failure is fail-open, and the guard lets the command
-through rather than blocking it wrongly. For the same reason a quoted or escaped command
-word, such as `"bash"` or `ba\sh`, is not recognised, and a long option that takes a
-separate value but is not in its wrapper's list reads its value as the command word.
+through rather than blocking it wrongly. For the same reason a quoted subcommand, as in
+`git "commit"`, is not recognised, and a long option that takes a separate value but is
+not in its wrapper's list reads its value as the command word.
 
 A shell that runs on another host, as in `ssh host bash <<EOF`, has its script read like
 a local one. So `guard-default-branch` judges a `git commit` in it against the local
