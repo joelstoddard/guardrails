@@ -51,6 +51,8 @@ the git guards and the shell readers, finds the command word through one lookup,
 `_guardrails_command_at` in `shell-split.sh` (#90). It skips:
 
 - `NAME=value` assignments;
+- redirects, such as `2>/dev/null` or `> out`, where an operator alone takes the next word
+  as its target (#109);
 - the keywords `!`, `{`, `(`, `if`, `then`, `elif`, `else`, `while`, `until` and `do`,
   and a `(` fused to the next word;
 - the wrappers `sudo`, `env`, `nohup`, `exec`, `command`, `time` and `xargs`, with
@@ -83,7 +85,8 @@ Two readers use the lookup with care:
 - **The directory walk follows only a plain `cd`.** A `cd` in a subshell, `(cd /x)`, does
   not last, and one after a keyword, `if false; then cd /x; fi`, may not run. Following
   either could judge a repo other than the one the commit lands in, which is weaker than
-  not following it. The same holds for the `cd` in an `eval` behind a keyword.
+  not following it. The same holds for the `cd` in an `eval` behind a keyword. A `cd`
+  behind any other word the lookup skips, a redirect included, is not followed either.
 
 ## Which repository the command acts on
 

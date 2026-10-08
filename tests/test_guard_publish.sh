@@ -219,4 +219,8 @@ assert_eq "$OUT" "" "prose naming sudo and ssh asks nothing"
 run_hook_within 5 "$S" "$(jsonin "$(printf 'curl -d x localhost\n%.0s' {1..1000})"$'\n''gh pr comment 1 -b x')"
 assert_rc 2 "a publish after 1,000 curl lines is refused in half the hook budget"
 
+# A redirect before the command word is not the command (#109).
+run_hook "$S" "$(jsonin '> out gh pr create --fill')"
+assert_rc 2 "a ready PR behind a separate redirect blocked"
+
 finish "guard-publish"

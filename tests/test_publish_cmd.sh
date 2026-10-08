@@ -386,4 +386,14 @@ per_line $'git commit -m "$(cat <<EOF\nSubject $(gh pr comment 1 -b x)\nEOF\n)"'
 per_line $'if true; then bash <<EOF\ngh pr comment 1 -b x\nEOF\nfi' $'if true\n then bash <<\nfi' "a shell heredoc after then"
 per_line $'ssh host bash <<EOF\ngh pr comment 1 -b x\nEOF'        'ssh host bash <<'          "a shell heredoc behind ssh"
 
+# A redirect before the command word is not the command, fused to its target or not (#109).
+blocks '>out gh pr create --fill'                                "a fused redirect before a ready PR"
+blocks '> out gh pr create --fill'                               "a separate redirect before a ready PR"
+blocks '2> /dev/null gh pr comment 1 -b x'                       "a separate fd redirect before a publish"
+blocks '<in gh pr create --title x'                              "an input redirect before a ready PR"
+blocks '&>f gh pr create --fill'                                 "&> before a ready PR"
+blocks '>&2 gh pr create --fill'                                 ">& before a ready PR"
+blocks "2>&1 > log bash -c 'gh pr comment 1 -b x'"               "redirects before a shell"
+allows '>out echo gh pr comment 1 -b x'                          "a redirect before a text tool"
+
 finish "publish-cmd"

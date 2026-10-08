@@ -147,7 +147,7 @@ yes "{ git commit -m x; }"                 commit "in a group"
 yes "(git commit -m x)"                    commit "in a subshell"
 yes "sudo bash -c 'git commit -m x'"       commit "a shell behind sudo"
 for w in '!' '{' '(' 'if' 'then' 'elif' 'else' 'while' 'until' 'do' 'nohup' 'command' 'time' 'sudo -n' 'env -i' 'exec -c' 'xargs -0' \
-  'ssh -T h bash -c'; do
+  'ssh -T h bash -c' '2>/dev/null' '> log'; do
   yes "$w git commit -m x"                 commit "seen through $w as a segment's first word"
 done
 yes "/usr/bin/time -p git commit -m x"     commit "seen through a wrapper by path"
@@ -159,5 +159,13 @@ cwd "sudo bash -c 'cd /x && git commit -m y'"     commit /start /x     "a cd in 
 cwd "(cd /x); git commit -m y"                    commit /start /start "a subshell's cd does not last"
 cwd "if false; then cd /x; fi; git commit -m y"   commit /start /start "a cd behind a keyword is not followed"
 cwd "if false; then eval 'cd /x'; fi; git commit -m y" commit /start /start "eval's cd behind a keyword is not followed"
+
+# A redirect before git is not the command, fused to its target or not (#109).
+yes '2>/dev/null git commit -m x'          commit "behind a fused fd redirect"
+yes '> log git commit -m x'                commit "behind a separate redirect"
+yes '&>/dev/null git push'                 push   "behind &>"
+yes '<in 2>&1 git commit -F -'             commit "behind an input redirect and 2>&1"
+no  '2>/dev/null git status'               commit "a redirect before another subcommand"
+cwd '2>/dev/null cd /x; git commit -m y'   commit /start /start "a cd behind a redirect is not followed"
 
 finish "git-cmd"

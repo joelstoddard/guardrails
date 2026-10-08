@@ -167,4 +167,8 @@ assert_eq "$OUT" "" "env FOO=1 git status asks nothing"
 run_hook "$S" "$(jsonat "$r13" "(cd $r14b); git commit -m x")"
 assert_rc 2 "a commit after a subshell's cd on the default branch blocked"
 
+# A redirect before git is not the command (#109).
+run_hook "$S" "$(jsonat "$r13" '2>/dev/null git commit -m x')"
+assert_rc 2 "a commit behind a redirect on the default branch blocked"
+
 finish "guard-default-branch"

@@ -261,17 +261,23 @@ _guardrails_command_at() {
   # Every segment pays for this call, and bash calls a small function faster, so only a word that can come before
   # the command goes on to the loop, which must skip each word named here.
   case "$_GUARDRAILS_CMD" in
-    *[=/\(]* | '' | '!' | '{' | if | then | elif | else | while | until | do) _guardrails_command_skip ;;
+    *[=/\(\<\>]* | '' | '!' | '{' | if | then | elif | else | while | until | do) _guardrails_command_skip ;;
     sudo | env | exec | time | xargs | ssh | nohup | command) _guardrails_command_skip ;;
   esac
 }
 
 _guardrails_command_skip() {
   local i=0 w b="" vals o start ssh=-1
+  local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
     # A ( opens a subshell, fused to the word after it or not; (( is arithmetic.
     case "$w" in '(('*) ;; '('*) w="${w#(}"; _GUARDRAILS_CMD_WRAPPED=1 ;; esac
+    # A redirect can come before the command (#109); an operator alone takes the next word as its target.
+    if [[ $w == *[\<\>]* && $w =~ $redirect ]]; then
+      [ -n "${BASH_REMATCH[3]}" ] || i=$((i + 1))
+      i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue
+    fi
     case "$w" in
       [A-Za-z_]*=*) i=$((i + 1)); continue ;;
       '' | '!' | '{' | if | then | elif | else | while | until | do) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
