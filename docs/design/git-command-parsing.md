@@ -171,11 +171,14 @@ The publish guard checks `curl`, `wget`, `http` and `gh api` lines without start
 scan now costs a regex per URL. So past 32 URLs in one segment a write is read as remote,
 which bounds a segment, while the length cap bounds the URLs in a command.
 
-Within the caps, the slowest input measured took 4.1 s of the 10 s budget: one `eval`
-re-reading 480 `curl -d` lines of 32 local hosts each, read by guard-publish on macOS at
-load 6. It took 3.4 s on Linux. The next slowest took 2.6 to 3.5 s: the same lines without the
-`eval`, 32,000 `env` wrappers or assignments before a `git commit`, and one `eval` over 128 KiB
-of words.
+Within the caps, the slowest inputs measured took 4.0 s of the 10 s budget on macOS at load 6:
+32,000 `env` wrappers before a `git commit`, read by guard-default-branch, and one `eval`
+re-reading 480 `curl -d` lines of 32 local hosts each, read by guard-publish (3.4 s on Linux).
+The words the lookup skips since #109, #110, #111 and #116 come next, at 2.7 to 3.9 s for
+26,000 escaped wrappers, 32,000 redirects, 13,100 `timeout 1` wrappers or 7,700
+`sudo --user root` before a commit. Each word before a command costs the lookup a few
+checks, so a word holding none of `<`, `>`, `(` and `)` skips the redirect and function
+checks; that kept 32,000 `env` wrappers at 4.0 s rather than 4.8 s.
 
 ## What was rejected
 
