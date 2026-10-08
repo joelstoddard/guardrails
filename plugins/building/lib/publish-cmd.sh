@@ -63,6 +63,7 @@ _guardrails_http_has_body() {
 # are development, not publishing — that distinction is the deliberate hole here.
 _guardrails_has_remote_target() {
   local seg="$1" rest url host re n bracketed='^[^]]*' plain='^[^/:]*' lead='^[[:space:]]*(.*)$'
+  local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}["'"'"']*$'
   local first='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
   local next='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
   case "$seg" in *.* | *://*) ;; *) return 1 ;; esac
@@ -75,15 +76,19 @@ _guardrails_has_remote_target() {
     n=$((n + 1)); [ "$n" -le 32 ] || return 0
     url="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[${#BASH_REMATCH[@]} - 1]}"; re="$next"
     case "$url" in [[:space:]]*) [[ $url =~ $lead ]] && url="${BASH_REMATCH[1]}" ;; esac
-    # Regexes and a guarded ${url#*://}, as ${host%%/*} and an unmatched ${url#*://} are quadratic.
+    # Regexes and a guarded ${url#*://}, as ${host%%/*} and an unmatched ${url#*://} are quadratic. A bare URL's
+    # host ends at its first /, though its path holds a :// (#128).
     host="$url"
-    case "$url" in *://*) host="${url#*://}" ;; esac
+    case "$url" in http://* | https://*) host="${url#*://}" ;; esac
     case "$host" in
       \[*) [[ $host =~ $bracketed ]]; host="${BASH_REMATCH[0]}]" ;;
       *) [[ $host =~ $plain ]]; host="${BASH_REMATCH[0]}" ;;
     esac
+    # A public name can start with 127., so only a dotted address is loopback (#128). Its URL can run on to the
+    # quote that closes it.
     case "$host" in
-      localhost | localhost:* | 127.* | 0.0.0.0 | \[::1\] | ::1 | *.local | *.localhost) ;;
+      localhost | localhost:* | 0.0.0.0 | \[::1\] | ::1 | *.local | *.localhost) ;;
+      127.*) [[ $host =~ $loopback ]] || return 0 ;;
       *) return 0 ;;
     esac
   done

@@ -147,7 +147,8 @@ yes "{ git commit -m x; }"                 commit "in a group"
 yes "(git commit -m x)"                    commit "in a subshell"
 yes "sudo bash -c 'git commit -m x'"       commit "a shell behind sudo"
 for w in '!' '{' '(' 'if' 'then' 'elif' 'else' 'while' 'until' 'do' 'nohup' 'command' 'time' 'sudo -n' 'env -i' 'exec -c' 'xargs -0' \
-  'ssh -T h bash -c'; do
+  'ssh -T h bash -c' '2>/dev/null' '> log' 'f()' 'f ()' 'function f' 'case x in *)' 'in a)' 'coproc' 'timeout 5' 'nice -n 5' \
+  'stdbuf -oL' 'doas -u r' 'setsid' 'chroot /j' 'docker exec -i c bash -c' 'kubectl exec p -- bash -c' '"env"' '\nohup'; do
   yes "$w git commit -m x"                 commit "seen through $w as a segment's first word"
 done
 yes "/usr/bin/time -p git commit -m x"     commit "seen through a wrapper by path"
@@ -159,5 +160,39 @@ cwd "sudo bash -c 'cd /x && git commit -m y'"     commit /start /x     "a cd in 
 cwd "(cd /x); git commit -m y"                    commit /start /start "a subshell's cd does not last"
 cwd "if false; then cd /x; fi; git commit -m y"   commit /start /start "a cd behind a keyword is not followed"
 cwd "if false; then eval 'cd /x'; fi; git commit -m y" commit /start /start "eval's cd behind a keyword is not followed"
+
+# A redirect before git is not the command, fused to its target or not (#109).
+yes '2>/dev/null git commit -m x'          commit "behind a fused fd redirect"
+yes '> log git commit -m x'                commit "behind a separate redirect"
+yes '&>/dev/null git push'                 push   "behind &>"
+yes '<in 2>&1 git commit -F -'             commit "behind an input redirect and 2>&1"
+no  '2>/dev/null git status'               commit "a redirect before another subcommand"
+yes '10>/dev/null git commit -m x'         commit "behind a redirect of a two-digit fd"
+yes '{fd}> log git commit -m x'            commit "behind a redirect of a named fd"
+no  '2x>f git commit -m x'                 commit "a word with > that is not a redirect"
+cwd '2>/dev/null cd /x; git commit -m y'   commit /start /start "a cd behind a redirect is not followed"
+
+# A function body, a case arm or a coproc runs its command, as does a command behind more wrappers (#110).
+yes 'f() { git commit -m x; }; f'          commit "in a function body"
+yes 'case x in *) git push;; esac'         push   "in a case arm"
+yes 'coproc git commit -m x'               commit "in a coproc"
+yes 'timeout 30 git push'                  push   "behind timeout"
+yes 'nice -n 5 git commit -m x'            commit "behind nice"
+no  'docker exec c git commit -m x'        commit "a commit in a container is not here"
+cwd 'timeout 5 cd /x; git commit -m y'     commit /start /start "a cd behind a new wrapper is not followed"
+cwd 'f() { cd /x; }; git commit -m y'      commit /start /start "a cd in a function body is not followed"
+
+# A wrapper's long option can take the next word as its value; written with = it takes none (#116).
+yes 'sudo --user root git commit -m x'     commit "behind sudo --user"
+yes 'env --chdir /x git push'              push   "behind env --chdir"
+yes 'sudo --user=root git commit -m x'     commit "behind sudo --user=root"
+no  'sudo --user git status'               commit "a long option's value is not the command"
+
+# The shell drops the quotes and backslashes of a command word, so a quoted or escaped one is read as itself (#111).
+yes '"git" commit -m x'                    commit "a quoted git"
+yes '\git commit -m x'                     commit "an escaped git"
+yes "'bash' -c 'git commit -m x'"          commit "a quoted shell's payload"
+no  '"echo" git commit'                    commit "a quoted text tool"
+cwd '"cd" /x; git commit -m y'             commit /start /start "a quoted cd is not followed"
 
 finish "git-cmd"

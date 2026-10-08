@@ -51,16 +51,29 @@ the git guards and the shell readers, finds the command word through one lookup,
 `_guardrails_command_at` in `shell-split.sh` (#90). It skips:
 
 - `NAME=value` assignments;
-- the keywords `!`, `{`, `(`, `if`, `then`, `elif`, `else`, `while`, `until` and `do`,
-  and a `(` fused to the next word;
-- the wrappers `sudo`, `env`, `nohup`, `exec`, `command`, `time` and `xargs`, with
-  their short options. In a cluster such as `-Eu`, the first option that takes a value
-  takes the rest of the word, or the next word if none is left, as getopt does.
+- redirects, such as `2>/dev/null` or `> out`, where an operator alone takes the next word
+  as its target (#109);
+- the keywords `!`, `{`, `(`, `if`, `then`, `elif`, `else`, `while`, `until`, `do` and
+  `in`, and a `(` fused to the next word;
+- a function's header (`f()`, `f ()`, `function f`), a case arm's pattern (a word ending in
+  `)`, after `case … in`) and `coproc` with its name, so the body or arm is read (#110);
+- the wrappers `sudo`, `env`, `nohup`, `exec`, `command`, `time`, `xargs`, `timeout`,
+  `nice`, `stdbuf`, `doas`, `setsid` and `chroot`, with their options, and the duration
+  of `timeout` and the root of `chroot`. In a cluster such as `-Eu`, the first option
+  that takes a value takes the rest of the word, or the next word if none is left, as
+  getopt does. A long option that takes a value, such as `sudo --user`, takes the next
+  word unless written with `=` (#116).
+
+The shell drops a command word's quotes and backslashes, so the lookup does too before it
+matches a word: `"bash"`, `'gh'`, `ba\sh` and `$'bash'` are read as `bash`, `gh` and `bash`
+(#111). Only a word of 64 characters or fewer is read this way, which any name it matches
+is, as the substitution is slow on a long word.
 
 `command -v` and `-V` name a command without running it, so there `command` is the
-command word. `ssh host` runs its command on another host, as you. The lookup sees through
-it only to a shell, which is then read like a shell here. `ssh host gh …` keeps `ssh` as
-its command word, as before.
+command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
+command elsewhere, as you. The lookup sees through them only to a shell, which is then
+read like a shell here. `ssh host gh …` and `docker exec c ls` keep `ssh` and `docker` as
+their command word, as before.
 
 The lookup is on the guards' slowest path: a command at the caps can make them read some
 65,000 segments. Two measured costs shape it:
@@ -79,11 +92,16 @@ Two readers use the lookup with care:
   it asks whether a shell's name is a word anywhere before the `<<` in the segment. That
   is a superset of the lookup, so no wrapper hides a shell. It also catches wrappers the
   lookup does not know, such as `docker exec -i c bash <<EOF`. The cost is a false
-  positive when a shell's name is a plain argument, as in `grep -w bash <<EOF`.
+  positive when a shell's name is a plain argument, as in `grep -w bash <<EOF`. A word
+  counts with its quotes and backslashes dropped, as `ba\sh` does. Inside quotes, only
+  the first word counts, and only when the quote ends with it or an option follows it,
+  as in `ssh host 'bash -s' <<EOF`. So prose such as `--title "bash fix"` does not make a
+  heredoc after it a script.
 - **The directory walk follows only a plain `cd`.** A `cd` in a subshell, `(cd /x)`, does
   not last, and one after a keyword, `if false; then cd /x; fi`, may not run. Following
   either could judge a repo other than the one the commit lands in, which is weaker than
-  not following it. The same holds for the `cd` in an `eval` behind a keyword.
+  not following it. The same holds for the `cd` in an `eval` behind a keyword. A `cd`
+  behind any other word the lookup skips, a redirect included, is not followed either.
 
 ## Which repository the command acts on
 
@@ -153,11 +171,14 @@ The publish guard checks `curl`, `wget`, `http` and `gh api` lines without start
 scan now costs a regex per URL. So past 32 URLs in one segment a write is read as remote,
 which bounds a segment, while the length cap bounds the URLs in a command.
 
-Within the caps, the slowest input measured took 4.1 s of the 10 s budget: one `eval`
-re-reading 480 `curl -d` lines of 32 local hosts each, read by guard-publish on macOS at
-load 6. It took 3.4 s on Linux. The next slowest took 2.6 to 3.5 s: the same lines without the
-`eval`, 32,000 `env` wrappers or assignments before a `git commit`, and one `eval` over 128 KiB
-of words.
+Within the caps, the slowest inputs measured took 4.0 s of the 10 s budget on macOS at load 6:
+32,000 `env` wrappers before a `git commit`, read by guard-default-branch, and one `eval`
+re-reading 480 `curl -d` lines of 32 local hosts each, read by guard-publish (3.4 s on Linux).
+The words the lookup skips since #109, #110, #111 and #116 come next, at 2.7 to 3.9 s for
+26,000 escaped wrappers, 32,000 redirects, 13,100 `timeout 1` wrappers or 7,700
+`sudo --user root` before a commit. Each word before a command costs the lookup a few
+checks, so a word holding none of `<`, `>`, `(` and `)` skips the redirect and function
+checks; that kept 32,000 `env` wrappers at 4.0 s rather than 4.8 s.
 
 ## What was rejected
 
@@ -175,9 +196,9 @@ of words.
 Tokens are split on whitespace with no quote handling, so
 `git -C '/path with spaces' commit` is not parsed correctly. This is consistent
 with the tripwire framing: the failure is fail-open, and the guard lets the command
-through rather than blocking it wrongly. For the same reason a quoted or escaped command
-word, such as `"bash"` or `ba\sh`, is not recognised, and a long option that takes a
-separate value, such as `sudo --user root`, reads its value as the command word.
+through rather than blocking it wrongly. For the same reason a quoted subcommand, as in
+`git "commit"`, is not recognised, and a long option that takes a separate value but is
+not in its wrapper's list reads its value as the command word.
 
 A shell that runs on another host, as in `ssh host bash <<EOF`, has its script read like
 a local one. So `guard-default-branch` judges a `git commit` in it against the local

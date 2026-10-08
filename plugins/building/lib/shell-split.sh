@@ -48,7 +48,7 @@ _guardrails_split_awk() {
       if (k > hb + 1) cs[k - 1] = e
     }
     # A shell word anywhere before a heredoc opener makes the body its script, so no wrapper hides one (#90).
-    function wordend() { if (index(" sh bash zsh dash ksh ", " " cw " ")) fsh = 1; cw = "" }
+    function wordend() { if (index(" sh bash zsh dash ksh ", " " cw " ")) fsh = 1; cw = ""; qd = 0 }
     # The shell ends a body at its delimiter line, even inside a substitution, which is then never closed.
     function bodyend() {
       for (; d > hb; d--) subemit(d, cs[d])
@@ -68,7 +68,7 @@ _guardrails_split_awk() {
       if (!carry) q = ""
       if (!cont) wb = 1
       # cw is the end of the word being read, and fsh notes a shell word before it in the segment.
-      if (carry && q == "" && !cont) { cw = ""; fsh = 0 }
+      if (carry && q == "" && !cont) { cw = ""; fsh = 0; qd = 0 }
       # Indexing the line split into characters keeps the scan linear: substr rescans the line on each call.
       cont = 0; ar = 0; n = split($0, chars, "")
       for (i = 1; i <= n; i++) {
@@ -80,6 +80,8 @@ _guardrails_split_awk() {
         # At the end of an unquoted line it joins the next line to this one.
         if (carry && c == bs && q != sq) {
           if (i == n) { if (q == "") cont = 1; else out = out c; break }
+          # The shell drops the backslash, so the character is part of the word, as in ba\sh (#111).
+          if (!qd) { if (chars[i + 1] == "/") cw = ""; else if (length(cw) < 5) cw = cw chars[i + 1] }
           out = out c chars[i + 1]; i++; wb = 0; continue
         }
 
@@ -87,21 +89,31 @@ _guardrails_split_awk() {
         # a <<WORD is a real opener. Depth outlives the line because the closing )
         # of a `-m "$(cat <<EOF ...)"` body lands on a later one.
         if (q != sq && q != "ansi" && q != "bt" && c == "$" && chars[i + 1] == "(" && chars[i + 2] != "(") {
-          st[++d] = q; sw[d] = cw; sf[d] = fsh; q = ""; cw = ""; fsh = 0; out = out "$("
+          st[++d] = q; sw[d] = cw; sf[d] = fsh; q = ""; cw = ""; fsh = 0; qd = 0; out = out "$("
           if (carry) { kind[d] = "$"; subopen(d, i + 2) }
           i++; wb = 1; continue
         }
         # A backtick substitution ends at the next unescaped backtick, whatever quotes it holds.
-        if (carry && c == "`" && q == "bt") { subclose(d, i); cw = sw[d]; fsh = sf[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (carry && c == "`" && q == "bt") { subclose(d, i); cw = sw[d]; fsh = sf[d]; qd = 1; q = st[d--]; out = out c; wb = 0; continue }
         if (carry && c == "`" && (q == "" || q == dq || q == "hd")) {
           st[++d] = q; sw[d] = cw; sf[d] = fsh; kind[d] = "`"; subopen(d, i + 1); q = "bt"; out = out c; continue
         }
         # An ANSI-C string ends only at a single quote, so its marker is longer than any character.
-        if (q != "") { out = out c; wb = 0; if (c == q || (q == "ansi" && c == sq)) q = ""; continue }
+        if (q != "") {
+          out = out c; wb = 0
+          if (c == q || (q == "ansi" && c == sq)) q = ""
+          else if (carry && !qd && q != "bt" && q != "hd") {
+            # A quoted first word is a shell when the quote ends with it or an option follows it, as when ssh
+            # is given bash -s in quotes (#111); a later word in the quote is prose, as in --title "bash fix".
+            if (c == " " || c == "\t") { if (chars[i + 1] == "-") wordend(); cw = ""; qd = 1 }
+            else if (c == "/") cw = ""; else if (length(cw) < 5) cw = cw c
+          }
+          continue
+        }
         if (carry && c == "$" && chars[i + 1] == sq) { q = "ansi"; out = out c sq; i++; continue }
         if (c == sq || c == dq) { q = c; out = out c; continue }
         if (carry && (c == "<" || c == ">") && chars[i + 1] == "(") {
-          st[++d] = q; sw[d] = cw; sf[d] = fsh; cw = ""; fsh = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
+          st[++d] = q; sw[d] = cw; sf[d] = fsh; cw = ""; fsh = 0; qd = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
         }
 
         # A word that starts with # comments out the rest of the line. wb marks a word start: after a
@@ -112,7 +124,7 @@ _guardrails_split_awk() {
         # Miscounting only suppresses heredoc detection, which is the safe way to err.
         if (c == "(" && chars[i + 1] == "(") { ad[++ar] = (chars[i - 1] == "$"); out = out "(("; i++; wb = 0; continue }
         if (c == ")" && chars[i + 1] == ")" && ar > 0) { wb = !ad[ar--]; out = out "))"; i++; continue }
-        if (c == ")" && d > 0) { if (carry) subclose(d, i); cw = sw[d]; fsh = sf[d]; q = st[d--]; out = out c; wb = 0; continue }
+        if (c == ")" && d > 0) { if (carry) subclose(d, i); cw = sw[d]; fsh = sf[d]; qd = 1; q = st[d--]; out = out c; wb = 0; continue }
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
         if (carry && c == "<" && (chars[i + 1] chars[i + 2]) == "<<") { out = out "<<<"; i += 2; wb = 1; continue }
@@ -157,7 +169,7 @@ _guardrails_split_awk() {
         if ((c == "&" && chars[i + 1] == "&") ||
             (c == "|" && chars[i + 1] == "|")) {
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
-          out = out "\n"; i++; wb = 1; cw = ""; fsh = 0; continue
+          out = out "\n"; i++; wb = 1; cw = ""; fsh = 0; qd = 0; continue
         }
         # A lone & ends a command as ; does, but the & in >&, <&, &> and |& belongs to a redirect or pipe.
         if (carry && ((index("<>", c) && chars[i + 1] == "&") || (c == "&" && chars[i + 1] == ">"))) {
@@ -167,7 +179,7 @@ _guardrails_split_awk() {
           j = (carry && c == "|" && chars[i + 1] == "&")
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 + j }
           i += j
-          out = out "\n"; wb = 1; cw = ""; fsh = 0; continue
+          out = out "\n"; wb = 1; cw = ""; fsh = 0; qd = 0; continue
         }
         if (carry) wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         # cw keeps only what a shell name needs, five characters after the last slash, so a long word stays linear.
@@ -200,8 +212,8 @@ _guardrails_split_awk() {
 
 # A hook that times out lets the command through, so the guards do not read a command past these limits:
 # its length, the segments in its two splits, and the shells and evals it could make them re-read. Within
-# them, the slowest guard measured 4.1 s of its 10 s budget (macOS, load 6), on one eval re-reading 480 curl
-# lines of 32 local hosts each (#126).
+# them, the slowest guard measured 4.0 s of its 10 s budget (macOS, load 6), on 32,000 env wrappers before a
+# commit and on one eval re-reading 480 curl lines of 32 local hosts each (#110).
 _GUARDRAILS_SPLIT_MAX=131072
 _GUARDRAILS_SPLIT_MAX_SEGMENTS=10000
 _GUARDRAILS_SPLIT_MAX_SHELLS=16
@@ -228,7 +240,7 @@ _guardrails_unreadable() {
       for (last = np; last > 0 && part[last] !~ /(^|[ \t])-([^ \t-][^ \t]*)?c|<<</; last--) ;
       n++; k = 0; pre = 0
       for (i = 1; i <= np; i++) {
-        nw = split(part[i], w, /[^A-Za-z0-9_.-]+/); at = pre
+        t = part[i]; gsub(/["\047\\]/, "", t); nw = split(t, w, /[^A-Za-z0-9_.-]+/); at = pre
         for (j = 1; j <= nw; j++) {
           at += length(w[j]); sh = (w[j] == "sh" || w[j] == "bash" || w[j] == "zsh" || w[j] == "dash" || w[j] == "ksh")
           if (f == 1 && (sh || w[j] == "eval")) s++
@@ -261,48 +273,106 @@ _guardrails_command_at() {
   # Every segment pays for this call, and bash calls a small function faster, so only a word that can come before
   # the command goes on to the loop, which must skip each word named here.
   case "$_GUARDRAILS_CMD" in
-    *[=/\(]* | '' | '!' | '{' | if | then | elif | else | while | until | do) _guardrails_command_skip ;;
+    *[=/\(\)\<\>\"\'\\]* | '' | '!' | '{' | if | then | elif | else | while | until | do | in) _guardrails_command_skip ;;
+    function | coproc | case) _guardrails_command_skip ;;
     sudo | env | exec | time | xargs | ssh | nohup | command) _guardrails_command_skip ;;
+    timeout | nice | stdbuf | doas | setsid | chroot | docker | kubectl) _guardrails_command_skip ;;
+    *) [ "${toks[1]:-}" != '()' ] || _guardrails_command_skip ;;   # f () { ...; }
   esac
 }
 
 _guardrails_command_skip() {
-  local i=0 w b="" vals o start ssh=-1
+  local i=0 w b="" vals longs o start ops sub remote=-1 rb
+  local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
+    # Most words hold none of < > ( ), so they skip these checks, which every word before the command pays for.
     # A ( opens a subshell, fused to the word after it or not; (( is arithmetic.
-    case "$w" in '(('*) ;; '('*) w="${w#(}"; _GUARDRAILS_CMD_WRAPPED=1 ;; esac
+    case "$w" in
+      *[\<\>\(\)]*) case "$w" in '(('*) ;; '('*) w="${w#(}"; _GUARDRAILS_CMD_WRAPPED=1 ;; esac
+        # A redirect can come before the command (#109); an operator alone takes the next word as its target.
+        # Patterns sort the usual forms, as a regex per word costs more; a longer fd goes to the regex.
+        case "$w" in
+          \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \&\> | \&\>\> | \<\< | \<\<- | \<\<\< | [0-9]\< | [0-9]\> | \
+            [0-9]\>\> | [0-9]\>\| | [0-9]\<\> | [0-9]\>\& | [0-9]\<\& | [0-9]\<\< | [0-9]\<\<- | [0-9]\<\<\<)
+            i=$((i + 2)); _GUARDRAILS_CMD_WRAPPED=1; continue ;;
+          \<* | \>* | \&\>* | [0-9]\<* | [0-9]\>*) i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue ;;
+          [0-9]*[\<\>]* | \{*[\<\>]*)
+            if [[ $w =~ $redirect ]]; then
+              [ -n "${BASH_REMATCH[3]}" ] || i=$((i + 1))
+              i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue
+            fi ;;
+        esac
+        # A function's header and a case arm's pattern come before the command they run (#110).
+        case "$w" in
+          *'()'*) [[ $w =~ \(\)(.*)$ ]]; w="${BASH_REMATCH[1]}"; w="${w#[{(]}"; _GUARDRAILS_CMD_WRAPPED=1 ;;
+          *')') _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
+        esac ;;
+    esac
     case "$w" in
       [A-Za-z_]*=*) i=$((i + 1)); continue ;;
-      '' | '!' | '{' | if | then | elif | else | while | until | do) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
+      # The shell drops a command word's quotes and backslashes (#111). A name is short, and a long word would
+      # make the substitution slow, so only a short word is read this way.
+      *[\"\'\\]*) [ "${#w}" -gt 64 ] || { w="${w#\$}"; w="${w//[\"\'\\]/}"; _GUARDRAILS_CMD_WRAPPED=1; } ;;
+    esac
+    case "$w" in
+      '' | '!' | '{' | if | then | elif | else | while | until | do | in) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
+      function) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue ;;
+      # A coproc's name comes only before a compound command, and a case's word before its in.
+      coproc) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); case "${toks[$((i + 1))]:-}" in '{' | '('*) i=$((i + 1)) ;; esac; continue ;;
+      case) _GUARDRAILS_CMD_WRAPPED=1; for ((i = i + 1; i < ${#toks[@]}; i++)); do [ "${toks[$i]}" = in ] && break; done; continue ;;
     esac
     # ${w##*/} is quadratic on a long word, enough to time the hook out; this regex is linear.
     b="$w"; [[ $b == */* && $b =~ /([^/]*)$ ]] && b="${BASH_REMATCH[1]}"
-    # A wrapper runs the command after its options; vals are its short options that take a value.
+    # A wrapper runs the command after its options and its operand, if it has one: a duration, root, host or
+    # container. vals are its short options that take a value, and longs its long ones (#116).
+    ops=0; sub=0; longs=""
     case "$b" in
-      sudo) vals=CDghpRrTtUu ;;
-      env) vals=CPSu ;;
+      sudo) vals=CDghpRrTtUu; longs='--user --group --chdir --close-from --host --prompt --role --type --command-timeout --other-user --chroot' ;;
+      env) vals=CPSu; longs='--unset --chdir --split-string' ;;
       exec) vals=a ;;
-      time) vals=fo ;;
-      xargs) vals=adEIJLnPRSs ;;
-      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; ssh="$i" ;;
-      nohup | command) vals="" ;;
-      *) break ;;
+      time) vals=fo; longs='--output --format' ;;
+      xargs) vals=adEIJLnPRSs; longs='--arg-file --delimiter --max-args --max-procs --max-chars --process-slot-var' ;;
+      timeout) vals=ks; ops=1; longs='--signal --kill-after' ;;
+      nice) vals=n; longs='--adjustment' ;;
+      stdbuf) vals=ioe; longs='--input --output --error' ;;
+      doas) vals=Cu ;;
+      chroot) vals=ugG; ops=1; longs='--userspec --groups' ;;
+      nohup | command | setsid) vals="" ;;
+      # These run their command elsewhere, as you, so only a shell there is read, like a shell here.
+      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; ops=1; remote="$i"; rb="$b" ;;
+      docker)
+        [ "${toks[$((i + 1))]:-}" = exec ] || break
+        vals=euw; ops=1; sub=1; remote="$i"; rb="$b"; longs='--env --env-file --user --workdir --detach-keys' ;;
+      kubectl)
+        [ "${toks[$((i + 1))]:-}" = exec ] || break
+        vals=cfn; ops=1; sub=1; remote="$i"; rb="$b"; longs='--container --filename --namespace --pod-running-timeout' ;;
+      # f () { ...; } names a function before its body.
+      *) [ "${toks[$((i + 1))]:-}" != '()' ] || { _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue; }; break ;;
     esac
-    start="$i"; _GUARDRAILS_CMD_WRAPPED=1
-    for ((i = i + 1; i < ${#toks[@]}; i++)); do
-      o="${toks[$i]}"
-      case "$o" in --) i=$((i + 1)); break ;; -?*) ;; *) break ;; esac
-      # command -v and -V name a command without running it.
-      [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 2; }
-      # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
-      [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1))
+    start="$i"; _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1 + sub))
+    while :; do
+      for (( ; i < ${#toks[@]}; i++)); do
+        o="${toks[$i]}"
+        case "$o" in
+          --) i=$((i + 1)); break ;;
+          # A long option written with = holds its value.
+          --*) case " $longs " in *" $o "*) i=$((i + 1)) ;; esac ;;
+          -?*)
+            # command -v and -V name a command without running it.
+            [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 3; }
+            # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
+            [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1)) ;;
+          *) break ;;
+        esac
+      done
+      [ "$ops" -gt 0 ] || break
+      # kubectl takes options after its pod as well.
+      ops=0; i=$((i + 1)); [ "$b" = kubectl ] || break
     done
-    [ "$b" = ssh ] && i=$((i + 1))   # the host
   done
   [ "$i" -lt "${#toks[@]}" ] || b=""
-  # ssh runs its command on another host, as you; only a shell there is read, like a shell here.
-  if [ "$ssh" -ge 0 ]; then case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$ssh"; b=ssh ;; esac; fi
+  if [ "$remote" -ge 0 ]; then case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$remote"; b="$rb" ;; esac; fi
   _GUARDRAILS_CMD_AT="$i"; _GUARDRAILS_CMD="$b"
 }
 
@@ -312,7 +382,7 @@ _guardrails_command_skip() {
 _guardrails_shell_payload() {
   local seg="$1" i k inner="" here='<<<[[:space:]]*(.*)$'
   local -a toks
-  case "$seg" in *eval* | *'<<<'* | *-*c*) ;; *) return 1 ;; esac
+  case "$seg" in *eval* | *'<<<'* | *-*c* | *[\"\'\\]*) ;; *) return 1 ;; esac
   read -r -a toks <<<"$seg" || return 1
   _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"
   case "$_GUARDRAILS_CMD" in

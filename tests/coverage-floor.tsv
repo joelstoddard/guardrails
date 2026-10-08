@@ -7,7 +7,7 @@ plugins/building/hooks/scripts/post-merge-cleanup.sh	100.0
 plugins/building/hooks/scripts/suppression-warn.sh	100.0
 plugins/building/hooks/scripts/test-gate.sh	100.0
 plugins/building/lib/git-cmd.sh	100.0
-plugins/building/lib/publish-cmd.sh	96.3
+plugins/building/lib/publish-cmd.sh	96.7
 plugins/building/lib/repo-cmd.sh	100.0
 plugins/building/lib/shell-split.sh	100.0
 plugins/personas/hooks/scripts/persona-report.sh	100.0
