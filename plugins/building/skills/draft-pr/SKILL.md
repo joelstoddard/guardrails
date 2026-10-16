@@ -1,6 +1,6 @@
 ---
 name: draft-pr
-description: Create a draft pull request with a standardized What/Why/How body and conventional-commit title, or hand the user the exact `gh pr create --draft` command to run. Follow this skill whenever opening a pull request, or when the user asks for the command to open one — the draft PR is the human review checkpoint, so the body format is fixed, the title is conventional-commit, and the PR is always marked draft. Main agents only; sub-agents return their work to the main agent to PR.
+description: Create a draft pull request with a standardized body (a blank Intent for the author, then What/Why/How) and conventional-commit title, or hand the user the exact `gh pr create --draft` command to run. Follow this skill whenever opening a pull request, or when the user asks for the command to open one — the draft PR is the human review checkpoint, so the body format is fixed, the title is conventional-commit, and the PR is always marked draft. Main agents only; sub-agents return their work to the main agent to PR.
 allowed-tools: Bash(git *), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr create --draft:*), Bash(gh auth status:*), Bash(gh repo view:*), Agent
 ---
 
@@ -47,9 +47,14 @@ Derivation priority:
 
 ### Body format (non-negotiable)
 
-Exactly three sections, in this order, with these headings:
+Exactly four sections, in this order, with these headings:
 
 ```markdown
+## Intent
+
+> [!IMPORTANT]
+> Author: replace this block with the mission these changes drive towards, in your own words. An agent never writes this section.
+
 ## What
 <bulleted summary of the changes — derived from the commits on this branch>
 
@@ -60,6 +65,7 @@ Exactly three sections, in this order, with these headings:
 <approach — key design decisions or tradeoffs worth surfacing to the reviewer>
 ```
 
+- **Intent** is the author's: the mission the change drives towards, which only they can state, and which aligns the agents, the author and the reviewers. Copy the placeholder above verbatim and write nothing into it, whatever the conversation says about the goal. Tools detect an unfilled Intent by the placeholder's text. The author fills it in before marking the PR ready.
 - **What** is derivable from `git log <base>..HEAD` alone. No conversation required.
 - **Why** and **How** come from conversation context. If conversation context is missing (e.g., the user starts a fresh session and says "PR this branch"), ask the user for the Why and How before proceeding. Never fabricate.
 
@@ -79,6 +85,7 @@ Stop and report if any check fails:
 
 - **Title:** Conventional Commit format, derived per the rule above.
 - **Body:**
+  - `## Intent`: the placeholder, verbatim.
   - `## What` from `git log <base>..HEAD --format='%s%n%b'` — bullet the distinct changes.
   - `## Why` from conversation context.
   - `## How` from conversation context.
@@ -89,6 +96,8 @@ If Why or How cannot be derived from conversation, ask the user. Do not fabricat
 
 State, without waiting: the title, the base branch, draft status, and whether
 the push creates or updates the remote branch. Then proceed.
+
+With the PR URL, tell the user to replace the Intent block before marking the PR ready.
 
 The draft state is the review gate — the user reviews the PR itself, not a
 preview of it. Asking twice is what this skill is removing.
@@ -116,6 +125,11 @@ so do not start the watcher.
 ## Body template
 
 ```markdown
+## Intent
+
+> [!IMPORTANT]
+> Author: replace this block with the mission these changes drive towards, in your own words. An agent never writes this section.
+
 ## What
 - <change 1 — from commit subjects>
 - <change 2>
@@ -137,6 +151,7 @@ so do not start the watcher.
 | Open PR already exists for branch | Refuse. Surface the existing PR URL. |
 | `gh` not authenticated | Use hand-back mode. Push, then give the exact `gh pr create --draft` command. |
 | Missing Why/How context | Ask the user. Do not fabricate. |
+| User asks the agent to fill in the Intent | Leave the placeholder. Say the Intent is theirs to write, on the PR. |
 | `git push` fails | Surface the error. Do not attempt `gh pr create`. |
 | CI still red after the watcher's three rounds | Surface the watcher's report. Do not retry. |
 
@@ -146,6 +161,7 @@ so do not start the watcher.
 - About to force-push or use `--no-verify`.
 - About to create a second PR when one already exists.
 - About to invent a "Why" or "How" because conversation context is thin.
+- About to write anything into the Intent block, or drop it.
 - About to mark the PR ready for review, or to let the watcher do so.
 
 All of these mean: stop, surface the issue to the user, and wait.

@@ -1,5 +1,5 @@
 schema_version: "1.1"
 name: draft-pr-uses-draft
-description: draft-pr gives a gh pr create command with --draft and a What/Why/How body, though the user never says draft.
+description: draft-pr gives a gh pr create command with --draft and an Intent/What/Why/How body with the Intent left blank, though the user never says draft.
 context:
   scaffold_script: scaffold.sh
