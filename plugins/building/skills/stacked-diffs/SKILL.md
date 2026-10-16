@@ -121,7 +121,7 @@ Use when the current branch has grown too large and needs to be split.
    gh pr create --draft --base feat/thing-01-schema     --head feat/thing-02-api    --title "..." --body "..."
    gh pr create --draft --base feat/thing-02-api        --head feat/thing-03-ui     --title "..." --body "..."
    ```
-   Use the `draft-pr` body format (What / Why / How). In the **Why**, note this PR's position in the stack and link the PRs above and below it.
+   Use the `draft-pr` body format (Intent / What / Why / How), with the Intent placeholder left blank on every layer for the author. In the **Why**, note this PR's position in the stack and link the PRs above and below it.
 6. **Report the stack** to the user with all three PR URLs.
 
 ### B. Preemptive stacking — start the next slice on top
