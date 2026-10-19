@@ -311,6 +311,24 @@ class PersonaGraders(unittest.TestCase):
         self.assertRegex(trace(dispatch("fork")), pattern)
         self.assertNotRegex(trace(rules, dispatch("general-purpose"), dispatch("personas:qa-engineer")), pattern)
 
+    def test_no_inline_review_fails_only_on_the_main_session_running_a_review_skill(self):
+        pattern = grader("review-not-forked", "no-inline-review", plugin="personas")
+
+        def skill(name, parent):
+            # The trace puts parent_tool_use_id after the message: null for the main session, an id inside a subagent.
+            return line({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill", "input": {"skill": name}}]},
+                         "parent_tool_use_id": parent})
+
+        cases = {
+            "main session, built-in": (skill("code-review", None), True),
+            "main session, plugin": (skill("superpowers:requesting-code-review", None), True),
+            "inside the fresh reviewer": (skill("code-review", "toolu_01"), False),
+            "main session, other skill": (skill("building:commit", None), False),
+        }
+        for name, (text, inline) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(bool(pattern.search(trace(text))), inline)
+
     def test_dispatched_needs_an_agent_call_not_its_mention(self):
         pattern = grader("review-not-forked", "dispatched", plugin="personas")
         prose = assistant({"type": "text", "text": "I reviewed it myself instead of using the Task tool."})

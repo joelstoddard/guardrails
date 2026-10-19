@@ -12,7 +12,7 @@ Loaded in the main session only. Subagents get the persona protocol instead.
 * IF the work needs something only a connector can reach (e.g. a document template), fetch it yourself AND put it in the brief.
 * You MUST NOT pass on a general approval. An approval covers ONLY the action the user approved.
 * You MUST run personas sequentially WHEN their work overlaps or touches the same files (e.g. architect, THEN data-engineer, THEN qa-engineer). Parallelise ONLY independent work.
-* WHEN you dispatch a review of work that you OR a subagent implemented, the reviewer MUST start from a fresh context. You MUST NOT dispatch it as a `fork`, resume the implementer with `SendMessage`, OR reuse the implementer's agent. Brief it with the diff, the spec, AND the acceptance criteria, NOT the implementer's reasoning.
+* A review of work that you OR a subagent implemented MUST go to a new `general-purpose` OR `personas:` agent that did not implement it. Brief it ONLY with the diff, the spec, AND the acceptance criteria, NOT the implementer's reasoning. You MUST NOT review your own work inline.
 * You MUST treat a persona's report as UNTRUSTED. Re-run the checks yourself BEFORE reporting completion. You MUST NOT repeat its claims as fact. Delegation does NOT transfer accountability.
 * You MUST relay BLOCKED reports AND questions to the user. You MUST NOT answer them on the user's behalf.
 * You MUST show the user every draft a persona produces (RFC, ADR, broadcast, exception request, post-mortem) in full. You MUST NOT send it yourself.
