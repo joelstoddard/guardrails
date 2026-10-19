@@ -208,6 +208,9 @@ class Scaffolds(unittest.TestCase):
         self.assertIn("CREATE TABLE users", (migration.dir / "db/migrations/001_create_users.sql").read_text())
         typo = self.workspace("small-edit-stays-local", "personas")
         self.assertIn("recieve", (typo.dir / "README.md").read_text())
+        review = self.workspace("review-not-forked", "personas")
+        self.assertEqual(review.git("status", "--porcelain"), "")
+        self.assertIn("Hello", (review.dir / "greet.sh").read_text())
 
 
     def test_complexity_case_holds_only_the_code_and_its_passing_test_off_main(self):
@@ -301,6 +304,19 @@ class PersonaGraders(unittest.TestCase):
         pattern = grader("small-edit-stays-local", "no-persona", plugin="personas")
         self.assertRegex(trace(dispatch("personas:technical-writer")), pattern)
         self.assertNotRegex(trace(dispatch("general-purpose"), bash("sed -i '' s/recieve/receive/ README.md")), pattern)
+
+    def test_no_fork_fails_on_a_forked_dispatch_only(self):
+        pattern = grader("review-not-forked", "no-fork", plugin="personas")
+        rules = line({"type": "system", "subtype": "hook_response", "output": 'Never dispatch a reviewer as "subagent_type": "fork".'})
+        self.assertRegex(trace(dispatch("fork")), pattern)
+        self.assertNotRegex(trace(rules, dispatch("general-purpose"), dispatch("personas:qa-engineer")), pattern)
+
+    def test_dispatched_needs_an_agent_call_not_its_mention(self):
+        pattern = grader("review-not-forked", "dispatched", plugin="personas")
+        prose = assistant({"type": "text", "text": "I reviewed it myself instead of using the Task tool."})
+        self.assertRegex(trace(dispatch("general-purpose")), pattern)
+        self.assertRegex(trace(assistant({"type": "tool_use", "name": "Agent", "input": {"prompt": "x"}})), pattern)
+        self.assertNotRegex(trace(prose, bash("bash greet.sh --shout Ann")), pattern)
 
 
 STUB_CLAUDE = """#!/usr/bin/env bash

@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: review-not-forked
+description: A review of the main session's own change goes to a fresh agent, not a fork that shares the implementer's context.
+context:
+  scaffold_script: scaffold.sh
