@@ -52,7 +52,9 @@ the git guards and the shell readers, finds the command word through one lookup,
 
 - `NAME=value` assignments;
 - redirects, such as `2>/dev/null` or `> out`, where an operator alone takes the next word
-  as its target (#109);
+  as its target (#109). The split has already dropped a heredoc's delimiter, and the per-line
+  split a here-string's word, so a `<<` alone takes none, nor a `<<<` in the per-line split,
+  unless the next word starts with a digit, which the split keeps as a shift's operand (#131);
 - the keywords `!`, `{`, `(`, `if`, `then`, `elif`, `else`, `while`, `until`, `do` and
   `in`, and a `(` fused to the next word;
 - a function's header (`f()`, `f ()`, `function f`), a case arm's pattern (a word ending in
@@ -68,6 +70,14 @@ The shell drops a command word's quotes and backslashes, so the lookup does too 
 matches a word: `"bash"`, `'gh'`, `ba\sh` and `$'bash'` are read as `bash`, `gh` and `bash`
 (#111). Only a word of 64 characters or fewer is read this way, which any name it matches
 is, as the substitution is slow on a long word.
+
+The words after the command are read the same way, in `_guardrails_skip_redirect` and
+`_guardrails_unquote`, which the lookup shares. So git's global options and subcommand, and
+the words before a publish verb, are read past redirects and without their quotes: `git
+2>/dev/null commit`, `git "commit"` and `gh >out pr create` are what they run (#131). A
+redirect between `-C` and its directory does not hide the directory, and a redirect's target
+is not read as `-C` or as a publish verb. The publish guard still matches an option as
+written, so a quoted `"-w"` stays a word before a verb, as it was before.
 
 `command -v` and `-V` name a command without running it, so there `command` is the
 command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
@@ -196,9 +206,13 @@ checks; that kept 32,000 `env` wrappers at 4.0 s rather than 4.8 s.
 Tokens are split on whitespace with no quote handling, so
 `git -C '/path with spaces' commit` is not parsed correctly. This is consistent
 with the tripwire framing: the failure is fail-open, and the guard lets the command
-through rather than blocking it wrongly. For the same reason a quoted subcommand, as in
-`git "commit"`, is not recognised, and a long option that takes a separate value but is
-not in its wrapper's list reads its value as the command word.
+through rather than blocking it wrongly. For the same reason a long option that takes a
+separate value but is not in its wrapper's list reads its value as the command word.
+
+A quoted argument of several words is read as several words. Each loses its quotes, so
+the publish guard reads `say "post it"` as the verb `post`, as it always read the middle
+words of such an argument. This blocks some commands that publish nothing, and catches
+`ssh host 'npm publish'`, which publishes from another host.
 
 A shell that runs on another host, as in `ssh host bash <<EOF`, has its script read like
 a local one. So `guard-default-branch` judges a `git commit` in it against the local

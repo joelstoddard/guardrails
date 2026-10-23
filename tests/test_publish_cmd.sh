@@ -472,4 +472,24 @@ allows 'curl -d x "http://127.0.0.1"'                                    "a quot
 allows "curl -d x 'http://127.0.0.1'"                                    "a single-quoted loopback address"
 allows 'curl localhost'                                                  "a read from localhost"
 
+# A redirect or a quoted word between a command and its subcommand does not hide it (#131).
+blocks 'gh >out pr create --fill'                  "a fused redirect between gh and its subcommand"
+blocks 'gh pr 2> /dev/null create --title x'       "a separate redirect before create"
+blocks 'npm >a 2>b <c publish'                     "redirects do not count as words before a verb"
+blocks 'gh pr "comment" 1 -b x'                    "a quoted publish verb"
+blocks "gh 'pr' create --fill"                     "a quoted subcommand before create"
+blocks 'gh pr com\ment 1 -b x'                     "an escaped publish verb"
+allows 'gh >out pr create --draft --fill'          "a draft PR behind a redirect"
+allows 'gh pr view 1 > out'                        "a read with its output redirected"
+allows 'gh pr > comment view 1'                    "a redirect's target is not a verb"
+allows 'gh pr create --draft --fill'               "a draft PR with --fill"
+# The split drops a heredoc's delimiter, so the word after its << is not the delimiter.
+blocks $'gh pr <<EOF comment 1 -b x\nbody\nEOF'     "a heredoc opened before a publish verb"
+blocks 'gh pr << 2 comment 1 -b x'                 "a numeric heredoc delimiter, which the split keeps"
+blocks $'gh pr 10<<EOF comment 1 -b x\nbody\nEOF'   "a heredoc on a two-digit fd before a publish verb"
+blocks 'npm "-w" app publish'                      "a quoted word that looks like an option, as before"
+blocks 'gh pr <<< body comment 1 -b x'             "a here-string's word is not a verb"
+per_line_blocks() { _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$1" >/dev/null || { echo "  FAIL [$2]: expected BLOCK"; FAILS=1; }; }
+per_line_blocks 'gh pr <<<x comment 1 -b x'        "the per-line split drops a here-string's word too"
+
 finish "publish-cmd"

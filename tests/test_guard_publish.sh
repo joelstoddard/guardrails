@@ -253,4 +253,15 @@ run_hook "$S" "$(jsonin 'curl -d x http://127.0.0.1:8080/x')"
 assert_rc 0 "an HTTP write to a loopback address allowed"
 assert_eq "$OUT" "" "an HTTP write to a loopback address asks nothing"
 
+# A redirect or a quoted word between a command and its subcommand does not hide it (#131).
+run_hook "$S" "$(jsonin 'gh >out pr create --fill')"
+assert_rc 2 "a ready PR behind a redirect after gh blocked"
+run_hook "$S" "$(jsonin 'gh pr "comment" 1 -b x')"
+assert_rc 2 "a quoted publish verb blocked"
+for c in 'gh pr view 1 > out' 'gh pr create --draft --fill'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 0 "$c allowed"
+  assert_eq "$OUT" "" "$c asks nothing"
+done
+
 finish "guard-publish"

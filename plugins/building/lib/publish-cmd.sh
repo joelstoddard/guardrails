@@ -107,7 +107,7 @@ _guardrails_publishes_as_user() {
       return 0 ;;
   esac
 
-  local seg i base n
+  local seg i base n w
   local -a toks lead
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
@@ -154,13 +154,14 @@ _guardrails_publishes_as_user() {
       *" $base "*) continue ;;
     esac
     lead=()
-    n="$i"
-    while [ "$n" -lt "${#toks[@]}" ] && [ "${#lead[@]}" -lt 4 ]; do
-      case "${toks[$n]}" in
-        -*) break ;;
-        *) lead+=("${toks[$n]}") ;;
-      esac
-      n=$((n + 1))
+    while [ "$i" -lt "${#toks[@]}" ] && [ "${#lead[@]}" -lt 4 ]; do
+      w="${toks[$i]}"
+      # The shell takes out redirects and drops quotes before the command reads its words (#131). An option is matched
+      # as written, so a quoted one stays a word, as it was before.
+      case "$w" in -*) break ;; *[\<\>]*) _guardrails_skip_redirect && continue ;; esac
+      case "$w" in *[\"\'\\]*) _guardrails_unquote ;; esac
+      lead+=("$w")
+      i=$((i + 1))
     done
     # A ready review request notifies reviewers, so only a draft is safe unasked.
     # Scan the whole segment, because the flag's position can change.

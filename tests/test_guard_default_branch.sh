@@ -185,4 +185,19 @@ assert_rc 2 "a commit behind sudo --user on the default branch blocked"
 run_hook "$S" "$(jsonat "$r13" '"git" commit -m x')"
 assert_rc 2 "a commit by a quoted git on the default branch blocked"
 
+# A redirect or a quoted word between git and its subcommand does not hide it (#131).
+run_hook "$S" "$(jsonat "$r13" 'git 2>/dev/null commit -m x')"
+assert_rc 2 "a commit behind a redirect after git on the default branch blocked"
+run_hook "$S" "$(jsonat "$r13" 'git "commit" -m x')"
+assert_rc 2 "a quoted commit on the default branch blocked"
+run_hook "$S" "$(jsonat "$r14b" "git 2>/dev/null -C $r13 commit -m x")"
+assert_rc 2 "a commit -C into a default-branch repo after a redirect blocked"
+run_hook "$S" "$(jsonat "$r2" 'git commit -m "x"')"
+assert_rc 0 "a commit with a quoted message on a feature branch allowed"
+for c in 'git -C /x status' 'git --no-pager log' 'git log > out'; do
+  run_hook "$S" "$(jsonat "$r13" "$c")"
+  assert_rc 0 "$c allowed on the default branch"
+  assert_eq "$OUT" "" "$c asks nothing"
+done
+
 finish "guard-default-branch"

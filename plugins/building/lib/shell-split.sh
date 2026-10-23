@@ -281,28 +281,48 @@ _guardrails_command_at() {
   esac
 }
 
+# _guardrails_skip_redirect → rc 0 if the caller's word w, at its index i, is a redirect (#109), with i past it, and past
+# its target when the operator stands alone. Callers pass only a word that holds < or >.
+_guardrails_skip_redirect() {
+  # Patterns sort the usual forms, as a regex per word costs more; a longer fd goes to the regex. An operator alone takes
+  # the next word as its target.
+  case "$w" in
+    \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \&\> | \&\>\> | [0-9]\< | [0-9]\> | [0-9]\>\> | [0-9]\>\| | \
+      [0-9]\<\> | [0-9]\>\& | [0-9]\<\&) i=$((i + 2)); return 0 ;;
+    \<\< | \<\<- | \<\<\< | [0-9]\<\< | [0-9]\<\<- | [0-9]\<\<\<) ;;
+    \<* | \>* | \&\>* | [0-9]\<* | [0-9]\>*) i=$((i + 1)); return 0 ;;
+    [0-9]*[\<\>]* | \{*[\<\>]*)
+      local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
+      [[ $w =~ $redirect ]] || return 1
+      [ -z "${BASH_REMATCH[3]}" ] || { i=$((i + 1)); return 0; }
+      case "${BASH_REMATCH[2]}" in \<\< | \<\<- | \<\<\<) ;; *) i=$((i + 2)); return 0 ;; esac ;;
+    *) return 1 ;;
+  esac
+  # The split drops a heredoc's delimiter, as the per-line split does a here-string's word, unless the word starts with
+  # a digit, which they read as a shift.
+  i=$((i + 1))
+  case "$w" in *\<\<\<) [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ] || { i=$((i + 1)); return 0; } ;; esac
+  case "${toks[$i]:-}" in [0-9]*) i=$((i + 1)) ;; esac
+}
+
+# _guardrails_unquote → rc 0 with the quotes and backslashes the shell drops removed from the caller's word w, if it is
+# short (#111). Callers pass only a word that holds a quote or backslash.
+_guardrails_unquote() {
+  # A name is short, and a long word would make the substitution slow.
+  [ "${#w}" -le 64 ] || return 1
+  w="${w#\$}"; w="${w//[\"\'\\]/}"
+}
+
 _guardrails_command_skip() {
   local i=0 w b="" vals longs o start ops sub remote=-1 rb
-  local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
     # Most words hold none of < > ( ), so they skip these checks, which every word before the command pays for.
     # A ( opens a subshell, fused to the word after it or not; (( is arithmetic.
     case "$w" in
       *[\<\>\(\)]*) case "$w" in '(('*) ;; '('*) w="${w#(}"; _GUARDRAILS_CMD_WRAPPED=1 ;; esac
-        # A redirect can come before the command (#109); an operator alone takes the next word as its target.
-        # Patterns sort the usual forms, as a regex per word costs more; a longer fd goes to the regex.
-        case "$w" in
-          \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \&\> | \&\>\> | \<\< | \<\<- | \<\<\< | [0-9]\< | [0-9]\> | \
-            [0-9]\>\> | [0-9]\>\| | [0-9]\<\> | [0-9]\>\& | [0-9]\<\& | [0-9]\<\< | [0-9]\<\<- | [0-9]\<\<\<)
-            i=$((i + 2)); _GUARDRAILS_CMD_WRAPPED=1; continue ;;
-          \<* | \>* | \&\>* | [0-9]\<* | [0-9]\>*) i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue ;;
-          [0-9]*[\<\>]* | \{*[\<\>]*)
-            if [[ $w =~ $redirect ]]; then
-              [ -n "${BASH_REMATCH[3]}" ] || i=$((i + 1))
-              i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue
-            fi ;;
-        esac
+        # A redirect can come before the command (#109).
+        _guardrails_skip_redirect && { _GUARDRAILS_CMD_WRAPPED=1; continue; }
         # A function's header and a case arm's pattern come before the command they run (#110).
         case "$w" in
           *'()'*) [[ $w =~ \(\)(.*)$ ]]; w="${BASH_REMATCH[1]}"; w="${w#[{(]}"; _GUARDRAILS_CMD_WRAPPED=1 ;;
@@ -311,9 +331,8 @@ _guardrails_command_skip() {
     esac
     case "$w" in
       [A-Za-z_]*=*) i=$((i + 1)); continue ;;
-      # The shell drops a command word's quotes and backslashes (#111). A name is short, and a long word would
-      # make the substitution slow, so only a short word is read this way.
-      *[\"\'\\]*) [ "${#w}" -gt 64 ] || { w="${w#\$}"; w="${w//[\"\'\\]/}"; _GUARDRAILS_CMD_WRAPPED=1; } ;;
+      # The shell drops a command word's quotes and backslashes (#111).
+      *[\"\'\\]*) _guardrails_unquote && _GUARDRAILS_CMD_WRAPPED=1 ;;
     esac
     case "$w" in
       '' | '!' | '{' | if | then | elif | else | while | until | do | in) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
