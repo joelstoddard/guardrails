@@ -40,23 +40,33 @@ assert_eq "[sre] Retries have no upper bound
 [sre] TTL unset" "$(cat "$PENDING/a1")" "a retry replaces the same subagent's earlier report"
 
 run_hook "$CAPTURE" "$(sub "$(report 'Disk fills up' )" s1 a2)"
-run_hook "$GATE" "$(stop 'All done.')"
-assert_out '"decision": "block"' "pending findings block the main stop"
+run_hook "$GATE" "$(stop 'Step 1 of 3 done.')"
+assert_eq "" "$OUT" "pending findings are held while the message lists no findings"
+[ -e "$PENDING/a1" ] || { echo "  FAIL [a held stop keeps the pending findings]"; FAILS=1; }
+
+own='### Findings outside scope
+- Own finding #4'
+run_hook "$GATE" "$(stop "All done.
+$own")"
+assert_out '"decision": "block"' "a findings list that leaves out pending findings blocks"
 assert_out "[sre] Retries have no upper bound" "reason lists the first subagent's findings"
 assert_out "[sre] Disk fills up" "reason lists the second subagent's findings"
 assert_eq "0" "$(printf '%s' "$OUT" | grep -c 'Retries are unbounded')" "the replaced report is gone"
 [ -e "$PENDING/a1" ] || { echo "  FAIL [a block keeps the pending findings]"; FAILS=1; }
 
-run_hook "$GATE" "$(stop 'Still not tracked.' true)"
+run_hook "$GATE" "$(stop "Still not tracked.
+$own" true)"
 assert_eq "" "$OUT" "a continuation with nothing new is let through, so the gate cannot loop"
 
 run_hook "$CAPTURE" "$(sub "$(report 'Queue has no dead-letter' )" s1 a3)"
-run_hook "$GATE" "$(stop 'Still working.' true)"
+run_hook "$GATE" "$(stop "Still working.
+$own" true)"
 assert_out "[sre] Queue has no dead-letter" "a finding captured during a continuation blocks that continuation's stop"
 assert_eq "0" "$(printf '%s' "$OUT" | grep -c 'Disk fills up')" "findings already shown this turn are not listed again"
 
-run_hook "$GATE" "$(stop 'Next turn.')"
-assert_out "[sre] Disk fills up" "findings the model ignored block again at the next turn's stop"
+run_hook "$GATE" "$(stop "Next turn.
+$own")"
+assert_out "[sre] Disk fills up" "findings left out block again at the next findings list"
 
 run_hook "$GATE" "$(stop 'Filed them.
 ### Findings outside scope
@@ -81,6 +91,15 @@ run_hook "$CAPTURE" "$(sub "$(report 'x')" '../escape')"
 [ -e "$XDG_STATE_HOME/claude-guardrails/escape" ] && { echo "  FAIL [unsafe session id is ignored]"; FAILS=1; }
 run_hook "$CAPTURE" "$(sub "$(report 'x')" s1 '../../escape')"
 [ -e "$XDG_STATE_HOME/claude-guardrails/escape" ] && { echo "  FAIL [unsafe agent id is ignored]"; FAILS=1; }
+
+run_hook "$CAPTURE" "$(sub "$(report 'Cert expires soon')" s2 b1)"
+s2() { jq -n --arg m "$1" '{session_id:"s2", last_assistant_message:$m}'; }
+run_hook "$GATE" "$(s2 '### Findings outside scope
+None.')"
+assert_out "[sre] Cert expires soon" "an empty findings list still blocks on pending findings"
+run_hook "$GATE" "$(s2 '## Report: **Findings outside scope**
+- Own finding left untracked')"
+assert_out "Own finding left untracked" "a heading with emphasis inside is a findings list"
 
 run_hook "$GATE" '{}'
 assert_eq "" "$OUT" "no message, no opinion"

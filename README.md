@@ -5,8 +5,8 @@ and finds, and let it delegate to specialists.
 
 | Plugin | What it does |
 |---|---|
-| `building` | Blocks publishing as the user and commits on the default branch, gates tests on push, warns on lint, suppressions and long comments, and drives commit, rebase, stacked diffs, draft PRs, CI watching and pre-PR checks |
-| `recording` | Keeps findings tracked, nudges pending lessons, and drives ADRs, RFCs, mistake write-ups, project memory and self-improvement |
+| `building` | Blocks publishing as the user and commits on the default branch, gates tests on push, warns on lint, suppressions and long comments, and drives commit, rebase, stacked diffs, draft PRs, CI watching and pre-PR checks. Turns on the `clear` output style: short, plain replies with the next action and any decision last |
+| `recording` | Keeps findings tracked and lists them once when a request is done, nudges pending lessons, and drives ADRs, RFCs, mistake write-ups, project memory and self-improvement |
 | `personas` | Seven specialist subagents (architect, data-engineer, qa-engineer, release-engineer, sre, security-engineer, technical-writer) and their delegation rules. Installs `building` and `recording` too |
 
 Each plugin injects its standing rules at session and subagent start.

@@ -18,6 +18,12 @@ assert_eq "" "$versions" "no version pins"
 assert_eq '["building","recording"]' "$(jq -c '.dependencies' "$ROOT/plugins/personas/.claude-plugin/plugin.json")" \
   "personas depends on building and recording"
 
+# The validator does not read output styles. Without keep-coding-instructions, the style drops Claude Code's coding rules.
+style="$(sed -n '2,/^---$/p' "$ROOT/plugins/building/output-styles/clear.md")"
+for key in 'force-for-plugin: true' 'keep-coding-instructions: true'; do
+  printf '%s\n' "$style" | grep -qxF "$key" || { echo "  FAIL [clear output style]: frontmatter lacks '$key'"; FAILS=1; }
+done
+
 # A hook script that no hooks.json entry runs is a guard that silently stopped.
 for s in "$ROOT"/plugins/*/hooks/scripts/*.sh; do
   jq -e --arg s "/hooks/scripts/$(basename "$s")" '[.. | objects | select(has("command")) | .command | select(contains($s))] != []' \
