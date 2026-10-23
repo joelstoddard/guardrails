@@ -181,14 +181,24 @@ The publish guard checks `curl`, `wget`, `http` and `gh api` lines without start
 scan now costs a regex per URL. So past 32 URLs in one segment a write is read as remote,
 which bounds a segment, while the length cap bounds the URLs in a command.
 
-Within the caps, the slowest inputs measured took 4.0 s of the 10 s budget on macOS at load 6:
-32,000 `env` wrappers before a `git commit`, read by guard-default-branch, and one `eval`
-re-reading 480 `curl -d` lines of 32 local hosts each, read by guard-publish (3.4 s on Linux).
-The words the lookup skips since #109, #110, #111 and #116 come next, at 2.7 to 3.9 s for
-26,000 escaped wrappers, 32,000 redirects, 13,100 `timeout 1` wrappers or 7,700
-`sudo --user root` before a commit. Each word before a command costs the lookup a few
-checks, so a word holding none of `<`, `>`, `(` and `)` skips the redirect and function
-checks; that kept 32,000 `env` wrappers at 4.0 s rather than 4.8 s.
+Within the caps, the slowest inputs measured took 4.1 s of the 10 s budget on macOS, on an
+M4 Max at load 3 to 6, when re-measured for #131: 32,000 `env` wrappers before a `git commit`,
+read by guard-default-branch, and one `eval` re-reading 480 `curl -d` lines of 32 local hosts
+each, read by guard-publish (3.4 s on Linux, when last measured there). The words the lookup
+skips since #109, #110, #111 and #116 come next, at 2.7 to 4.0 s for 26,000 escaped
+wrappers, 32,000 redirects, 13,100 `timeout 1` wrappers or 7,700 `sudo --user root` before a
+commit. Each word before a command costs the lookup a few checks, so a word holding none of
+`<`, `>`, `(` and `)` skips the redirect and function checks; that kept 32,000 `env`
+wrappers at 4.0 s rather than 4.8 s.
+
+The words after a command are read the same way since #131, so they are on the slow path
+too: 32,000 redirects or escaped options between `git` and `commit` take guard-default-branch
+3.0 to 3.7 s. A call to the shared redirect or unquote helper costs a few microseconds a word,
+so 32,000 redirects before a commit went from 2.8 to 3.4 s. The pipe check drops quotes as
+bytes (#134): in a UTF-8 locale the substitution took guard-publish 19 s on 126 KB of quoted
+multibyte words, and as bytes it takes 1.1 s. A host that ends in a quote costs two more
+regexes (#135), so one `eval` re-reading 205 lines of 32 quoted local URLs takes
+guard-publish 3.0 s.
 
 ## What was rejected
 
