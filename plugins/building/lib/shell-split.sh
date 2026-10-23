@@ -447,10 +447,13 @@ _guardrails_shell_reads_stdin() {
 
 # _guardrails_names_shell <text> → rc 0 if a shell or eval appears in it as a word, as it must to run.
 _guardrails_names_shell() {
-  local w
-  case "$1" in *sh* | *eval*) ;; *) return 1 ;; esac
+  local w t="$1"
+  # The shell drops quotes, backslashes and a backslash-newline inside a word, so b"as"h is bash (#134). As bytes, as the
+  # substitution is quadratic on long text in a UTF-8 locale.
+  case "$t" in *[\"\'\\]*) local LC_ALL=C; t="${t//\\$'\n'/}"; t="${t//[\"\'\\]/}" ;; esac
+  case "$t" in *sh* | *eval*) ;; *) return 1 ;; esac
   for w in sh bash zsh dash ksh eval; do
-    case " $1 " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
+    case " $t " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
   done
   return 1
 }

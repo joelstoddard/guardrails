@@ -492,4 +492,14 @@ blocks 'gh pr <<< body comment 1 -b x'             "a here-string's word is not 
 per_line_blocks() { _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$1" >/dev/null || { echo "  FAIL [$2]: expected BLOCK"; FAILS=1; }; }
 per_line_blocks 'gh pr <<<x comment 1 -b x'        "the per-line split drops a here-string's word too"
 
+# A shell's name with quotes or backslashes inside it is still its name, so the pipe check reads it (#134).
+unseen 'cat x | b"as"h'                 "a pipe into a shell whose name holds quotes"
+unseen "cat x | k's'h -s"               "a pipe into a shell whose name holds single quotes"
+unseen 'cat x | b\ash'                  "a pipe into a shell whose name holds a backslash"
+unseen $'cat x | b\\\nash'              "a pipe into a shell whose name a backslash-newline splits"
+unseen $'true; cat x | b"as"h'          "a pipe into a quoted shell after another command"
+unseen "bash -c 'cat x | b\"as\"h'"     "a pipe into a quoted shell inside a payload"
+seen   'echo b"as"h'                    "a shell's quoted name as an argument"
+seen   'cat x | grep b"as"h'            "a shell's quoted name as a grep pattern"
+
 finish "publish-cmd"

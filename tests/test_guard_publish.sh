@@ -264,4 +264,16 @@ for c in 'gh pr view 1 > out' 'gh pr create --draft --fill'; do
   assert_eq "$OUT" "" "$c asks nothing"
 done
 
+# A shell's name with quotes inside it is still its name (#134).
+pipe_asks 'cat x | b"as"h' "a pipe into a shell whose name holds quotes asks"
+run_hook "$S" "$(jsonin 'echo b"as"h')"
+assert_rc 0 "a shell's quoted name as an argument allowed"
+assert_eq "$OUT" "" "a shell's quoted name as an argument asks nothing"
+# In a UTF-8 locale, dropping the quotes from this text took the guard 19 s, past its timeout. So it must ask within half
+# that budget.
+quoted="echo $(printf 'é"ü\\ %.0s' {1..18000}); cat x | b\"as\"h"
+LC_ALL=C.UTF-8 run_hook_within 5 "$S" "$(jsonin "$quoted")"
+assert_rc 0 "a pipe into a quoted shell after 18,000 quoted words is decided in half the hook budget"
+assert_out '"permissionDecision":"ask"' "a pipe into a quoted shell after 18,000 quoted words asks"
+
 finish "guard-publish"

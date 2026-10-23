@@ -200,4 +200,8 @@ for c in 'git -C /x status' 'git --no-pager log' 'git log > out'; do
   assert_eq "$OUT" "" "$c asks nothing"
 done
 
+# A shell's name with quotes inside it is still its name (#134).
+run_hook "$S" "$(jsonat "$r13" 'cat cmds.txt | b"as"h')"
+assert_out '"permissionDecision":"ask"' "a pipe into a shell whose name holds quotes asks on a default branch"
+
 finish "guard-default-branch"
