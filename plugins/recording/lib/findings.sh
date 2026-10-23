@@ -3,11 +3,14 @@
 #
 # Usage: _guardrails_findings "<text>"  → one finding per line, continuation lines joined
 #        _guardrails_untracked "<text>" → the findings whose line does not end with a reference
+#        _guardrails_listing "<text>"   → succeeds IF the text has a findings heading outside a code fence
 
 # A reference counts only at the end of the item, so a mid-sentence "PR #85" is not one.
 # Matched against lowercased text, as is the PR reference, which marks a pull request, not an issue.
 _GUARDRAILS_TRACKED_RE='(github\.com/[^[:space:]]+/issues/[0-9]+|linear\.app/[^[:space:]]+/issue/[a-z0-9-]+[^[:space:]]*|(^|[^a-z0-9&])#[0-9]+|[a-z0-9_.-]+/[a-z0-9_.-]+#[0-9]+|\((declined|asked)\))[]).>]*[[:space:]]*$'
 _GUARDRAILS_PR_RE='pr[[:space:]]+([a-z0-9_.-]+/[a-z0-9_.-]+)?#[0-9]+[]).>]*[[:space:]]*$'
+# A markdown heading, OR a line that is only bold text. One pattern, so the parser AND the gate agree.
+_GUARDRAILS_HEADING_RE='^[[:space:]]*(#+[[:space:]]|\*\*[^*]+\*\*[[:space:]:]*$)'
 
 # _guardrails_unfence <text> → the text without its closed code fences. A fence closes only on the
 # same character, at least as long; an unclosed fence stays as text, so nothing after it is hidden.
@@ -29,7 +32,7 @@ _guardrails_unfence() {
 }
 
 _guardrails_findings() {
-  _guardrails_unfence "$1" | awk '
+  _guardrails_unfence "$1" | H="$_GUARDRAILS_HEADING_RE" awk '
     function flush() { if (item != "") print item; item = "" }
     # Emphasis, parentheses and a dashed reason do not make an empty list a finding.
     function empty(s) {
@@ -37,7 +40,7 @@ _guardrails_findings() {
       return s ~ /^((none|nothing)( found| to report)?|no findings( outside scope)?|n\/a)[.!]?$/ ||
         s ~ /^(none|nothing|n\/a)[[:space:]]+(-|–|—)[[:space:]]/
     }
-    /^[[:space:]]*#+[[:space:]]/ || /^[[:space:]]*\*\*[^*]+\*\*[[:space:]:]*$/ {
+    $0 ~ ENVIRON["H"] {
       flush(); insec = (tolower($0) ~ /findings outside scope/); base = -1; next
     }
     !insec { next }
@@ -76,6 +79,10 @@ _guardrails_handback() {
 
 _guardrails_untracked() {
   _guardrails_findings "$1" | _guardrails_split untracked
+}
+
+_guardrails_listing() {
+  _guardrails_unfence "$1" | grep -E "$_GUARDRAILS_HEADING_RE" | grep -qi 'findings outside scope'
 }
 
 # _guardrails_token <id> → succeeds only for a plain token, so a crafted id cannot point outside a dir.

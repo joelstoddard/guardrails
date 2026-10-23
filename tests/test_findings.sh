@@ -41,6 +41,20 @@ Done.'
 OUT="$(_guardrails_findings "$fenced")"
 assert_eq "" "$OUT" "fenced block ignored"
 
+_guardrails_listing '### Findings outside scope
+None.' && r=yes || r=no
+assert_eq "yes" "$r" "a findings heading is a findings list, even an empty one"
+_guardrails_listing '**Findings outside scope:**' && r=yes || r=no
+assert_eq "yes" "$r" "a bold findings heading is a findings list"
+_guardrails_listing '### Notes and *findings outside scope*' && r=yes || r=no
+assert_eq "yes" "$r" "a heading with emphasis inside is a findings list"
+_guardrails_listing '**Findings outside scope** are held until the end.' && r=yes || r=no
+assert_eq "no" "$r" "bold words in a sentence are not a findings list"
+_guardrails_listing 'Step 2 of 3 done.' && r=yes || r=no
+assert_eq "no" "$r" "no heading, no findings list"
+_guardrails_listing "$fenced" && r=yes || r=no
+assert_eq "no" "$r" "a fenced heading is not a findings list"
+
 OUT="$(_guardrails_findings '**Findings outside scope**:
 - colon after the bold')"
 assert_eq "colon after the bold" "$OUT" "bold heading with the colon outside"

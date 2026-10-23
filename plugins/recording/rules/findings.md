@@ -12,9 +12,12 @@ Loaded in every session by the recording plugin.
 *Tier: EDIT*
 
 * A finding is anything outside the task's scope that you noticed AND did not change.
-* You MUST NOT leave a finding only in chat. In the main session, BEFORE ending your turn, you MUST file every finding with `recording:track-findings`, mark it `(asked)` WHILE the user decides whether to file it, OR mark it `(declined)` WHEN they say not to.
+* You MUST NOT leave a finding only in chat. In the main session, you MUST file every finding with `recording:track-findings`, mark it `(asked)` WHILE the user decides whether to file it, OR mark it `(declined)` WHEN they say not to.
+* In the main session, you MUST hold back the findings list WHILE you work on the user's request. WHEN the request is done, list them all once. You MUST NOT list them in every turn.
+* WHERE filing needs no question (a repo the user owns), file each finding WHEN you find it, so a compacted context cannot lose it.
 * IF you are a subagent, list your findings in your report AND you MUST NOT file them. The main session files them.
 * You MUST list findings under a heading containing "Findings outside scope", one list item per finding, each line ending with its issue URL, `#N`, `(asked)`, OR `(declined)`.
+* You MUST keep each finding as short as a commit subject. Give more detail ONLY WHEN the user asks.
 
 ## Continuity
 *Tier: EDIT*

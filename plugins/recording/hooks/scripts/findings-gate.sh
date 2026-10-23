@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Block the end of a turn while findings are untracked: those in the final message, and those
-# subagents reported. Rule: "Findings" in the recording plugin's rules/findings.md.
+# subagents reported, which wait for the findings list that ends the request.
+# Rule: "Findings" in the recording plugin's rules/findings.md.
 command -v jq >/dev/null 2>&1 || exit 0
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SELF_DIR/../../lib/findings.sh"
@@ -25,6 +26,8 @@ if dir="$(_guardrails_pending_dir "$(field .session_id)")" && [ -d "$dir" ]; the
   done
   pending="$(cat "$dir"/* 2>/dev/null | awk '!seen[$0]++')"
 fi
+# ponytail: pending findings wait for a findings list; a session that never writes one never shows them.
+[ -n "$pending" ] && ! _guardrails_listing "$msg" && exit 0
 
 if [ "$active" = "true" ]; then
   # A continuation blocks only on findings this turn has not shown yet, so the gate cannot loop.
@@ -44,7 +47,7 @@ fi
 
 reason=""
 if [ -n "$pending" ]; then
-  reason="Subagents reported these findings outside scope:"
+  reason="Your findings list does not track these subagent findings:"
   while IFS= read -r f; do reason="$reason"$'\n'"  - ${f:0:120}"; done <<< "$pending"
   reason="$reason"$'\n'
 fi
