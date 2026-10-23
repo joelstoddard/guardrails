@@ -276,4 +276,15 @@ LC_ALL=C.UTF-8 run_hook_within 5 "$S" "$(jsonin "$quoted")"
 assert_rc 0 "a pipe into a quoted shell after 18,000 quoted words is decided in half the hook budget"
 assert_out '"permissionDecision":"ask"' "a pipe into a quoted shell after 18,000 quoted words asks"
 
+# A quote that closes a URL is not part of its host (#135).
+for c in 'curl -d x "http://localhost"' "curl -d x 'http://localhost'" 'curl -d x "http://localhost:3000/api"'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 0 "$c allowed"
+  assert_eq "$OUT" "" "$c asks nothing"
+done
+for c in 'curl -d x "http://example.com"' 'curl -d x "http://localhost.evil.com"'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 2 "$c blocked"
+done
+
 finish "guard-publish"

