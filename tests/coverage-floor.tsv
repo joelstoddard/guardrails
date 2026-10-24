@@ -16,3 +16,4 @@ plugins/recording/hooks/scripts/findings-gate.sh	100.0
 plugins/recording/hooks/scripts/lessons-nudge.sh	100.0
 plugins/recording/lib/findings.sh	100.0
 TOTAL	99.5
+UNCOVERED	3

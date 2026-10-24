@@ -94,18 +94,37 @@ test that runs that line covers all of it.
 
 ## Floors and the ratchet
 
-`tests/coverage-floor.tsv` holds one `path<TAB>percent` line per measured file, and a
-`TOTAL` line. Percentages are rounded down to one decimal place. A value must match
-`digits.digit`, and a path may appear once.
+`tests/coverage-floor.tsv` holds one `path<TAB>percent` line per measured file, a
+`TOTAL` line, and an `UNCOVERED<TAB>count` line. Percentages are rounded down to one
+decimal place. A percentage must match `digits.digit`, the count must be a whole
+number, and a path may appear once.
 
-- `bash tests/coverage.sh` exits 1 if a measured file or the total is below its floor,
-  has no floor, or has a malformed or duplicated floor (status `BAD`).
+`UNCOVERED` is a ceiling on the uncovered lines of all measured files together, and it
+may fall but never rise. `TOTAL` passes at or above its floor, and also below it while
+the uncovered lines are within `UNCOVERED`. A percentage of the total alone punishes
+deleting covered code: removing two covered lines from a fully covered `repo-cmd.sh`
+took the total from 597/600 to 595/598, which rounds down from 99.5 to 99.4 and failed,
+though nothing was less tested. Deleting code never adds an uncovered line, and losing
+a test of a line, or adding a line no test runs, always does, so the count tells the
+two apart where the percentage cannot. Rounding to nearest would only move the edge:
+deleting enough covered lines crosses it again. Letting `TOTAL` pass whenever every
+file meets its floor would let a new file with a low floor of its own lower the total.
+A new uncovered line still fails `TOTAL` unless enough covered lines come with it to
+hold the percentage, as before; `UNCOVERED` then stays at the lower count, so a later
+deletion needs the percentage again until that line is covered.
+
+- `bash tests/coverage.sh` exits 1 if a measured file is below its floor, the total is
+  below its floor with more uncovered lines than `UNCOVERED`, or any row has no floor
+  or a malformed or duplicated one (status `BAD`). Status `above` on `UNCOVERED` means
+  the total passes on its percentage alone.
 - `bash tests/coverage.sh --update` sets each floor to its current value and never
-  lowers one. A new measured file gets its floor here.
+  lowers one, and sets `UNCOVERED` to the current count and never raises it. A new
+  measured file gets its floor here.
 - `bash tests/coverage.sh --ratchet BASE` compares the floor file with a `BASE` copy,
   such as the one on the PR's base branch. It fails if any floor is lower, if a floor
   is missing while its file still exists, or if a floor on either side is malformed or
-  duplicated (`floor invalid`). `TOTAL` must always exist, on both sides: a base with
+  duplicated (`floor invalid`), and if `UNCOVERED` rose (`ceiling raised`) or went.
+  `TOTAL` must always exist, on both sides: a base with
   no `TOTAL` row, such as an empty file from a failed `git show`, fails, so a missing
   base can never read as nothing to compare. A floor for a deleted file may go. This
   makes "floors only rise" a machine check and not a habit.

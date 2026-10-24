@@ -19,6 +19,7 @@ tenths() { # "87.5" -> 875; fails on anything but digits.digit, so a bad floor c
   echo $((10#${1%.*} * 10 + 10#${1#*.}))
 }
 pct() { local t=$1; echo "$((t / 10)).$((t % 10))"; }            # 875 -> "87.5"
+whole() { [[ $1 =~ ^[0-9]+$ ]]; }                                # UNCOVERED, a count of lines
 
 measured() { # measured files, relative to ROOT
   (cd "$ROOT" && for f in plugins/*/hooks/scripts/*.sh plugins/*/lib/*.sh; do
@@ -93,10 +94,20 @@ report() { # <update: 0|1>; prints the table, rewrites floors on update, returns
   done < <(measured)
   now=$((total_exec == 0 ? 1000 : total_hit * 1000 / total_exec))
   floor=$(floor_of TOTAL)
-  check TOTAL "$now" "$floor" || bad=1
+  local uncovered=$((total_exec - total_hit)) most ustatus=ok
+  most=$(floor_of UNCOVERED)
+  if [[ -z $most ]]; then ustatus="NO FLOOR"; most=$uncovered; ((update)) || bad=1
+  elif ! whole "$most"; then ustatus=BAD; invalid=1; bad=1; most=$uncovered
+  elif ((uncovered > 10#$most)); then ustatus=above; else most=$uncovered
+  fi
+  # Deleting covered lines lowers TOTAL but leaves nothing less tested, so TOTAL also passes while no uncovered line is added.
+  if ! check TOTAL "$now" "$floor"; then
+    if [[ $status == LOW && $ustatus == ok ]]; then status=ok; else bad=1; fi
+  fi
   [[ $status == BAD ]] && invalid=1
   printf '%-8s %4d/%-4d %6s %6s  %s\n' "$status" "$total_hit" "$total_exec" "$(pct "$now")" "${floor:--}" TOTAL
-  rows+=("TOTAL"$'\t'"$(pct "$(newfloor "$now" "$floor")")")
+  printf '%-8s %9s %6s %6s  %s\n' "$ustatus" "$uncovered" - "$(floor_of UNCOVERED | grep . || echo -)" UNCOVERED
+  rows+=("TOTAL"$'\t'"$(pct "$(newfloor "$now" "$floor")")" "UNCOVERED"$'\t'"$((10#$most))")
   if ((update && !invalid)); then printf '%s\n' "${rows[@]}" >"$FLOORS"; fi
   return $bad
 }
@@ -149,7 +160,12 @@ ratchet() { # <base floor file>: fails if a floor fell, or vanished while its fi
     [[ -n $path ]] || continue
     [[ $path == TOTAL ]] && base_total=1
     new=$(floor_of "$path")
-    if [[ -z $new && $path != TOTAL && ! -e $ROOT/$path ]]; then # renamed per git, or moved with its name
+    if [[ $path == UNCOVERED && -n $new ]]; then # a ceiling on uncovered lines, which may fall and not rise
+      if ! whole "$new" || ! whole "$old"; then echo "floor invalid: $path"; bad=1
+      elif ((10#$new > 10#$old)); then echo "ceiling raised: $path $old -> $new"; bad=1; fi
+      continue
+    fi
+    if [[ -z $new && $path != TOTAL && $path != UNCOVERED && ! -e $ROOT/$path ]]; then # renamed per git, or moved with its name
       moved=$(moved_to "$path") || { echo "cannot list the repo's files to find $path"; bad=1; continue; }
       [[ -n $moved ]] || continue # deleted, so its floor may go
       new=$(floor_of "$moved"); path="$path -> $moved"
