@@ -43,4 +43,19 @@ case "$out" in
 esac
 run "$j" >/dev/null || { echo "  FAIL: nonzero exit on malformed input"; FAILS=1; }
 
+# --- with no override, the journal is in the Claude config directory, which defaults to ~/.claude (#120)
+cfg="$(scratch_dir)"
+printf '{"date":"%s","skill":"a","promoted":false}\n' "$old" > "$cfg/skill-lessons.jsonl"
+out="$(env -u GUARDRAILS_LESSONS_JOURNAL CLAUDE_CONFIG_DIR="$cfg" HOME=/nonexistent bash "$HOOK" 2>/dev/null)"
+case "$out" in *"1 lesson"*) ;; *) echo "  FAIL: missed the journal in CLAUDE_CONFIG_DIR, got: $out"; FAILS=1 ;; esac
+home="$(scratch_dir)"; mkdir "$home/.claude"; cp "$cfg/skill-lessons.jsonl" "$home/.claude/"
+out="$(env -u GUARDRAILS_LESSONS_JOURNAL -u CLAUDE_CONFIG_DIR HOME="$home" bash "$HOOK" 2>/dev/null)"
+case "$out" in *"1 lesson"*) ;; *) echo "  FAIL: missed the journal in ~/.claude, got: $out"; FAILS=1 ;; esac
+
+# --- the self-improvement skill writes the journal the hook reads
+SKILL="$DIR/../plugins/recording/skills/self-improvement/SKILL.md"
+hook_line="$(grep '^journal=' "$HOOK")"
+[ -n "$hook_line" ] || { echo "  FAIL: no journal= line in the hook"; FAILS=1; }
+assert_eq "$hook_line" "$(grep '^journal=' "$SKILL")" "the skill resolves the journal as the hook does"
+
 finish "lessons-nudge"
