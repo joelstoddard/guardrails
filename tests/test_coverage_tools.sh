@@ -196,6 +196,11 @@ echo "--- a failing test stops the run"
 setup; echo 'exit 1' >"$D/tests/test_broken.sh"; cov
 [[ $RC == 1 && $OUTPUT == *"test_broken.sh failed"* ]] || fail red-suite "rc=$RC: $OUTPUT"
 
+echo "--- the run reports each suite, with the output of one that fails, so CI needs no separate test run"
+setup; printf 'echo "  FAIL [why]: broken"\nexit 1\n' >"$D/tests/test_broken.sh"; cov
+[[ $OUTPUT == *"FAIL [why]: broken"* ]] || fail red-suite-output "rc=$RC: $OUTPUT"
+[[ $OUTPUT == *"coverage: test_f.sh passed"* ]] || fail green-suite-reported "rc=$RC: $OUTPUT"
+
 echo "--- a measured file without a floor fails"
 setup; cov
 [[ $RC == 1 && $(row "$S") == *"NO" ]] || fail no-floor "rc=$RC: $OUTPUT"

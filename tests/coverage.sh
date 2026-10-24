@@ -35,9 +35,11 @@ run_suites() { # every shell test under tracing, one log per test file; returns 
   return $rc
 }
 
-run_one() { # <test file> <name>
-  COV_LOG="$OUT/logs/$2.log" BASH_ENV="$HERE/coverage/bash_env.sh" bash "$1" >"$OUT/logs/$2.out" 2>&1 && return 0
-  echo "coverage: $2 failed, see $OUT/logs/$2.out" >&2
+run_one() { # <test file> <name>; reports the result, and a failing suite's output, which CI shows in place of a test run
+  if COV_LOG="$OUT/logs/$2.log" BASH_ENV="$HERE/coverage/bash_env.sh" bash "$1" >"$OUT/logs/$2.out" 2>&1; then
+    echo "coverage: $2 passed"; return 0
+  fi
+  { echo "coverage: $2 failed, see $OUT/logs/$2.out"; cat "$OUT/logs/$2.out"; } >&2
   return 1
 }
 

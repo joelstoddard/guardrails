@@ -130,8 +130,11 @@ line as `test<TAB>path<TAB>line`, with a continuation line's hit on its counted 
 
 ## In CI
 
-The `test` job runs `bash tests/coverage.sh` after the suite, so a pull request fails
-if a file falls below its floor or a new file has none. The floors were measured on
+The `test` job runs `bash tests/coverage.sh`, so a pull request fails if a suite fails,
+a file falls below its floor or a new file has none. It is the job's only run of the
+shell suites, so CI does not run them twice (#74): the tool prints
+`coverage: <suite> passed` for each, and the full output of one that fails. A Python
+step runs the Python tests that `tests/run.sh` runs too. The floors were measured on
 bash 5.3 (macOS) and on bash 5.2 in Ubuntu 24.04, as on the runner, and matched.
 
 On a pull request, the job also gets the floor file from the PR's base branch
@@ -156,7 +159,8 @@ tracer or a damaged floor file cannot hide a gap.
 - **Tracing stops working** (for example, `BASH_ENV` is no longer read): measured files
   report 0% and fall below their floors.
 - **A new measured file:** the run fails with `NO FLOOR` until `--update` records one.
-- **A suite fails:** the run stops with exit 1 and names the log.
+- **A suite fails:** the run stops with exit 1, names the log and prints the suite's
+  output.
 - **A bash older than 4.1:** the tool refuses to run. A test that starts such a bash
   inside the suite runs it untraced, and its lines show as uncovered.
 - **A relative path after `cd`:** traced paths resolve from the tool's working

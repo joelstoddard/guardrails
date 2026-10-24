@@ -51,7 +51,9 @@ jobs:
         run: |
           pip install -r tests/requirements.txt
           npm install -g @anthropic-ai/claude-code@2.1.289
-      - name: Run tests
-        run: bash tests/run.sh
-      - name: Check coverage floors
+      # The shell suites run once, under line tracing, in place of tests/run.sh: the step reports each suite, shows
+      # the output of one that fails, and fails with it. See docs/design/coverage.md
+      - name: Run the shell suites and check coverage floors
         run: bash tests/coverage.sh
+      - name: Run the Python tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
