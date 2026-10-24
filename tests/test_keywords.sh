@@ -23,4 +23,22 @@ while IFS= read -r hit; do
   FAILS=1
 done <<< "$escapes"
 
+# An all-capitals word reads as a keyword, so each one in a rules file is a keyword conduct.md defines (BCP 14's or
+# the project extension's), a term the rules define, or an acronym. Emphasis is lower-case (#122).
+KEYWORDS=" MUST NOT REQUIRED SHALL SHOULD RECOMMENDED MAY OPTIONAL IF WHEN WHERE WHILE AND OR BEFORE THEN FIRST LASTLY ONLY EVERY UNLESS OTHERWISE "
+TERMS=" EDIT CHANGE RELEASE STANDING PERSONAL WORK DONE PARTIAL BLOCKED ADR API BCP CI CLI CRAP DRY ISP KISS LSP MCP RFC SRP TDD URL "
+while IFS=: read -r file line word; do
+  case "$KEYWORDS$TERMS" in *" $word "*) continue ;; esac
+  echo "  FAIL [${file#"$ROOT"/}:$line]: $word is undefined; define it in conduct.md \"Keywords\" or lower-case it"
+  FAILS=1
+done < <(grep -noE '\b[A-Z]{2,}\b' "$ROOT"/plugins/*/rules/*.md)
+
+# A keyword accepted above but no longer defined in conduct.md would pass undefined. BCP 14's are quoted there, and
+# the extension's are labels: "IF / WHEN: …", "AND: …".
+section="$(awk '/^### Keywords/ { f = 1; next } /^#/ { f = 0 } f' "$ROOT/plugins/building/rules/conduct.md")"
+for w in $KEYWORDS; do
+  grep -qE "\"$w\"|\\b$w( / [A-Z]+)*:" <<< "$section" \
+    || { echo "  FAIL [conduct.md]: $w is accepted as a keyword but \"Keywords\" does not define it"; FAILS=1; }
+done
+
 finish "keywords"
