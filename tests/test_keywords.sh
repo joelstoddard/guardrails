@@ -23,15 +23,24 @@ while IFS= read -r hit; do
   FAILS=1
 done <<< "$escapes"
 
-# An all-capitals word reads as a keyword, so each one in a rules file is a keyword conduct.md defines (BCP 14's or
-# the project extension's), a term the rules define, or an acronym. Emphasis is lower-case (#122).
+# An all-capitals word reads as a keyword, so each one in a rule, agent or skill is a keyword conduct.md defines
+# (BCP 14's or the project extension's), a defined term, or an acronym. Emphasis is lower-case (#122).
 KEYWORDS=" MUST NOT REQUIRED SHALL SHOULD RECOMMENDED MAY OPTIONAL IF WHEN WHERE WHILE AND OR BEFORE THEN FIRST LASTLY ONLY EVERY UNLESS OTHERWISE "
-TERMS=" EDIT CHANGE RELEASE STANDING PERSONAL WORK DONE PARTIAL BLOCKED ADR API BCP CI CLI CRAP DRY ISP KISS LSP MCP RFC SRP TDD URL "
-while IFS=: read -r file line word; do
-  case "$KEYWORDS$TERMS" in *" $word "*) continue ;; esac
-  echo "  FAIL [${file#"$ROOT"/}:$line]: $word is undefined; define it in conduct.md \"Keywords\" or lower-case it"
-  FAILS=1
-done < <(grep -noE '\b[A-Z]{2,}\b' "$ROOT"/plugins/*/rules/*.md)
+# Tiers, project contexts and report statuses from the rules, and SemVer's release levels.
+TERMS=" EDIT CHANGE RELEASE STANDING PERSONAL WORK DONE PARTIAL BLOCKED MAJOR MINOR PATCH "
+ACRONYMS=" ADR AI API ASD BCP CD CI CLI CPU CRAP DAST DRY GDPR ID ISP JSON KISS LSP MCP OK OS PR QA README RFC RPO RTO SAST SBOM SCA SPDX SRP TDD UAT UI URL UTC WCAG "
+for f in "$ROOT"/plugins/*/rules/*.md "$ROOT"/plugins/*/agents/*.md "$ROOT"/plugins/*/skills/*/SKILL.md; do
+  [ -e "$f" ] || { echo "  FAIL: ${f#"$ROOT"/} matched no file"; FAILS=1; continue; }
+  # The open PR #144 edits these two. Lower-case them once it lands, and scan them again.
+  case "$f" in */personas/agents/sre.md | */building/skills/pre-pr-check/SKILL.md) continue ;; esac
+  # Capitals in code are literal text (`HEAD`, `BREAKING CHANGE`), so code is blanked first, keeping line numbers.
+  while IFS=: read -r line word; do
+    case "$KEYWORDS$TERMS$ACRONYMS" in *" $word "*) continue ;; esac
+    echo "  FAIL [${f#"$ROOT"/}:$line]: $word is undefined; define it in conduct.md \"Keywords\" or lower-case it"
+    FAILS=1
+  done < <(awk '/^[[:space:]]*```/ { fence = !fence; print ""; next } fence { print ""; next } { gsub(/`[^`]*`/, ""); print }' "$f" \
+    | grep -noE '\b[A-Z]{2,}\b')
+done
 
 # A keyword accepted above but no longer defined in conduct.md would pass undefined. BCP 14's are quoted there, and
 # the extension's are labels: "IF / WHEN: …", "AND: …".

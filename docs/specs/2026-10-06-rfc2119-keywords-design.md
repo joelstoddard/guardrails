@@ -60,8 +60,10 @@ new definition lands, and a stray ALWAYS / NEVER still reads as plain English.
   `plugins/`, hook scripts included, so the old vocabulary cannot drift back. It also fails
   on a MUST sentence that carries its own escape, which the mapping makes a SHOULD. The dotfiles
   `test/unit/test_rules.py` gets the same check over `.claude/rules/`.
-- Since #122, `tests/test_keywords.sh` also fails on an all-capitals word in a plugin rules
-  file that is not a keyword `conduct.md` defines, a term the rules define, or a listed acronym.
+- Since #122, `tests/test_keywords.sh` also fails on an all-capitals word outside code in a
+  plugin rule, agent or skill that is not a keyword `conduct.md` defines, a defined term, or a
+  listed acronym. It skips `sre.md` and `pre-pr-check` until the open PR #144, which edits
+  them, lands.
 - `bash tests/run.sh` (it holds the 10,000-character cap) and `bash tests/lint.sh` pass, and
   so do the dotfiles `bash test/unit/run.sh` and `bash test/lint.sh`.
 - The evals are the behavioural check, run by hand: `bash tests/evals.sh <plugin> --runs 1`

@@ -9,7 +9,7 @@ In a personal project an RFC is a design spec: `docs/specs/YYYY-MM-DD-<topic>-de
 
 ## Protocol
 
-1. **Check the context.** IF the session context names another RFC skill, STOP AND use that one.
+1. **Check the context.** IF the session context names another RFC skill, stop AND use that one.
 2. **IF you are the main session**, run `superpowers:brainstorming`. It asks the user the questions AND writes the spec to `docs/specs/`. Stop here.
 3. **IF you are a persona** (you cannot ask the user), write the spec yourself at that path with these sections, AND list it under "Changes":
 
