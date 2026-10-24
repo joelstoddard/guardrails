@@ -58,13 +58,24 @@ _guardrails_split_awk() {
     BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1; cw = ""; fsh = 0 }
     {
       # A heredoc body starts once its opening line ends, and a backslash-newline has not ended it.
-      if (hd != "" && (!cont || inb)) {
+      if (!carry && hd != "") { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); if (t == hd) hd = ""; next }
+      # The carried split reads the body of every heredoc a line opens, in turn (#108). Entries pb+1..en are opened
+      # on a line not yet ended, and level lv holds those of one line, from la[lv], with its body read at lh[lv].
+      if (carry && !cont && en > pb) { la[++lv] = pb + 1; lh[lv] = pb + 1; pb = en }
+      # A script ends at its delimiter only where its shell would read a new command.
+      if (lv && (es[h = lh[lv]] ? q == "" && !cont : !cont || inb)) {
         t = $0
         sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
-        if (t == hd) { hd = ""; hx = 0; if (inb) bodyend(); next }
-        # The shell runs the $( ) and backticks of an unquoted body, where quotes are text, as in q = "hd".
-        if (!hx) next
-        if (!inb) { inb = 1; hb = d; hq = q; q = "hd" }
+        if (t == ed[h]) {
+          if (++lh[lv] > en) { en = pb = la[lv] - 1; lv-- }
+          if (inb) bodyend()
+          # The delimiter line of a script is still read, as it was before.
+          if (!es[h]) next
+        } else if (!es[h]) {
+          # The shell runs the $( ) and backticks of an unquoted body, where quotes are text, as in q = "hd".
+          if (!ex[h]) next
+          if (!inb) { inb = 1; hb = d; hq = q; q = "hd" }
+        }
       }
       if (!carry) q = ""
       if (!cont) wb = 1
@@ -163,7 +174,7 @@ _guardrails_split_awk() {
           if (dl != "") {
             wordend()
             if (here && chars[i - 1] == "<") { out = out substr($0, i, j - i); i = j - 1; continue }
-            if (!carry || !fsh) { hd = dl; if (carry && !quoted) hx = 1 }
+            if (!carry) hd = dl; else { ed[++en] = dl; ex[en] = !quoted; es[en] = fsh }
             out = out "<<"; i = j - 1; wb = 0; continue
           }
         }

@@ -312,4 +312,8 @@ run_hook "$S" "$(jsonin 'claude "review this"')"
 assert_eq "$OUT" "" "environment hatch asks nothing about a piece of a quoted argument"
 unset ALLOW_PUBLISH_AS_ME
 
+# Each heredoc a line opens has its body read in turn, by its own rule (#108).
+run_hook "$S" "$(jsonin $'bash <<A; cat <<B\ngh pr comment 1 -b x\nA\nhi\nB')"
+assert_rc 2 "a publish in a shell's heredoc before another on its line blocked"
+
 finish "guard-publish"

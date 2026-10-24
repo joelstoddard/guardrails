@@ -248,6 +248,10 @@ blocks $'cd /tmp && /bin/zsh - <<EOF\nset -e\ngh pr comment 1 -b x\nEOF'  "a her
 blocks $'FOO=1 dash <<-EOF\n\tgh pr comment 1 -b x\n\tEOF'                "a heredoc fed to a shell after an assignment"
 blocks $'bash <<A\ncat <<B\nprose\nB\ngh pr comment 1 -b x\nA'            "a command after a heredoc nested in one"
 allows $'bash <<A\ncat <<B\ngh pr comment is only prose here\nB\nA'       "prose in a heredoc nested in a shell heredoc"
+# Each heredoc a line opens has its body read in turn, by its own rule (#108).
+blocks $'bash <<A; cat <<B\ngh pr comment 1 -b x\nA\nhi\nB'             "a shell's heredoc before another on its line"
+blocks $'cat <<A; bash <<B\nhi\nA\ngh pr comment 1 -b x\nB'             "a shell's heredoc after another on its line"
+allows $'bash <<A; cat <<B\necho hi\nA\ngh pr comment is prose\nB'      "prose in a heredoc after a shell's on its line"
 
 # A shell reading commands from a pipe runs what no guard can see, so guard-publish asks about it.
 unseen() { _guardrails_unseen_shell_stdin "$1" >/dev/null || { echo "  FAIL [$2]: expected unseen stdin — '$1'"; FAILS=1; }; }
