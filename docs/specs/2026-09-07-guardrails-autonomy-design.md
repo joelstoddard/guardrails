@@ -84,6 +84,7 @@ git fetch --prune origin          # under GIT_TERMINAL_PROMPT=0
 for each worktree under .claude/worktrees/:
     branch merged into origin/<default>?
     AND not the directory this session is running in?
+    AND not locked, and its tip not equal to origin/<default>?
       → add a report line naming `git worktree remove <path>`,
         warned if `git status --porcelain --ignored` is non-empty
 if main checkout is on <default> and clean:
@@ -287,6 +288,8 @@ that nothing is deleted and that the report says the right thing:
 - a merged but **dirty** worktree survives and is reported with the warning
 - an **unmerged** worktree is not reported at all
 - the worktree the session is running in is not reported
+- a new branch with no commits, whose tip is the base, is not reported
+- a locked worktree, held by a running session, is not reported
 - a worktree outside `.claude/worktrees/` is ignored
 - a diverged default branch is not rewritten (`--ff-only` refuses)
 - a repo not using the `.claude/worktrees` convention is left entirely alone
