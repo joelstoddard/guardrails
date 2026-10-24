@@ -28,7 +28,7 @@ fi
 
 while IFS= read -r repo; do
   testcmd="$(repo_cmd "$repo" test)" || {
-    echo "⚠️  test-gate: no test command in $repo/AGENTS.md or CLAUDE.md — skipping (CI is the backstop). Document it to enable the local gate." >&2
+    echo "⚠️  test-gate: no test command in the committed AGENTS.md or CLAUDE.md of $repo — skipping (CI is the backstop). Document it to enable the local gate." >&2
     continue
   }
   ( cd "$repo" && eval "$testcmd" ) </dev/null >/dev/null 2>&1 && continue

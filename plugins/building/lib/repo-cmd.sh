@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# repo-cmd.sh — resolve a repo's canonical test/lint command from its agent doc.
-# AGENTS.md is the source of truth, and CLAUDE.md is the fallback for repos that
-# use that name. No runner is hardcoded.
+# repo-cmd.sh — resolve a repo's canonical test/lint command from its agent doc, as
+# committed at HEAD. AGENTS.md is the source of truth, and CLAUDE.md is the fallback
+# for repos that use that name. No runner is hardcoded.
 # Usage: repo_cmd <dir> <test|lint>  → prints command (rc 0) or nothing (rc 1).
 
 # Extract a labelled inline-code command, e.g.  "- **Test:** `make test`"  or
@@ -26,11 +26,11 @@ _guardrails_labelled() { # $1=file $2=keyword
 }
 
 repo_cmd() {
-  local dir="$1" kind="$2" top doc cmd
-  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || top="$dir"
-  for doc in "$top/AGENTS.md" "$top/CLAUDE.md"; do
-    [ -f "$doc" ] || continue
-    cmd="$(_guardrails_labelled "$doc" "$kind")"
+  local dir="$1" kind="$2" doc cmd
+  # The hooks run it outside Claude Code's sandbox, so only the committed doc names it (#83).
+  # See docs/design/agent-doc-command-extraction.md
+  for doc in AGENTS.md CLAUDE.md; do
+    cmd="$(_guardrails_labelled <(git -C "$dir" cat-file blob "HEAD:$doc" 2>/dev/null) "$kind")"
     [ -n "$cmd" ] && { printf '%s\n' "$cmd"; return 0; }
   done
   return 1

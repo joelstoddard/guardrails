@@ -3,16 +3,18 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 S="$DIR/../plugins/building/hooks/scripts/test-gate.sh"
 json() { printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$1" "$2"; }
+# The gate reads the committed agent doc (#83), so each fixture commits its own.
+commit_doc() { git -C "$1" add -A && git -C "$1" -c user.email=t@t -c user.name=t commit -qm doc; }
 
 # Repo with a passing test command → push allowed
 r="$(make_repo main)"
-printf '## Commands\n- **Test:** `true`\n' > "$r/AGENTS.md"
+printf '## Commands\n- **Test:** `true`\n' > "$r/AGENTS.md"; commit_doc "$r"
 run_hook "$S" "$(json "$r" "git push origin HEAD")"
 assert_rc 0 "push allowed when tests pass"
 
 # Repo with a failing test command → push blocked
 rf="$(make_repo main)"
-printf '## Commands\n- **Test:** `false`\n' > "$rf/AGENTS.md"
+printf '## Commands\n- **Test:** `false`\n' > "$rf/AGENTS.md"; commit_doc "$rf"
 run_hook "$S" "$(json "$rf" "git push origin HEAD")"
 assert_rc 2 "push blocked when tests fail"
 assert_err "Tests failed" "block reason surfaced"
@@ -55,11 +57,11 @@ split_cd() { jq -cn --arg cwd "$1" --arg c $'x=a; echo "${x#"\'"}"\ncd '"$2"$'\n
 run_hook "$S" "$(split_cd "$r" "$rf")"
 assert_rc 2 "a failing repo only the per-line split cds into is blocked"
 rn1="$(make_repo main)"; count="$(scratch_file)"
-printf '## Commands\n- **Test:** `echo run >> %s`\n' "$count" > "$rn1/AGENTS.md"
+printf '## Commands\n- **Test:** `echo run >> %s`\n' "$count" > "$rn1/AGENTS.md"; commit_doc "$rn1"
 run_hook "$S" "$(split_cd "$rn1" .)"
 assert_eq "$(wc -l < "$count" | tr -d ' ')" "1" "one repo reached by both splits runs its tests once"
 rs="$(make_repo main)"
-printf '## Commands\n- **Test:** `cat >/dev/null`\n' > "$rs/AGENTS.md"
+printf '## Commands\n- **Test:** `cat >/dev/null`\n' > "$rs/AGENTS.md"; commit_doc "$rs"
 run_hook "$S" "$(split_cd "$rs" "$rf")"
 assert_rc 2 "a test command reading stdin does not hide the next repo"
 
@@ -84,5 +86,13 @@ assert_out '"permissionDecision":"ask"' "a pipe into a shell asks when the tests
 assert_out 'reads commands from stdin' "the question says why"
 run_hook "$S" "$(json "$r" "cat cmds.txt | bash")"
 assert_eq "$OUT" "" "a pipe into a shell asks nothing when the tests pass"
+
+# Hooks run outside Claude Code's sandbox, so a command from an agent doc edited since the last commit does not run (#83).
+rd="$(make_repo main)"; ran="$(scratch_dir)/ran"
+printf '## Commands\n- **Test:** `true`\n' > "$rd/AGENTS.md"; commit_doc "$rd"
+printf '## Commands\n- **Test:** `touch %s; false`\n' "$ran" > "$rd/AGENTS.md"
+run_hook "$S" "$(json "$rd" "git push origin HEAD")"
+assert_rc 0 "the committed test command runs"
+[ ! -e "$ran" ] || { echo "  FAIL [a modified agent doc's command does not run]: $ran exists"; FAILS=1; }
 
 finish "test-gate"
