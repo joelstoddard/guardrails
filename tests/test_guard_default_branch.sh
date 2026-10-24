@@ -225,4 +225,8 @@ assert_rc 2 "a commit after a heredoc whose delimiter holds a backslash on the d
 run_hook "$S" "$(jsonat "$r13" $'bash <<A; cat <<B\ngit commit -m x\nA\nhi\nB')"
 assert_rc 2 "a commit in a shell's heredoc before another on its line on the default branch blocked"
 
+# A shell's name after a heredoc opener makes it a script too (#132).
+run_hook "$S" "$(jsonat "$r13" $'<<EOF bash\ngit commit -m x\nEOF')"
+assert_rc 2 "a commit in a heredoc opened before the shell it feeds on the default branch blocked"
+
 finish "guard-default-branch"

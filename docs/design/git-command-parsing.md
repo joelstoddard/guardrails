@@ -106,8 +106,9 @@ The lookup is on the guards' slowest path: a command at the caps can make them r
 Two readers use the lookup with care:
 
 - **The splitter's awk cannot call it.** To decide whether a heredoc is a shell's script,
-  it asks whether a shell's name is a word anywhere before the `<<` in the segment. That
-  is a superset of the lookup, so no wrapper hides a shell. It also catches wrappers the
+  it asks whether a shell's name is a word anywhere in the segment, before the `<<` or
+  after it, as in `<<EOF bash`, which feeds the body to bash (#132). That is a superset of
+  the lookup, so no wrapper or redirect hides a shell. It also catches wrappers the
   lookup does not know, such as `docker exec -i c bash <<EOF`. The cost is a false
   positive when a shell's name is a plain argument, as in `grep -w bash <<EOF`. A word
   counts with its quotes and backslashes dropped, as `ba\sh` does. Inside quotes, only

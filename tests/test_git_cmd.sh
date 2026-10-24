@@ -112,6 +112,7 @@ cwd $'echo "`echo \'"\'`"\ncd /evil\n# \'\ngit commit -m x' commit /start /evil 
 yes $'bash <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to bash"
 no  $'cat <<EOF\ngit commit -m x\nEOF'            commit "a heredoc fed to cat is data"
 yes $'bash <<A; cat <<B\ngit commit -m x\nA\nhi\nB' commit "a shell's heredoc before another on its line (#108)"
+yes $'<<EOF bash\ngit commit -m x\nEOF'           commit "a heredoc opened before the shell it feeds (#132)"
 
 # A shell or eval payload is a script of its own (#65).
 yes "bash -c 'git commit -m x'"                   commit "inside bash -c"

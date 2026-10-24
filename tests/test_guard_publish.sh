@@ -320,4 +320,8 @@ assert_rc 2 "a publish in a shell's heredoc before another on its line blocked"
 run_hook "$S" "$(jsonin $'bash <<EOF\necho \'it\nEOF\ngh pr comment 1 -b x\necho \'')"
 assert_rc 2 "a publish after a shell's heredoc that left a quote open blocked"
 
+# A shell's name after a heredoc opener makes it a script too (#132).
+run_hook "$S" "$(jsonin $'<<EOF bash\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc opened before the shell it feeds blocked"
+
 finish "guard-publish"

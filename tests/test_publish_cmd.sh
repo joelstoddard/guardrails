@@ -252,6 +252,12 @@ allows $'bash <<A\ncat <<B\ngh pr comment is only prose here\nB\nA'       "prose
 blocks $'bash <<A; cat <<B\ngh pr comment 1 -b x\nA\nhi\nB'             "a shell's heredoc before another on its line"
 blocks $'cat <<A; bash <<B\nhi\nA\ngh pr comment 1 -b x\nB'             "a shell's heredoc after another on its line"
 allows $'bash <<A; cat <<B\necho hi\nA\ngh pr comment is prose\nB'      "prose in a heredoc after a shell's on its line"
+# A shell's name anywhere in the command that opens a heredoc makes it a script, after the opener too (#132).
+blocks $'<<EOF bash\ngh pr comment 1 -b x\nEOF'                          "a heredoc opened before the shell it feeds"
+blocks $'x=$(<<EOF bash\ngh pr comment 1 -b x\nEOF\n)'                   "a heredoc opened before a shell in a substitution"
+allows $'<<EOF cat; bash x.sh\ngh pr comment is prose\nEOF'              "a shell in the next command does not read it"
+blocks $'<<EOF bash\necho \'it\nEOF\ngh pr comment 1 -b x\necho \''   "a command after it, though its script left a quote open"
+blocks $'bash <<EOF $(true)\ngh pr comment 1 -b x\nEOF'                 "a shell's heredoc with a substitution after its opener"
 # A shell's heredoc ends at its delimiter, whatever its script left open there, as the shell reads it.
 blocks $'bash <<EOF\necho \'it\nEOF\ngh pr comment 1 -b x\necho \''       "a command after a shell's heredoc that left a quote open"
 blocks $'bash <<EOF\ncat <<X\nEOF\ngh pr comment 1 -b x'                  "a command after a shell's heredoc that left a heredoc open"

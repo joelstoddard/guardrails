@@ -33,7 +33,7 @@ _guardrails_split_awk() {
     # Levels at or below hb enclose an unquoted heredoc body being read, whose text is data, not theirs.
     function subopen(k, start) {
       if (k > hb + 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
-      cs[k] = start; ln[k] = 0
+      cs[k] = start; ln[k] = 0; seal(sf[k])
     }
     function subemit(k, e,   j, t) {
       t = substr($0, cs[k], e - cs[k])
@@ -45,15 +45,19 @@ _guardrails_split_awk() {
       xp[++nxp] = "\n"; ln[k] = 0
     }
     function subclose(k, e) {
+      wordend(); seal(fsh)
       subemit(k, e)
       if (k > hb + 1) cs[k - 1] = e
     }
-    # A shell word anywhere before a heredoc opener makes the body its script, so no wrapper hides one (#90).
+    # A shell word anywhere in a segment makes the body of a heredoc opened in it its script, so no wrapper hides one
+    # (#90), nor a redirect before the shell, as in <<EOF bash (#132). seal decides for the heredocs opened from pseg on
+    # once their segment ends, or a substitution opens in it, whose own heredocs it decides for when it closes.
     function wordend() { if (index(" sh bash zsh dash ksh ", " " cw " ")) fsh = 1; cw = ""; qd = 0 }
+    function seal(f, k) { for (k = pseg; k <= en; k++) if (es[k] < 0) es[k] = f; pseg = en + 1 }
     # Level l reads the body at lh[l], and act maps the delimiter of each script being read to the outermost level
     # reading it.
     function head(l, e) { e = lh[l]; if (es[e] && !(ed[e] in act)) act[ed[e]] = l }
-    function drop(e) { e = lh[lv]; if (es[e] && (ed[e] in act) && act[ed[e]] == lv) delete act[ed[e]]; en = pb = la[lv] - 1; lv-- }
+    function drop(e) { e = lh[lv]; if (es[e] && (ed[e] in act) && act[ed[e]] == lv) delete act[ed[e]]; en = pb = la[lv] - 1; pseg = en + 1; lv-- }
     function nexthead(e) {
       e = lh[lv]
       if (lh[lv] == en) { drop(); return }
@@ -71,7 +75,11 @@ _guardrails_split_awk() {
       if (!carry && hd != "") { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); if (t == hd) hd = ""; next }
       # The carried split reads the body of every heredoc a line opens, in turn (#108). Entries pb+1..en are opened
       # on a line not yet ended, and level lv holds those of one line, from la[lv], with its body read at lh[lv].
-      if (carry && !cont && en > pb) { la[++lv] = pb + 1; lh[lv] = pb + 1; pb = en; lq[lv] = q; ld[lv] = d; head(lv) }
+      if (carry && !cont) {
+        if (q == "") wordend()
+        seal(fsh)
+        if (en > pb) { la[++lv] = pb + 1; lh[lv] = pb + 1; pb = en; lq[lv] = q; ld[lv] = d; head(lv) }
+      }
       if (lv) {
         t = $0
         sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
@@ -186,7 +194,7 @@ _guardrails_split_awk() {
           if (dl != "") {
             wordend()
             if (here && chars[i - 1] == "<") { out = out substr($0, i, j - i); i = j - 1; continue }
-            if (!carry) hd = dl; else { ed[++en] = dl; ex[en] = !quoted; es[en] = fsh }
+            if (!carry) hd = dl; else { ed[++en] = dl; ex[en] = !quoted; es[en] = -1 }
             out = out "<<"; i = j - 1; wb = 0; continue
           }
         }
@@ -194,6 +202,7 @@ _guardrails_split_awk() {
         if ((c == "&" && chars[i + 1] == "&") ||
             (c == "|" && chars[i + 1] == "|")) {
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
+          if (carry) { wordend(); seal(fsh) }
           out = out "\n"; i++; wb = 1; cw = ""; fsh = 0; qd = 0; continue
         }
         # A lone & ends a command as ; does, but the & in >&, <&, &> and |& belongs to a redirect or pipe.
@@ -203,6 +212,7 @@ _guardrails_split_awk() {
         if (c == "|" || c == ";" || (carry && c == "&")) {
           j = (carry && c == "|" && chars[i + 1] == "&")
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 + j }
+          if (carry) { wordend(); seal(fsh) }
           i += j
           out = out "\n"; wb = 1; cw = ""; fsh = 0; qd = 0; continue
         }
