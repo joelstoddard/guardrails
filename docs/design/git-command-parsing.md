@@ -44,7 +44,9 @@ turn, and each is read by its own rule: a shell's as script lines up to its deli
 unquoted one's substitutions as commands, a quoted one's not at all (#108). A shell reads
 the heredoc its script came from up to the delimiter, whatever the script leaves open there,
 a quote, a substitution or a heredoc of its own, so the splitter ends the script there too,
-the outermost first, and reads on from where it was before the body.
+the outermost first, and reads on from where it was before the body. A body starts once the
+command that opened it ends, as the shell reads it: after a quote, backtick or substitution
+that the command carries across lines, whose commands run first.
 A `cd` inside `sh -c` ends with that child shell, while one inside `eval` lasts. A pipe
 into a shell runs commands no guard can see, so `guard-default-branch` asks when the
 directory it would run in is on its default branch.

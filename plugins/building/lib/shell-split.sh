@@ -74,11 +74,13 @@ _guardrails_split_awk() {
       # A heredoc body starts once its opening line ends, and a backslash-newline has not ended it.
       if (!carry && hd != "") { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); if (t == hd) hd = ""; next }
       # The carried split reads the body of every heredoc a line opens, in turn (#108). Entries pb+1..en are opened
-      # on a line not yet ended, and level lv holds those of one line, from la[lv], with its body read at lh[lv].
+      # on a line not yet ended, and level lv holds those of one line, from la[lv], with its body read at lh[lv]. The
+      # bodies start once the command that opened them ends: not inside a quote, backtick or substitution opened
+      # after them on its line, whose text the shell reads first, at depth pd or less.
       if (carry && !cont) {
         if (q == "") wordend()
         seal(fsh)
-        if (en > pb) { la[++lv] = pb + 1; lh[lv] = pb + 1; pb = en; lq[lv] = q; ld[lv] = d; head(lv) }
+        if (en > pb && q == "" && d <= pd) { la[++lv] = pb + 1; lh[lv] = pb + 1; pb = en; lq[lv] = q; ld[lv] = d; head(lv) }
       }
       if (lv) {
         t = $0
@@ -194,7 +196,7 @@ _guardrails_split_awk() {
           if (dl != "") {
             wordend()
             if (here && chars[i - 1] == "<") { out = out substr($0, i, j - i); i = j - 1; continue }
-            if (!carry) hd = dl; else { ed[++en] = dl; ex[en] = !quoted; es[en] = -1 }
+            if (!carry) hd = dl; else { ed[++en] = dl; ex[en] = !quoted; es[en] = -1; if (en == pb + 1 || d < pd) pd = d }
             out = out "<<"; i = j - 1; wb = 0; continue
           }
         }

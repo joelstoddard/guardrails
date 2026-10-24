@@ -258,6 +258,9 @@ blocks $'x=$(<<EOF bash\ngh pr comment 1 -b x\nEOF\n)'                   "a here
 allows $'<<EOF cat; bash x.sh\ngh pr comment is prose\nEOF'              "a shell in the next command does not read it"
 blocks $'<<EOF bash\necho \'it\nEOF\ngh pr comment 1 -b x\necho \''   "a command after it, though its script left a quote open"
 blocks $'bash <<EOF $(true)\ngh pr comment 1 -b x\nEOF'                 "a shell's heredoc with a substitution after its opener"
+# A body starts once the command that opened it ends, after a backtick or substitution it spans, which run first.
+blocks $'cat <<EOF `true\ngh pr comment 1 -b x\n`\nbody\nEOF'           "a backtick spanning lines after an opener"
+blocks $'cat <<EOF "$(true\ngh pr comment 1 -b x)"\nEOF'                "a substitution spanning lines after an opener"
 # A shell's heredoc ends at its delimiter, whatever its script left open there, as the shell reads it.
 blocks $'bash <<EOF\necho \'it\nEOF\ngh pr comment 1 -b x\necho \''       "a command after a shell's heredoc that left a quote open"
 blocks $'bash <<EOF\ncat <<X\nEOF\ngh pr comment 1 -b x'                  "a command after a shell's heredoc that left a heredoc open"

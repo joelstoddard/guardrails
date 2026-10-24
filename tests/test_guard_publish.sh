@@ -324,4 +324,8 @@ assert_rc 2 "a publish after a shell's heredoc that left a quote open blocked"
 run_hook "$S" "$(jsonin $'<<EOF bash\ngh pr comment 1 -b x\nEOF')"
 assert_rc 2 "a publish in a heredoc opened before the shell it feeds blocked"
 
+# A body starts once the command that opened it ends, after a backtick it spans, which runs first.
+run_hook "$S" "$(jsonin $'cat <<EOF `true\ngh pr comment 1 -b x\n`\nbody\nEOF')"
+assert_rc 2 "a publish in a backtick spanning lines after an opener blocked"
+
 finish "guard-publish"

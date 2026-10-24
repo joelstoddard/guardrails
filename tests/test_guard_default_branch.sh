@@ -229,4 +229,8 @@ assert_rc 2 "a commit in a shell's heredoc before another on its line on the def
 run_hook "$S" "$(jsonat "$r13" $'<<EOF bash\ngit commit -m x\nEOF')"
 assert_rc 2 "a commit in a heredoc opened before the shell it feeds on the default branch blocked"
 
+# A body starts once the command that opened it ends, after a backtick it spans, which runs first.
+run_hook "$S" "$(jsonat "$r13" $'cat <<EOF `true\ngit commit -m x\n`\nbody\nEOF')"
+assert_rc 2 "a commit in a backtick spanning lines after an opener on the default branch blocked"
+
 finish "guard-default-branch"
