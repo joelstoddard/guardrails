@@ -200,6 +200,40 @@ tracer or a damaged floor file cannot hide a gap.
   directory. A suite that changes directory and then runs a script by a relative path
   loses those hits. Run such scripts by an absolute path.
 
+## Branches
+
+The tracer measures lines, not branches, and has no branch floor. A line that holds a
+branch, such as `[[ -n $x ]] && return 0`, `cmd || exit 1` or a one-line
+`if x; then y; fi`, reads as covered once any part of it runs. A branch on a line of
+its own, such as an `if` body or a case arm, is measured already, as that line: bash
+never traces a case label, so a one-line arm counts only when its command runs.
+
+Branches within a line cannot be measured soundly in this tracer, and a measurement
+that can read higher than the truth would break the rule the failure modes keep:
+
+- **xtrace says which line ran, not which operand.** It prints each command it runs,
+  after expansion, with the line's number. Telling which side of `a && b || c` printed
+  it means matching expanded text back to source, and two sides can expand to the same
+  text, as in `echo x || echo x`.
+- **Counting commands on a line overcounts.** The commands inside a `$( )` on the line
+  trace on it too, and those of a `$( )` that bash prints on more than one line trace
+  on the lines after it (see [Executable lines](#executable-lines)). So a line could
+  show more commands than it has sides, and read a side that never ran as taken.
+- **A DEBUG trap changes the code it measures.** `BASH_COMMAND` holds the command before
+  expansion, but as bash prints it again: `echo "$v  b"   >/dev/null` reads
+  `echo "$v  b" > /dev/null`, so matching it to the source needs bash's printer. And
+  the trap is code that runs before every command of the hooks: to reach functions and
+  subshells it needs `set -T`, which the hooks would inherit, and it replaces any DEBUG
+  trap of their own. The xtrace tracer only writes to its own file descriptor.
+- **Probes need a shell parser.** Rewriting each operand into `{ probe; cmd; }` in a copy
+  changes the status that `&&`, `||`, `!` and `set -e` read, and placing probes right
+  needs a parser of bash, which this repo does not have.
+
+[Mutation testing](#mutation) is the check for these branches instead. It swaps `&&`
+and `||`, drops a leading `!`, flips `[[ ]]` tests and exit statuses, and deletes
+commands, on every covered line. A branch within a line that no test tells apart leaves
+its mutant alive, and the mutation floors hold the score.
+
 ## Mutation
 
 Coverage shows that a test ran a line, not that it checks the line. `tests/mutate.sh`
