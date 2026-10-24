@@ -207,8 +207,10 @@ The publish guard checks `curl`, `wget`, `http` and `gh api` lines without start
 scan now costs a regex per URL. So past 32 URLs in one segment a write is read as remote,
 which bounds a segment, while the length cap bounds the URLs in a command.
 
-Within the caps, the slowest inputs measured took 4.1 s of the 10 s budget on macOS, on an
-M4 Max at load 3 to 6, when re-measured for #131: 32,000 `env` wrappers before a `git commit`,
+Within the caps, the slowest input measured takes guard-default-branch 5.9 s of the 10 s
+budget on macOS, on an M4 Max at load 6 to 30: 25,000 options with a redirect fused to each
+between `git` and `commit` (#91), as described below. Before #91, the slowest took 4.1 s,
+when re-measured for #131: 32,000 `env` wrappers before a `git commit`,
 read by guard-default-branch, and one `eval` re-reading 480 `curl -d` lines of 32 local hosts
 each, read by guard-publish (3.4 s on Linux, when last measured there). The words the lookup
 skips since #109, #110, #111 and #116 come next, at 2.7 to 4.0 s for 26,000 escaped
@@ -225,6 +227,23 @@ bytes (#134): in a UTF-8 locale the substitution took guard-publish 19 s on 126 
 multibyte words, and as bytes it takes 1.1 s. A host that ends in a quote costs two more
 regexes (#135), so one `eval` re-reading 205 lines of 32 quoted local URLs takes
 guard-publish 3.0 s.
+
+A word with a redirect fused to it, as in `git>/dev/null` or `-p>x`, is split since #91, so the
+lookup and git's skip read on past it where they stopped at it before. Each such word costs a
+regex and a second look at what is left, where an escaped option costs one unquote: 25,000
+options with a redirect fused to each between `git` and `commit` take guard-default-branch
+5.9 s, against 4.0 s before #91, 14,000 `sudo> x` wrappers before a commit 5.7 s, and 16,000
+`sudo>x` 4.9 s. Before #91 the lookup stopped at the first of those wrappers, in 1.3 s. A
+plain chain of 25,000 `sudo` wrappers takes 3.7 s, as before. The split is made in the call
+that checks for a redirect, and a redirect fused to its target needs no second check; together
+they took the slowest shape from 6.6 s to 5.9 s.
+
+The heredoc queue (#108, #132) costs little: within the caps, 9,900 heredocs opened on one
+line take at most 1.0 s, 1,600 lines that each open two 0.8 s, and 16 shells' heredocs nested
+around 4,900 lines of commands 1.4 s, as before. A command whose quotes never close has every
+line read again on its own in the carried split's pass, and those lines are no longer hidden
+after a here-string (#61), so 4,990 lines after one take guard-publish 2.1 s, where they took
+1.3 s.
 
 ## What was rejected
 

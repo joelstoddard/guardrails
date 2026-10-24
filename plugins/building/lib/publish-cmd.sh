@@ -162,7 +162,7 @@ _guardrails_publishes_as_user() {
       w="${toks[$i]}"
       # The shell takes out redirects and drops quotes before the command reads its words (#131). An option is matched
       # as written, so a quoted one stays a word, as it was before.
-      case "$w" in -*) break ;; *[\<\>]*) { _guardrails_skip_redirect || _guardrails_split_fused; } && continue ;; esac
+      case "$w" in -*) break ;; *[\<\>]*) _guardrails_skip_redirect && continue ;; esac
       case "$w" in *[\"\'\\]*) _guardrails_whole_word || piece[${#lead[@]}]="$w"; _guardrails_unquote ;; esac
       lead+=("$w")
       i=$((i + 1))

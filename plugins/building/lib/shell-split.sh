@@ -249,8 +249,8 @@ _guardrails_split_awk() {
 
 # A hook that times out lets the command through, so the guards do not read a command past these limits:
 # its length, the segments in its two splits, and the shells and evals it could make them re-read. Within
-# them, the slowest guard measured 4.1 s of its 10 s budget (macOS on an M4 Max, load 3 to 6), on 32,000 env
-# wrappers before a commit and on one eval re-reading 480 curl lines of 32 local hosts each (#131).
+# them, the slowest guard measured 5.9 s of its 10 s budget (macOS on an M4 Max, load 6 to 30), on 25,000 options with
+# a redirect fused to each between git and commit (#91). See docs/design/git-command-parsing.md
 _GUARDRAILS_SPLIT_MAX=131072
 _GUARDRAILS_SPLIT_MAX_SEGMENTS=10000
 _GUARDRAILS_SPLIT_MAX_SHELLS=16
@@ -322,7 +322,8 @@ _guardrails_command_at() {
 }
 
 # _guardrails_skip_redirect → rc 0 if the caller's word w, at its index i, is a redirect (#109), with i past it, and past
-# its target when the operator stands alone. Callers pass only a word that holds < or >.
+# its target when the operator stands alone, or a word with a redirect fused to it, split for the caller to read index i
+# again (#91). Callers pass only a word that holds < or >.
 _guardrails_skip_redirect() {
   # Patterns sort the usual forms, as a regex per word costs more; a longer fd goes to the regex. An operator alone takes
   # the next word as its target.
@@ -333,10 +334,10 @@ _guardrails_skip_redirect() {
     \<* | \>* | \&\>* | [0-9]\<* | [0-9]\>*) i=$((i + 1)); return 0 ;;
     [0-9]*[\<\>]* | \{*[\<\>]*)
       local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
-      [[ $w =~ $redirect ]] || return 1
+      [[ $w =~ $redirect ]] || { _guardrails_split_fused; return; }
       [ -z "${BASH_REMATCH[3]}" ] || { i=$((i + 1)); return 0; }
       case "${BASH_REMATCH[2]}" in \<\< | \<\<- | \<\<\<) ;; *) i=$((i + 2)); return 0 ;; esac ;;
-    *) return 1 ;;
+    *) _guardrails_split_fused; return ;;
   esac
   # The split drops a heredoc's delimiter, as the per-line split does a here-string's word, unless the word starts with
   # a digit, which they read as a shift.
@@ -347,15 +348,16 @@ _guardrails_skip_redirect() {
 
 # _guardrails_split_fused → rc 0 if the caller's word w, at its index i, is a word with a redirect after it and no blank
 # between, as in bash<<<'…' or git>out (#91). toks[i] is then that word, or the redirect fused to its target with the word
-# after it, and the caller reads index i again. Callers pass only a word that holds < or > and is no redirect.
+# after it, as only an operator alone takes the next word. _guardrails_skip_redirect calls it on a word that is no redirect.
 _GUARDRAILS_FUSED='^(([^<>"'"'"'\\]|\\.|"[^"]*"|'"'"'[^'"'"']*'"'"')+)([<>].*)$'
 _guardrails_split_fused() {
   local j="$i" p
   [[ $w =~ $_GUARDRAILS_FUSED ]] || return 1
-  p="${BASH_REMATCH[1]}"; w="${BASH_REMATCH[3]}"
+  p="${BASH_REMATCH[1]}"; w="${BASH_REMATCH[3]}"; toks[j]="$p"
+  case "$w" in \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \<\< | \<\<- | \<\<\<) ;; *) return 0 ;; esac
   _guardrails_skip_redirect
-  if [ "$i" -gt "$((j + 1))" ]; then toks[j]="$w${toks[j + 1]}"; toks[j + 1]="$p"; else toks[j]="$p"; fi
-  i="$j"
+  [ "$i" -gt "$((j + 1))" ] && { toks[j]="$w${toks[j + 1]}"; toks[j + 1]="$p"; }
+  i="$j"; return 0
 }
 
 # _guardrails_unquote → rc 0 with the quotes and backslashes the shell drops removed from the caller's word w, if it is
@@ -388,7 +390,6 @@ _guardrails_command_skip() {
         case "$w" in
           *'()'*) [[ $w =~ \(\)(.*)$ ]]; w="${BASH_REMATCH[1]}"; w="${w#[{(]}"; _GUARDRAILS_CMD_WRAPPED=1 ;;
           *')') _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
-          *[\<\>]*) _guardrails_split_fused && continue ;;
         esac ;;
     esac
     case "$w" in
