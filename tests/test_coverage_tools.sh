@@ -23,7 +23,7 @@ EOF
 EOF
 }
 cov() { OUTPUT="$(COVERAGE_ROOT="$D" bash "$TOOL" "$@" 2>&1)"; RC=$?; }
-row() { printf '%s\n' "$OUTPUT" | awk -v f="$1" '$NF == f { print $(NF-3), $(NF-2), $1 }'; } # → "hit/exec pct status"
+row() { printf '%s\n' "$OUTPUT" | awk -v f="$1" '$NF == f { print $(NF-4), $(NF-3), $1 }'; } # → "hit/exec pct status"
 floors() { cat "$D/tests/coverage-floor.tsv"; }
 
 # On a bash older than 4.1 every case below would fail with an empty row, so stop with the tool's reason.
@@ -209,7 +209,7 @@ echo "--- --update records floors for the hook scripts and libs only, after whic
 setup; mkdir -p "$D/plugins/p/bin"; echo 'echo unmeasured' >"$D/plugins/p/bin/other.sh"
 cov --update; cov
 [[ $RC == 0 ]] || fail update "rc=$RC: $OUTPUT"
-assert_eq "$S"$'\t66.6\nTOTAL\t66.6\nUNCOVERED\t1' "$(floors)" "update writes exactly the measured floors"
+assert_eq "$S"$'\t66.6\t1\nTOTAL\t66.6\t1' "$(floors)" "update writes exactly the measured floors"
 
 echo "--- coverage below its floor fails, and --update never lowers the floor"
 setup; printf '%s\t90.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov
@@ -334,7 +334,7 @@ cov --update
 
 echo "--- --update raises an existing floor to the current value"
 setup; printf '%s\t50.0\nTOTAL\t50.0\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --update
-assert_eq "$S"$'\t66.6\nTOTAL\t66.6\nUNCOVERED\t1' "$(floors)" "raise"
+assert_eq "$S"$'\t66.6\t1\nTOTAL\t66.6\t1' "$(floors)" "raise"
 
 echo "--- the ratchet fails on a last base row with no trailing newline"
 setup
@@ -347,44 +347,63 @@ total_setup() { # → the fixture plus a fully covered lib: 6 of 7 lines covered
   setup
   printf 'echo 1\necho 2\necho 3\necho 4\n' >"$D/$G"
   echo 'bash "$(dirname "$0")/../plugins/p/lib/g.sh" >/dev/null' >"$D/tests/test_g.sh"
-  printf '%s\t66.6\n%s\t100.0\nTOTAL\t85.7\nUNCOVERED\t1\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"
+  printf '%s\t66.6\t1\n%s\t100.0\t0\nTOTAL\t85.7\t1\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"
 }
 
 echo "--- deleting covered lines from a fully covered file passes, though TOTAL falls, while no uncovered line is added"
 total_setup; printf 'echo 1\necho 2\n' >"$D/$G"; cov
 [[ $RC == 0 && $(row TOTAL) == "4/5 80.0 ok" ]] || fail total-deleted-covered "rc=$RC: $OUTPUT"
 
-echo "--- an added uncovered line fails a TOTAL that fell"
-total_setup; printf 'echo 1\necho 2\nexit 0\necho never # an uncovered line\n' >"$D/$G"; cov
-[[ $RC == 1 && $(row TOTAL) == "5/7 71.4 LOW" ]] || fail total-added-uncovered "rc=$RC: $OUTPUT"
-
-echo "--- a TOTAL at its floor passes whatever the uncovered count"
-total_setup; printf '%s\t66.6\n%s\t100.0\nTOTAL\t85.7\nUNCOVERED\t0\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov
-[[ $RC == 0 && $(row TOTAL) == "6/7 85.7 ok" ]] || fail total-at-floor "rc=$RC: $OUTPUT"
-
-echo "--- --update lowers UNCOVERED to the uncovered lines there are, and never raises it"
-total_setup; printf '%s\t66.6\n%s\t100.0\nTOTAL\t85.7\nUNCOVERED\t5\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov --update
-[[ $RC == 0 && $(floors) == *$'\nUNCOVERED\t1' ]] || fail uncovered-lowered "rc=$RC, floors '$(floors)'"
-printf 'echo 1\nexit 0\necho never\necho never\n' >"$D/$G"; cov --update
-[[ $RC == 1 && $(floors) == *$'\nUNCOVERED\t1' ]] || fail uncovered-not-raised "rc=$RC, floors '$(floors)'"
-
-echo "--- an UNCOVERED that is not a whole number fails the check and leaves --update writing nothing"
-total_setup; printf '%s\t66.6\n%s\t100.0\nTOTAL\t85.7\nUNCOVERED\t1.0\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"
-printf 'echo 1\necho 2\n' >"$D/$G"; cov
-[[ $RC == 1 && $OUTPUT == *"BAD"*"UNCOVERED"* ]] || fail uncovered-malformed "rc=$RC: $OUTPUT"
-cov --update
-[[ $RC == 1 && $(floors) == *$'\nUNCOVERED\t1.0' ]] || fail uncovered-malformed-update "rc=$RC, floors '$(floors)'"
-
-echo "--- the ratchet fails when UNCOVERED rises, vanishes or is malformed"
+echo "--- deleting a covered line from a partly covered file passes, though its percentage falls"
 setup
-printf '%s\t66.6\nTOTAL\t66.6\nUNCOVERED\t2\n' "$S" >"$D/base.tsv"
-printf '%s\t66.6\nTOTAL\t66.6\nUNCOVERED\t3\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
-[[ $RC == 1 && $OUTPUT == *"ceiling raised: UNCOVERED 2 -> 3"* ]] || fail ratchet-uncovered-raised "rc=$RC: $OUTPUT"
-printf '%s\t66.6\nTOTAL\t66.6\nUNCOVERED\t1\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
-[[ $RC == 0 ]] || fail ratchet-uncovered-lowered "rc=$RC: $OUTPUT"
-printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
-[[ $RC == 1 && $OUTPUT == *"floor removed: UNCOVERED"* ]] || fail ratchet-uncovered-removed "rc=$RC: $OUTPUT"
-printf '%s\t66.6\nTOTAL\t66.6\nUNCOVERED\tn/a\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
-[[ $RC == 1 && $OUTPUT == *"floor invalid: UNCOVERED"* ]] || fail ratchet-uncovered-invalid "rc=$RC: $OUTPUT"
+cat >"$D/$S" <<'EOF'
+if [[ ${1:-} == yes ]]; then
+  echo "took yes"
+  echo "also yes"
+else
+  echo "took no"
+fi
+EOF
+printf '%s\t75.0\t1\nTOTAL\t75.0\t1\n' "$S" >"$D/tests/coverage-floor.tsv"
+grep -v 'also yes' "$D/$S" >"$D/kept" && mv "$D/kept" "$D/$S"; cov
+[[ $RC == 0 && $(row "$S") == "2/3 66.6 ok" ]] || fail file-deleted-covered "rc=$RC: $OUTPUT"
+
+echo "--- an added uncovered line fails a percentage that fell"
+total_setup; printf 'echo 1\necho 2\nexit 0\necho never # an uncovered line\n' >"$D/$G"; cov
+[[ $RC == 1 && $(row TOTAL) == "5/7 71.4 LOW" && $(row "$G") == "3/4 75.0 LOW" ]] || fail added-uncovered "rc=$RC: $OUTPUT"
+
+echo "--- a row at its floor passes whatever its ceiling, and one with no ceiling needs its floor"
+total_setup; printf '%s\t66.6\t0\n%s\t100.0\t0\nTOTAL\t85.7\t0\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov
+[[ $RC == 0 && $(row TOTAL) == "6/7 85.7 ok" ]] || fail at-floor "rc=$RC: $OUTPUT"
+printf '%s\t70.0\n%s\t100.0\t0\nTOTAL\t85.7\t1\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov
+[[ $RC == 1 && $(row "$S") == "2/3 66.6 LOW" ]] || fail no-ceiling-low "rc=$RC: $OUTPUT"
+
+echo "--- --update lowers each ceiling to the uncovered lines there are, and never raises one"
+total_setup; printf '%s\t66.6\t5\n%s\t100.0\nTOTAL\t85.7\t5\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov --update
+assert_eq "$S"$'\t66.6\t1\n'"$G"$'\t100.0\t0\nTOTAL\t85.7\t1' "$(floors)" "ceilings lowered"
+printf 'echo 1\nexit 0\necho never\necho never\n' >"$D/$G"; cov --update
+[[ $RC == 1 ]] || fail ceiling-not-raised-rc "rc=$RC: $OUTPUT"
+assert_eq "$S"$'\t66.6\t1\n'"$G"$'\t100.0\t0\nTOTAL\t85.7\t1' "$(floors)" "ceilings not raised"
+
+echo "--- a ceiling that is not a whole number fails the check and leaves --update writing nothing"
+total_setup; printf '%s\t66.6\t1.0\n%s\t100.0\t0\nTOTAL\t85.7\t1\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov
+[[ $RC == 1 && $(row "$S") == "2/3 66.6 BAD" ]] || fail ceiling-malformed "rc=$RC: $OUTPUT"
+cov --update
+[[ $RC == 1 && $(floors) == "$S"$'\t66.6\t1.0\n'* ]] || fail ceiling-malformed-update "rc=$RC, floors '$(floors)'"
+
+echo "--- the ratchet fails when a ceiling rises, goes or is malformed, and compares none a base lacks"
+setup
+printf '%s\t66.6\t2\nTOTAL\t66.6\t2\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\t3\nTOTAL\t66.6\t2\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"ceiling raised: $S 2 -> 3"* ]] || fail ratchet-ceiling-raised "rc=$RC: $OUTPUT"
+printf '%s\t66.6\t1\nTOTAL\t66.6\t2\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-ceiling-lowered "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nTOTAL\t66.6\t2\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"ceiling removed: $S (was 2)"* ]] || fail ratchet-ceiling-removed "rc=$RC: $OUTPUT"
+printf '%s\t66.6\tn/a\nTOTAL\t66.6\t2\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor invalid: $S"* ]] || fail ratchet-ceiling-invalid "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\t9\nTOTAL\t66.6\t9\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-ceiling-new "rc=$RC: $OUTPUT"
 
 finish "coverage-tools"

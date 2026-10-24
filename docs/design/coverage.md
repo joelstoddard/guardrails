@@ -94,36 +94,38 @@ test that runs that line covers all of it.
 
 ## Floors and the ratchet
 
-`tests/coverage-floor.tsv` holds one `path<TAB>percent` line per measured file, a
-`TOTAL` line, and an `UNCOVERED<TAB>count` line. Percentages are rounded down to one
-decimal place. A percentage must match `digits.digit`, the count must be a whole
-number, and a path may appear once.
+`tests/coverage-floor.tsv` holds one `path<TAB>percent<TAB>most` line per measured
+file, and a `TOTAL` line for all of them together. `percent` is the floor, rounded down
+to one decimal place, and must match `digits.digit`. `most` is a ceiling, the most
+uncovered lines the row may have, a whole number. A path may appear once.
 
-`UNCOVERED` is a ceiling on the uncovered lines of all measured files together, and it
-may fall but never rise. `TOTAL` passes at or above its floor, and also below it while
-the uncovered lines are within `UNCOVERED`. A percentage of the total alone punishes
-deleting covered code: removing two covered lines from a fully covered `repo-cmd.sh`
-took the total from 597/600 to 595/598, which rounds down from 99.5 to 99.4 and failed,
-though nothing was less tested. Deleting code never adds an uncovered line, and losing
-a test of a line, or adding a line no test runs, always does, so the count tells the
-two apart where the percentage cannot. Rounding to nearest would only move the edge:
-deleting enough covered lines crosses it again. Letting `TOTAL` pass whenever every
-file meets its floor would let a new file with a low floor of its own lower the total.
-A new uncovered line still fails `TOTAL` unless enough covered lines come with it to
-hold the percentage, as before; `UNCOVERED` then stays at the lower count, so a later
-deletion needs the percentage again until that line is covered.
+A row passes at or above its floor, and also below it while its uncovered lines stay
+within its ceiling. A floor alone punishes deleting covered code: removing two covered
+lines from a fully covered `repo-cmd.sh` took the total from 597/600 to 595/598, which
+rounds down from 99.5 to 99.4 and failed, though nothing was less tested, and deleting
+a covered line from `publish-cmd.sh`, at 94/97, would fail that file the same way.
+Deleting code never adds an uncovered line, and losing the test of a line, or adding a
+line no test runs, always does, so the count tells the two apart where the percentage
+cannot. Rounding to nearest would only move the edge: deleting enough covered lines
+crosses it again. Letting `TOTAL` pass whenever every file meets its floor would let a
+new file with a low floor of its own drag the total down. A new uncovered line still
+fails its row unless enough covered lines come with it to hold the percentage, as
+before; the ceiling then stays at the lower count, so a later deletion needs the
+percentage again until that line is covered. A row with no ceiling, as in a floor file
+from before the ceilings, needs its floor.
 
-- `bash tests/coverage.sh` exits 1 if a measured file is below its floor, the total is
-  below its floor with more uncovered lines than `UNCOVERED`, or any row has no floor
-  or a malformed or duplicated one (status `BAD`). Status `above` on `UNCOVERED` means
-  the total passes on its percentage alone.
+- `bash tests/coverage.sh` exits 1 if a measured file or the total is below its floor
+  with more uncovered lines than its ceiling, has no floor, or has a malformed or
+  duplicated floor or ceiling (status `BAD`).
 - `bash tests/coverage.sh --update` sets each floor to its current value and never
-  lowers one, and sets `UNCOVERED` to the current count and never raises it. A new
-  measured file gets its floor here.
+  lowers one, and each ceiling to the current count and never raises one. A new
+  measured file gets both here.
 - `bash tests/coverage.sh --ratchet BASE` compares the floor file with a `BASE` copy,
   such as the one on the PR's base branch. It fails if any floor is lower, if a floor
   is missing while its file still exists, or if a floor on either side is malformed or
-  duplicated (`floor invalid`), and if `UNCOVERED` rose (`ceiling raised`) or went.
+  duplicated (`floor invalid`), and if a ceiling rose (`ceiling raised`) or went
+  (`ceiling removed`). A base row with no ceiling, as on a base from before them, has
+  none to compare.
   `TOTAL` must always exist, on both sides: a base with
   no `TOTAL` row, such as an empty file from a failed `git show`, fails, so a missing
   base can never read as nothing to compare. A floor for a deleted file may go. This

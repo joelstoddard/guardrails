@@ -19,7 +19,7 @@ tenths() { # "87.5" -> 875; fails on anything but digits.digit, so a bad floor c
   echo $((10#${1%.*} * 10 + 10#${1#*.}))
 }
 pct() { local t=$1; echo "$((t / 10)).$((t % 10))"; }            # 875 -> "87.5"
-whole() { [[ $1 =~ ^[0-9]+$ ]]; }                                # UNCOVERED, a count of lines
+whole() { [[ $1 =~ ^[0-9]+$ ]]; }                                # a ceiling, a count of lines
 
 measured() { # measured files, relative to ROOT
   (cd "$ROOT" && for f in plugins/*/hooks/scripts/*.sh plugins/*/lib/*.sh; do
@@ -74,58 +74,57 @@ credit_spans() { # stdin "test<TAB>path<TAB>line"; moves a hit on a command's la
 }
 
 floor_of() { awk -F'\t' -v p="$1" '$1 == p { print $2 }' "$FLOORS" 2>/dev/null || true; }
+most_of() { awk -F'\t' -v p="$1" '$1 == p { print $3 }' "$FLOORS" 2>/dev/null || true; } # the ceiling on uncovered lines
 
 report() { # <update: 0|1>; prints the table, rewrites floors on update, returns 1 on a missing or low floor
-  local update=$1 f exec_n hit_n now floor total_exec=0 total_hit=0 bad=0 invalid=0 status
+  local update=$1 f exec_n hit_n total_exec=0 total_hit=0 bad=0 invalid=0 status
   local -a rows=()
-  printf '%-8s %9s %6s %6s  %s\n' status lines pct floor file
+  printf '%-8s %9s %6s %6s %5s  %s\n' status lines pct floor most file
   while IFS= read -r f; do
     exec_n=$(awk -f "$HERE/coverage/executable.awk" "$ROOT/$f" | LC_ALL=C sort -u >"$OUT/exec" && wc -l <"$OUT/exec")
     awk -F'\t' -v p="$f" '$2 == p { print $3 }' "$OUT/hits.tsv" | LC_ALL=C sort -u >"$OUT/hit"
     hit_n=$(LC_ALL=C comm -12 <(LC_ALL=C sort "$OUT/exec") <(LC_ALL=C sort "$OUT/hit") | wc -l)
     exec_n=$((exec_n)); hit_n=$((hit_n))
     total_exec=$((total_exec + exec_n)); total_hit=$((total_hit + hit_n))
-    now=$((exec_n == 0 ? 1000 : hit_n * 1000 / exec_n))
-    floor=$(floor_of "$f")
-    check "$f" "$now" "$floor" || bad=1
-    [[ $status == BAD ]] && invalid=1
-    printf '%-8s %4d/%-4d %6s %6s  %s\n' "$status" "$hit_n" "$exec_n" "$(pct "$now")" "${floor:--}" "$f"
-    rows+=("$f"$'\t'"$(pct "$(newfloor "$now" "$floor")")")
+    row "$f" "$hit_n" "$exec_n"
   done < <(measured)
-  now=$((total_exec == 0 ? 1000 : total_hit * 1000 / total_exec))
-  floor=$(floor_of TOTAL)
-  local uncovered=$((total_exec - total_hit)) most ustatus=ok
-  most=$(floor_of UNCOVERED)
-  if [[ -z $most ]]; then ustatus="NO FLOOR"; most=$uncovered; ((update)) || bad=1
-  elif ! whole "$most"; then ustatus=BAD; invalid=1; bad=1; most=$uncovered
-  elif ((uncovered > 10#$most)); then ustatus=above; else most=$uncovered
-  fi
-  # Deleting covered lines lowers TOTAL but leaves nothing less tested, so TOTAL also passes while no uncovered line is added.
-  if ! check TOTAL "$now" "$floor"; then
-    if [[ $status == LOW && $ustatus == ok ]]; then status=ok; else bad=1; fi
-  fi
-  [[ $status == BAD ]] && invalid=1
-  printf '%-8s %4d/%-4d %6s %6s  %s\n' "$status" "$total_hit" "$total_exec" "$(pct "$now")" "${floor:--}" TOTAL
-  printf '%-8s %9s %6s %6s  %s\n' "$ustatus" "$uncovered" - "$(floor_of UNCOVERED | grep . || echo -)" UNCOVERED
-  rows+=("TOTAL"$'\t'"$(pct "$(newfloor "$now" "$floor")")" "UNCOVERED"$'\t'"$((10#$most))")
+  row TOTAL "$total_hit" "$total_exec"
   if ((update && !invalid)); then printf '%s\n' "${rows[@]}" >"$FLOORS"; fi
   return $bad
 }
 
-check() { # <file> <now, tenths> <floor or empty>; sets status
-  if [[ -z $3 ]]; then
+row() { # <file or TOTAL> <hit> <executable>; prints its row and adds its floors to rows; report's bad and invalid see it
+  local now=$(($3 == 0 ? 1000 : $2 * 1000 / $3)) uncovered=$(($3 - $2)) floor most
+  floor=$(floor_of "$1"); most=$(most_of "$1")
+  check "$now" "$floor" "$uncovered" "$most" || bad=1
+  [[ $status == BAD ]] && invalid=1
+  printf '%-8s %4d/%-4d %6s %6s %5s  %s\n' "$status" "$2" "$3" "$(pct "$now")" "${floor:--}" "${most:--}" "$1"
+  rows+=("$1"$'\t'"$(pct "$(newfloor "$now" "$floor")")"$'\t'"$(newmost "$uncovered" "$most")")
+}
+
+check() { # <now, tenths> <floor or empty> <uncovered lines> <ceiling or empty>; sets status
+  if [[ -z $2 ]]; then
     status="NO FLOOR"; ((update)) && return 0; return 1
   fi
   local floor_tenths
-  floor_tenths=$(tenths "$3") || { status="BAD"; return 1; }
-  if (($2 < floor_tenths)); then status="LOW"; return 1; fi
+  floor_tenths=$(tenths "$2") || { status="BAD"; return 1; }
+  if [[ -n $4 ]] && ! whole "$4"; then status="BAD"; return 1; fi
   status="ok"
+  (($1 >= floor_tenths)) && return 0
+  # Deleting covered lines lowers a percentage and tests nothing less, so a row also passes while its uncovered lines
+  # stay within its ceiling. See docs/design/coverage.md
+  [[ -n $4 ]] && (($3 <= 10#$4)) && return 0
+  status="LOW"; return 1
 }
 
 newfloor() { # <now> <floor>: the higher of the two, in tenths
   local now=$1 floor_tenths
   if floor_tenths=$(tenths "${2:-}") && ((floor_tenths > now)); then now=$floor_tenths; fi
   echo "$now"
+}
+
+newmost() { # <uncovered lines> <ceiling or empty>: the lower of the two
+  if whole "${2:-}" && ((10#$2 < $1)); then echo "$((10#$2))"; else echo "$1"; fi
 }
 
 moved_to() { # <path>: where a gone file went, per git since --base, else a file with its name; empty if deleted
@@ -141,7 +140,7 @@ moved_to() { # <path>: where a gone file went, per git since --base, else a file
 }
 
 ratchet() { # <base floor file>: fails if a floor fell, or vanished while its file still exists, here or moved
-  local path old new new_tenths old_tenths moved bad=0 base_total=0 changes st a b
+  local path old oldmost key new newmost new_tenths old_tenths moved bad=0 base_total=0 changes st a b
   declare -A renamed=() # path at --base -> its path now, or "" if deleted
   if [[ -n $base_rev ]]; then
     changes=$(mktemp) || return 1
@@ -156,19 +155,14 @@ ratchet() { # <base floor file>: fails if a floor fell, or vanished while its fi
     done <"$changes"
     rm -f "$changes"
   fi
-  while IFS=$'\t' read -r path old || [[ -n $path ]]; do
+  while IFS=$'\t' read -r path old oldmost || [[ -n $path ]]; do
     [[ -n $path ]] || continue
     [[ $path == TOTAL ]] && base_total=1
-    new=$(floor_of "$path")
-    if [[ $path == UNCOVERED && -n $new ]]; then # a ceiling on uncovered lines, which may fall and not rise
-      if ! whole "$new" || ! whole "$old"; then echo "floor invalid: $path"; bad=1
-      elif ((10#$new > 10#$old)); then echo "ceiling raised: $path $old -> $new"; bad=1; fi
-      continue
-    fi
-    if [[ -z $new && $path != TOTAL && $path != UNCOVERED && ! -e $ROOT/$path ]]; then # renamed per git, or moved with its name
+    key=$path; new=$(floor_of "$key")
+    if [[ -z $new && $path != TOTAL && ! -e $ROOT/$path ]]; then # renamed per git, or moved with its name
       moved=$(moved_to "$path") || { echo "cannot list the repo's files to find $path"; bad=1; continue; }
       [[ -n $moved ]] || continue # deleted, so its floor may go
-      new=$(floor_of "$moved"); path="$path -> $moved"
+      key=$moved; new=$(floor_of "$key"); path="$path -> $moved"
     fi
     if [[ -z $new ]]; then echo "floor removed: $path (was $old)"; bad=1; continue; fi
     if ! new_tenths=$(tenths "$new") || ! old_tenths=$(tenths "$old"); then
@@ -176,6 +170,11 @@ ratchet() { # <base floor file>: fails if a floor fell, or vanished while its fi
     elif ((new_tenths < old_tenths)); then
       echo "floor lowered: $path $old -> $new"; bad=1
     fi
+    [[ -n $oldmost ]] || continue # a base from before the ceilings has none to compare
+    newmost=$(most_of "$key")
+    if [[ -z $newmost ]]; then echo "ceiling removed: $path (was $oldmost)"; bad=1
+    elif ! whole "$newmost" || ! whole "$oldmost"; then echo "floor invalid: $path"; bad=1
+    elif ((10#$newmost > 10#$oldmost)); then echo "ceiling raised: $path $oldmost -> $newmost"; bad=1; fi
   done <"$1"
   # An empty base, such as a failed git show, would otherwise compare nothing and pass.
   if ((!base_total)); then echo "base has no TOTAL floor: $1"; bad=1; fi
