@@ -59,7 +59,7 @@ kept throughout.
   skills/rfc/           personal RFC → docs/specs/YYYY-MM-DD-<topic>-design.md
   skills/adr/           personal ADR → docs/design/<concept>.md
   skills/track-findings/ file each finding in the session's tracker
-  hooks/scripts/{persona-report,findings-capture,findings-gate,suppression-warn}.sh
+  hooks/scripts/{persona-report,findings-capture,findings-gate,findings-reminder,suppression-warn}.sh
   lib/findings.sh
 ```
 
@@ -208,6 +208,7 @@ reference.
 | `persona-report.sh`   | `SubagentStop`, `architect\|data-engineer\|qa-engineer\|release-engineer\|sre\|security-engineer\|technical-writer` | Blocks a final message lacking `## Result: DONE\|PARTIAL\|BLOCKED` or any of the six `###` headings; the reason carries the format                           | Allows when `stop_hook_active`. Fail-open without `jq`                                   |
 | `findings-capture.sh` | `SubagentStop`, all agents                                                                                          | Appends the report's findings to a per-session pending file that `findings-gate` surfaces at the next `Stop`                                                 | A background subagent's report never reaches a main-session hook (live check 5). Unsafe session ids are ignored |
 | `findings-gate.sh`    | `Stop`                                                                                                              | Blocks once if any item in a findings section of the final message does not end with an issue URL, `#N`, `owner/repo#N`, `(asked)` or `(declined)`, AND lists pending subagent findings, consuming them | Allows when `stop_hook_active`. `ponytail:` ceiling: findings under another heading pass |
+| `findings-reminder.sh` | `UserPromptSubmit`                                                                                                  | Names how many pending subagent findings wait for a findings list, which `findings-gate` holds until one comes                                               | Never blocks. Unsafe session ids are ignored                                             |
 | `suppression-warn.sh` | `PostToolUse`, `Edit\|Write\|MultiEdit`                                                                             | Warns, never blocks, on added `it\|test\|describe\|context\|suite.skip(`, `xit(`, `@pytest.mark.skip`, `t.Skip(`, `# noqa`, `eslint-disable`, `@ts-ignore`, `type: ignore`, `as any`, `nolint` | Same shape as `comment-warn.sh`; markdown ignored                                        |
 
 The findings scripts share `lib/findings.sh`, which extracts the items of a findings
