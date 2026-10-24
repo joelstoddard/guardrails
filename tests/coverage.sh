@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Line coverage for the plugins' hook scripts and lib files, checked against per-file floors that only rise.
-# Usage: tests/coverage.sh [--update | --ratchet BASE_FLOOR_FILE | --lines FILE]
+# Usage: tests/coverage.sh [--update | [--base REV] --ratchet BASE_FLOOR_FILE | --lines FILE]
 # See docs/design/coverage.md
 set -euo pipefail
 # Each sort and comm runs with LC_ALL=C, so hits.tsv sorts the same on every host. LC_ALL is not
@@ -117,7 +117,8 @@ newfloor() { # <now> <floor>: the higher of the two, in tenths
   echo "$now"
 }
 
-moved_to() { # <path>: a file in the repo with the same name, preferring one with a floor; fails if git cannot list the repo
+moved_to() { # <path>: where a gone file went, per git since --base, else a file with its name; empty if deleted
+  if [[ -n ${renamed[$1]+set} ]]; then echo "${renamed[$1]}"; return 0; fi
   local files f found=""
   files=$(cd "$ROOT" && git ls-files --cached --others --exclude-standard) || return 1
   while IFS= read -r f; do
@@ -129,12 +130,26 @@ moved_to() { # <path>: a file in the repo with the same name, preferring one wit
 }
 
 ratchet() { # <base floor file>: fails if a floor fell, or vanished while its file still exists, here or moved
-  local path old new new_tenths old_tenths moved bad=0 base_total=0
+  local path old new new_tenths old_tenths moved bad=0 base_total=0 changes st a b
+  declare -A renamed=() # path at --base -> its path now, or "" if deleted
+  if [[ -n $base_rev ]]; then
+    changes=$(mktemp) || return 1
+    if ! (cd "$ROOT" && git diff --find-renames --name-status -z "$base_rev" --) >"$changes"; then
+      echo "cannot diff against $base_rev"; rm -f "$changes"; return 1
+    fi
+    while IFS= read -r -d '' st && IFS= read -r -d '' a; do
+      case $st in
+        R*) IFS= read -r -d '' b && renamed[$a]=$b ;;
+        D) renamed[$a]="" ;;
+      esac
+    done <"$changes"
+    rm -f "$changes"
+  fi
   while IFS=$'\t' read -r path old || [[ -n $path ]]; do
     [[ -n $path ]] || continue
     [[ $path == TOTAL ]] && base_total=1
     new=$(floor_of "$path")
-    if [[ -z $new && $path != TOTAL && ! -e $ROOT/$path ]]; then # a moved file keeps its name
+    if [[ -z $new && $path != TOTAL && ! -e $ROOT/$path ]]; then # renamed per git, or moved with its name
       moved=$(moved_to "$path") || { echo "cannot list the repo's files to find $path"; bad=1; continue; }
       [[ -n $moved ]] || continue # deleted, so its floor may go
       new=$(floor_of "$moved"); path="$path -> $moved"
@@ -151,6 +166,11 @@ ratchet() { # <base floor file>: fails if a floor fell, or vanished while its fi
   return $bad
 }
 
+base_rev=""
+if [[ ${1:-} == --base ]]; then
+  base_rev=${2:?--base needs a revision}; shift 2
+  [[ ${1:-} == --ratchet ]] || die "--base goes only with --ratchet"
+fi
 case ${1:-} in
   --lines) awk -f "$HERE/coverage/executable.awk" "${2:?--lines needs a file}" ;;
   --ratchet) ratchet "${2:?--ratchet needs the base floor file}" ;;

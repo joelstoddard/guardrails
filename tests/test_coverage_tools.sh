@@ -251,6 +251,39 @@ printf '%s\t66.6\nplugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/cover
 [[ $RC == 1 && $OUTPUT == *"floor lowered: plugins/p/lib/m.sh -> plugins/q/lib/m.sh 50.0 -> 40.0"* ]] ||
   fail ratchet-moved-lowered "rc=$RC: $OUTPUT"
 
+commit_all() { git -C "$D" add -A && git -C "$D" -c user.email=t@t -c user.name=t commit -qm "$1"; }
+
+echo "--- with --base, the ratchet follows a floor whose file git saw renamed, and fails if it fell"
+setup; git -C "$D" init -q; echo 'echo old' >"$D/plugins/p/lib/old.sh"; commit_all seed
+git -C "$D" mv plugins/p/lib/old.sh plugins/p/lib/new.sh
+printf '%s\t66.6\nplugins/p/lib/old.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\nplugins/p/lib/new.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+cov --base HEAD --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor lowered: plugins/p/lib/old.sh -> plugins/p/lib/new.sh 50.0 -> 40.0"* ]] ||
+  fail ratchet-renamed-lowered "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nplugins/p/lib/new.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+cov --base HEAD --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-renamed "rc=$RC: $OUTPUT"
+
+echo "--- with --base, a floor whose file git saw deleted may go, though another file has its name"
+setup; git -C "$D" init -q; mkdir -p "$D/plugins/q/lib"
+echo 'echo p' >"$D/plugins/p/lib/m.sh"; echo 'echo q' >"$D/plugins/q/lib/m.sh"; commit_all seed
+git -C "$D" rm -q plugins/p/lib/m.sh
+printf '%s\t66.6\nplugins/p/lib/m.sh\t50.0\nplugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\nplugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+cov --base HEAD --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-deleted-namesake "rc=$RC: $OUTPUT"
+
+echo "--- with --base, the ratchet fails when git cannot diff against the revision"
+setup; git -C "$D" init -q; commit_all seed
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" | tee "$D/base.tsv" >"$D/tests/coverage-floor.tsv"
+cov --base no-such-revision --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"cannot diff against no-such-revision"* ]] || fail ratchet-bad-base "rc=$RC: $OUTPUT"
+
+echo "--- --base goes only with --ratchet"
+setup; cov --base HEAD --update
+[[ $RC == 2 ]] || fail base-without-ratchet "rc=$RC: $OUTPUT"
+
 echo "--- the ratchet fails on a vanished floor when it cannot list the repo's files to look for it"
 setup
 printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"

@@ -109,21 +109,28 @@ test that runs that line covers all of it.
   no `TOTAL` row, such as an empty file from a failed `git show`, fails, so a missing
   base can never read as nothing to compare. A floor for a deleted file may go. This
   makes "floors only rise" a machine check and not a habit.
-- A file gone from its path counts as moved if another file in the repo has its name,
-  as `git ls-files` lists the repo: tracked files, and untracked ones git does not
-  ignore. Its floor must follow it to the new path and not fall there. A script moved
-  out of the globs, for example into a subdirectory of `hooks/scripts/`, loses its
-  floor on `--update`, so the ratchet fails with `floor removed: OLD -> NEW`. If git
-  cannot list the repo, the ratchet fails too.
+- A file gone from its path counts as moved, and its floor must follow it to the new
+  path and not fall there. With `--base REV`, the revision the base floor file comes
+  from, git says where it went: `git diff --find-renames --name-status REV` compares
+  that revision with the working tree, so a file renamed as it moved keeps its floor,
+  and one git saw deleted loses it even when another file has its name. A file git
+  does not name, such as one moved with a plain `mv` and not added, and every file
+  without `--base`, counts as moved if another file in the repo has its name, as
+  `git ls-files` lists the repo: tracked files, and untracked ones git does not
+  ignore. A script moved out of the globs, for example into a subdirectory of
+  `hooks/scripts/`, loses its floor on `--update`, so the ratchet fails with
+  `floor removed: OLD -> NEW`. If git cannot diff against `REV` or list the repo, the
+  ratchet fails too.
 - `bash tests/coverage.sh --lines FILE` prints the lines of `FILE` that count.
 
-Known limit: the ratchet finds a moved file by its name. A move that also renames the
-file reads as a deletion, so its floor may go. A deleted file whose name another file
-still has reads as moved to that file.
+Known limit: without `--base`, the ratchet finds a moved file by its name alone. A
+move that also renames the file reads as a deletion, so its floor may go, and a deleted
+file whose name another file still has reads as moved to that file. CI passes `--base`.
 
 Exit codes: 0 for success; 1 for a failed test, a missing, low or invalid floor, a
-missing argument after `--lines` or `--ratchet`, an unreadable base file, or a repo git
-cannot list; 2 for an unknown option or a bash older than 4.1.
+missing argument after `--lines`, `--ratchet` or `--base`, an unreadable base file, a
+revision git cannot diff against, or a repo git cannot list; 2 for an unknown option,
+`--base` without `--ratchet`, or a bash older than 4.1.
 
 Output goes to `.coverage/`, which git ignores. `.coverage/hits.tsv` lists every traced
 line as `test<TAB>path<TAB>line`, with a continuation line's hit on its counted line.
@@ -138,7 +145,10 @@ step runs the Python tests that `tests/run.sh` runs too. The floors were measure
 bash 5.3 (macOS) and on bash 5.2 in Ubuntu 24.04, as on the runner, and matched.
 
 On a pull request, the job also gets the floor file from the PR's base branch
-(`$GITHUB_BASE_REF`) and runs `--ratchet` against it. A stacked PR compares with its
+(`$GITHUB_BASE_REF`) and runs `--ratchet` against it, with `--base FETCH_HEAD` so a
+renamed file keeps its floor. The diff runs from the base branch's tip, the revision
+the floor file comes from, to the checkout, not `BASE...HEAD` from their merge base:
+the checkout is one commit deep, so git finds no merge base. A stacked PR compares with its
 parent branch, not with `main`, so each PR in a stack is checked against the floors it
 would merge into. The step has no fallback. If the base has no floor file, `git show`
 fails and the step fails, and the tool also rejects an empty base. A push to `main`
