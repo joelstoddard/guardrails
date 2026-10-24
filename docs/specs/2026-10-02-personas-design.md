@@ -255,13 +255,14 @@ command:
     subagent's findings per session, and the gate surfaces them once and consumes them.
     An unsafe session id is ignored.
   - `test_suppression_warn.sh`: each pattern warns, markdown is ignored, nothing blocks.
-- **Consistency.** `tests/test_agents.py`, ported from the dotfiles' `test/unit/test_personas.py` (Python `unittest`, like its neighbours):
-  - every `guardrails:` skill named in an agent or rule exists;
-  - the `SubagentStop` matcher and the agent files list the same personas;
-  - every agent has `name`, `description` and `tools`;
-  - every rule's frontmatter parses.
-
-  This is the check that would have caught the draft's dangling references.
+- **Consistency.** Each check lives in the file named:
+  - `tests/test_references.sh`: every `building:`, `recording:` or `personas:` skill or
+    agent named under `plugins/` exists, and no stale `guardrails:` name or old rule path
+    remains. This is the check that would have caught the draft's dangling references.
+  - `tests/test_agents.py`: the `SubagentStop` matcher and the agent files list the same
+    personas, and every agent has `name`, `description` and `tools`.
+  - The dotfiles' `test/unit/test_rules.py`: every path-scoped rule's frontmatter parses.
+    The plugins' own rules have no frontmatter, since hooks load them.
 
 - **Work plugin.** Its own `tests/test_work_context.sh`: context under `~/work`, silent
   elsewhere.
