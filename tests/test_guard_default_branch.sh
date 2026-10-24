@@ -204,4 +204,9 @@ done
 run_hook "$S" "$(jsonat "$r13" 'cat cmds.txt | b"as"h')"
 assert_out '"permissionDecision":"ask"' "a pipe into a shell whose name holds quotes asks on a default branch"
 
+# One piece of a quoted argument is not read as the subcommand, as on main (#131).
+run_hook "$S" "$(jsonat "$r13" 'git "commit -m x"')"
+assert_rc 0 "a piece of a quoted argument is not a commit on the default branch"
+assert_eq "$OUT" "" "a piece of a quoted argument asks nothing"
+
 finish "guard-default-branch"

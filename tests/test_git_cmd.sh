@@ -216,5 +216,10 @@ yes $'git <<EOF commit -m x\nbody\nEOF'     commit "a heredoc opened before the 
 yes $'<<EOF git commit -m x\nbody\nEOF'     commit "a heredoc opened before git"
 yes 'git << 2 commit -m x'                 commit "a numeric heredoc delimiter, which the split keeps"
 yes '<< 2 git commit -m x'                 commit "a numeric heredoc delimiter before git"
+# One piece of a quoted argument of several words is not read: the shell passes the argument whole, as main read it.
+no  'git "commit -m x"'                    commit "a piece of a quoted argument is not the subcommand"
+no  "git 'commit x' -m y"                  commit "a first piece of a quoted argument is not the subcommand"
+no  'git commit\ x -m y'                   commit "a word an escaped blank joins to the next is not the subcommand"
+yes "git co'mm'it -m x"                    commit "a word quoted in its middle is whole"
 
 finish "git-cmd"

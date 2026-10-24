@@ -40,7 +40,11 @@ _guardrails_git_skip_globals() {
     case "$w" in
       --*=*) ;;                                                  # --git-dir=/x
       -*) _guardrails_git_opt_takes_value "$w" && opt="$w" ;;    # -C /x, --no-pager
-      *) _GUARDRAILS_GIT_SUB="$w"; break ;;
+      *)
+        # git gets a quoted argument whole, so a subcommand read from one piece of it is left as written, as before.
+        _GUARDRAILS_GIT_SUB="$w"; w="${toks[$((i - 1))]}"
+        case "$w" in *[\"\'\\]*) _guardrails_whole_word || _GUARDRAILS_GIT_SUB="$w" ;; esac
+        break ;;
     esac
   done
 }

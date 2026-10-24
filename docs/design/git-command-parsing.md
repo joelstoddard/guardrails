@@ -77,7 +77,8 @@ the words before a publish verb, are read past redirects and without their quote
 2>/dev/null commit`, `git "commit"` and `gh >out pr create` are what they run (#131). A
 redirect between `-C` and its directory does not hide the directory, and a redirect's target
 is not read as `-C` or as a publish verb. The publish guard still matches an option as
-written, so a quoted `"-w"` stays a word before a verb, as it was before.
+written, so a quoted `"-w"` stays a word before a verb, as it was before. A word that is one
+piece of a quoted argument of several words is read differently; see "Known limitation".
 
 `command -v` and `-V` name a command without running it, so there `command` is the
 command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
@@ -219,10 +220,16 @@ with the tripwire framing: the failure is fail-open, and the guard lets the comm
 through rather than blocking it wrongly. For the same reason a long option that takes a
 separate value but is not in its wrapper's list reads its value as the command word.
 
-A quoted argument of several words is read as several words. Each loses its quotes, so
-the publish guard reads `say "post it"` as the verb `post`, as it always read the middle
-words of such an argument. This blocks some commands that publish nothing, and catches
-`ssh host 'npm publish'`, which publishes from another host.
+A quoted argument of several words is read as several words, as it always was. Its middle
+words hold no quote, so a verb among them blocks, as before: `python3 x.py "a post here"`. Its
+first and last words, such as `"post` and `it"` in `say "post it"`, are pieces that the split
+on blanks cut, whose quotes do not close within them (`_guardrails_whole_word`). The shell
+passes the argument whole, so a verb read from a piece may not be the command's: the publish
+guard asks rather than blocks, and names the piece (#131). So `claude "review this"` costs a
+question, and `ssh host 'npm publish'`, which publishes from another host, gets one too. The
+per-line split cuts every quoted line into pieces, so a piece read there asks nothing, as
+before. Git's skip leaves a piece as written, as before, so `git "commit -m x"` is not a
+commit.
 
 A shell that runs on another host, as in `ssh host bash <<EOF`, has its script read like
 a local one. So `guard-default-branch` judges a `git commit` in it against the local

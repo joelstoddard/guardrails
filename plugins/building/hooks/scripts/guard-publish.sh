@@ -18,10 +18,15 @@ if why="$(_guardrails_unreadable "$cmd")"; then
   exit 0
 fi
 
-reason="$(_guardrails_publishes_as_user "$cmd")" || {
+reason="$(_guardrails_publishes_as_user "$cmd")"; rc=$?
+[ "$rc" = 0 ] || {
+  # A verb read from one piece of a quoted argument may not be the command's (#131).
+  if [ "$rc" = 2 ]; then
+    ask="Could not be sure this does not publish as you: $reason. The shell passes that argument whole, so allow it only if nothing here posts under your name."
   # Read line by line, as before quotes carried, it may still publish: a quote spanning lines
   # looks the same as shell syntax the carried split misreads, so only the human can tell.
-  if reason="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$cmd")"; then
+  # That split cuts every quoted line into pieces, so a verb read from one asks nothing there.
+  elif reason="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$cmd")"; then
     ask="Could not be sure this does not publish as you. Read line by line: $reason. A quoted argument spanning lines reads the same way, so allow it only if nothing here posts under your name."
   # A shell reading commands from a pipe runs what no guard can read (#63).
   elif why="$(_guardrails_unseen_shell_stdin "$cmd")"; then

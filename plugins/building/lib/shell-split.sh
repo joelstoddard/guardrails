@@ -313,6 +313,14 @@ _guardrails_unquote() {
   w="${w#\$}"; w="${w//[\"\'\\]/}"
 }
 
+# _guardrails_whole_word → rc 0 if every quote and backslash in the caller's word w closes within it, so the word is
+# whole and not one piece of a quoted argument that the split on blanks cut (#131). A word too long to unquote is not.
+_GUARDRAILS_WHOLE_WORD='^([^"'"'"'\\]|\\.|"([^"\\]|\\.)*"|'"'"'[^'"'"']*'"'"')*$'
+_guardrails_whole_word() {
+  [ "${#w}" -le 64 ] || return 1
+  case "$w" in *[\"\']* | *\\) [[ $w =~ $_GUARDRAILS_WHOLE_WORD ]] ;; esac
+}
+
 _guardrails_command_skip() {
   local i=0 w b="" vals longs o start ops sub remote=-1 rb
   while [ "$i" -lt "${#toks[@]}" ]; do
