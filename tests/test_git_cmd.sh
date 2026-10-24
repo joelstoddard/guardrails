@@ -96,6 +96,8 @@ yes $'echo \'x\ngit <<<y commit -m x'                                          c
 # What the per-line split sees still counts, so a quote the carried split misreads hides nothing.
 yes $'bash -c \'\ncd /tmp\ngit commit -m x\n\''       commit "a commit only the per-line split sees"
 yes $'x=a; echo "${x#"\'"}"\ngit commit -m x\n# \''     commit "a commit after misread nested quotes"
+yes $'echo \'a\ngit <<<x commit -m y\n\''                commit "the per-line split's lines read by its own here-string rule"
+yes $'cat <<E\\OF\nE\neval \'echo $(git commit -m x)\'\nEOF'      commit "a payload the per-line split sees is split both ways"
 cwd $'x=a; echo "${x#"\'"}"\ncd /evil\n# \'\ngit commit -m x' commit /start $'/start\n/evil' \
   "both directories when the splits disagree"
 # Backticks end where the shell ends them, so quotes inside them no longer split the two apart (#87).

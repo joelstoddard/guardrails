@@ -50,13 +50,20 @@ _guardrails_git_skip_globals() {
 }
 
 _guardrails_invokes_git() {
-  local cmdline="$1" want="$2" depth="${3:-0}" seg i carried per_line
-  local -a toks
+  local cmdline="$1" want="$2" depth="${3:-0}" carried per_line
   [ "$depth" -gt 4 ] && return 1
   carried="$(_guardrails_split_segments "$cmdline")"
   per_line="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_split_segments "$cmdline")"
-  # Where the two splits agree, as they mostly do, one is read: both would double the work at each level.
-  [ "$per_line" != "$carried" ] || per_line=""
+  _guardrails_git_in_segments "$carried" && return 0
+  # Where the two splits agree, as they mostly do, one is read: both would double the work at each level. The per-line
+  # split's lines are read by its own rule for a here-string, whose word it drops (#152).
+  [ "$per_line" != "$carried" ] && _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_git_in_segments "$per_line"
+}
+
+# _guardrails_git_in_segments <segments> → rc 0 if one of them runs git with the caller's want, at the caller's depth.
+_guardrails_git_in_segments() {
+  local seg i
+  local -a toks
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
     _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"
@@ -66,10 +73,11 @@ _guardrails_invokes_git() {
         [ "$_GUARDRAILS_GIT_SUB" = "$want" ] && return 0
         ;;
       *sh | eval)
+        # A payload is split both ways again, whichever split it came from.
         _guardrails_shell_payload "$seg" &&
-          _guardrails_invokes_git "$_GUARDRAILS_PAYLOAD" "$want" "$((depth + 1))" && return 0 ;;
+          _GUARDRAILS_SPLIT_PER_LINE='' _guardrails_invokes_git "$_GUARDRAILS_PAYLOAD" "$want" "$((depth + 1))" && return 0 ;;
     esac
-  done <<<"$carried"$'\n'"$per_line"
+  done <<<"$1"
   return 1
 }
 

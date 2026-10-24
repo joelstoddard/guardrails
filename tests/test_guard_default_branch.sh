@@ -213,4 +213,8 @@ assert_eq "$OUT" "" "a piece of a quoted argument asks nothing"
 run_hook "$S" "$(jsonat "$r13" $'echo \'x\nread -r b <<<"$PWD"\ngit commit -m x')"
 assert_rc 2 "a commit after a here-string, split on its own, on the default branch blocked"
 
+# The per-line split's lines are read by its own rule, which takes no word after a here-string, as it drops that word.
+run_hook "$S" "$(jsonat "$r13" $'echo \'a\ngit <<<x commit -m y\n\'')"
+assert_rc 2 "a commit the per-line split sees past a here-string on the default branch blocked"
+
 finish "guard-default-branch"
