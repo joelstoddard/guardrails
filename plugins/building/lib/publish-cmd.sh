@@ -8,7 +8,8 @@
 # host, or a mail transport.
 #
 # Usage: _guardrails_publishes_as_user "<cmdline>" → rc 0 and a reason on stdout if it
-#                                                    publishes, rc 1 otherwise.
+#                                                    publishes, rc 2 and a reason if it may,
+#                                                    rc 1 otherwise.
 
 _GUARDRAILS_PUBLISH_CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_GUARDRAILS_PUBLISH_CMD_DIR/shell-split.sh"
@@ -63,7 +64,7 @@ _guardrails_http_has_body() {
 # are development, not publishing — that distinction is the deliberate hole here.
 _guardrails_has_remote_target() {
   local seg="$1" rest url host re n bracketed='^[^]]*' plain='^[^/:]*' lead='^[[:space:]]*(.*)$'
-  local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}["'"'"']*$'
+  local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' closed='^(.*[^"'"'"'])["'"'"']+$' userinfo='^https?://[^/]*@'
   local first='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
   local next='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
   case "$seg" in *.* | *://*) ;; *) return 1 ;; esac
@@ -84,8 +85,9 @@ _guardrails_has_remote_target() {
       \[*) [[ $host =~ $bracketed ]]; host="${BASH_REMATCH[0]}]" ;;
       *) [[ $host =~ $plain ]]; host="${BASH_REMATCH[0]}" ;;
     esac
-    # A public name can start with 127., so only a dotted address is loopback (#128). Its URL can run on to the
-    # quote that closes it.
+    # A quote that closes the URL is not part of its host (#135). An @ after it makes the host what follows the @.
+    case "$host" in *[\"\']) [[ $url =~ $userinfo ]] || { [[ $host =~ $closed ]]; host="${BASH_REMATCH[1]}"; } ;; esac
+    # A public name can start with 127., so only a dotted address is loopback (#128).
     case "$host" in
       localhost | localhost:* | 0.0.0.0 | \[::1\] | ::1 | *.local | *.localhost) ;;
       127.*) [[ $host =~ $loopback ]] || return 0 ;;
@@ -98,6 +100,8 @@ _guardrails_has_remote_target() {
 _guardrails_publishes_as_user() {
   local cmdline="$1" depth="${2:-0}"
   [ "$depth" -gt 4 ] && return 1
+  # A payload's question is the whole command's, so every depth adds to one.
+  [ "$depth" -gt 0 ] || _GUARDRAILS_PUBLISH_ASK=""
 
   # The hatch is only meaningful when the human sets it in their own environment.
   # An assistant can prefix any command it writes, so an inline assignment is a bypass.
@@ -107,8 +111,8 @@ _guardrails_publishes_as_user() {
       return 0 ;;
   esac
 
-  local seg i base n
-  local -a toks lead
+  local seg i base n w reason
+  local -a toks lead piece
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
     _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; base="$_GUARDRAILS_CMD"
@@ -153,14 +157,15 @@ _guardrails_publishes_as_user() {
     case " $_GUARDRAILS_TEXT_TOOLS " in
       *" $base "*) continue ;;
     esac
-    lead=()
-    n="$i"
-    while [ "$n" -lt "${#toks[@]}" ] && [ "${#lead[@]}" -lt 4 ]; do
-      case "${toks[$n]}" in
-        -*) break ;;
-        *) lead+=("${toks[$n]}") ;;
-      esac
-      n=$((n + 1))
+    lead=(); piece=()
+    while [ "$i" -lt "${#toks[@]}" ] && [ "${#lead[@]}" -lt 4 ]; do
+      w="${toks[$i]}"
+      # The shell takes out redirects and drops quotes before the command reads its words (#131). An option is matched
+      # as written, so a quoted one stays a word, as it was before.
+      case "$w" in -*) break ;; *[\<\>]*) _guardrails_skip_redirect && continue ;; esac
+      case "$w" in *[\"\'\\]*) _guardrails_whole_word || piece[${#lead[@]}]="$w"; _guardrails_unquote ;; esac
+      lead+=("$w")
+      i=$((i + 1))
     done
     # A ready review request notifies reviewers, so only a draft is safe unasked.
     # Scan the whole segment, because the flag's position can change.
@@ -171,20 +176,25 @@ _guardrails_publishes_as_user() {
         case " $seg " in
           *' --draft'* | *' --wip'*) ;;
           *)
-            printf '%s %s create without --draft (drafts only; promoting is yours)' \
-              "$base" "${lead[1]}"
-            return 0 ;;
+            printf -v reason '%s %s create without --draft (drafts only; promoting is yours)' "$base" "${lead[1]}"
+            [ -n "${piece[1]:-}${piece[2]:-}" ] || { printf '%s' "$reason"; return 0; }
+            : "${_GUARDRAILS_PUBLISH_ASK:=$reason, read from ${piece[1]:-${piece[2]:-}}, one piece of a quoted argument}" ;;
         esac ;;
     esac
 
+    # A verb read from one piece of a quoted argument of several words may not be the command's, as the shell passes the
+    # argument whole, so it asks; any whole verb after it still blocks.
     for n in 1 2 3; do
       [ "$n" -lt "${#lead[@]}" ] || break
       case "$_GUARDRAILS_PUBLISH_VERBS" in
         *" ${lead[$n]} "*)
-          printf '%s %s publishes under your name' "$base" "${lead[$n]}"
-          return 0 ;;
+          printf -v reason '%s %s publishes under your name' "$base" "${lead[$n]}"
+          [ -n "${piece[$n]:-}" ] || { printf '%s' "$reason"; return 0; }
+          : "${_GUARDRAILS_PUBLISH_ASK:=$reason, read from ${piece[$n]}, one piece of a quoted argument}" ;;
       esac
     done
   done < <(_guardrails_split_segments "$cmdline")
+  # rc 2 asks, with the first such reason, only once no command blocks.
+  [ "$depth" -gt 0 ] || [ -z "$_GUARDRAILS_PUBLISH_ASK" ] || { printf '%s' "$_GUARDRAILS_PUBLISH_ASK"; return 2; }
   return 1
 }
