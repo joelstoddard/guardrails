@@ -34,7 +34,7 @@ Every section is tagged with a tier. Tiers decide WHEN a rule applies, NOT WHETH
 * You MUST NOT skip an EDIT or CHANGE tier rule because the change "seems small" IF it touches the code the rule governs.
 
 ### Pipeline and organisational rules
-* WHEN a rule describes a pipeline or organisational property (e.g. "keep main releasable", "build once, promote the same artefact", "run mutation testing on a schedule"), you MUST ensure your change preserves or configures it. You do NOT perform the production action yourself.
+* WHEN a rule describes a pipeline or organisational property (e.g. "keep main releasable", "build once, promote the same artefact", "run mutation testing on a schedule"), you MUST ensure your change preserves or configures it.
 * WHEN a rule says "ensure X runs in CI", verify it. IF it is missing, propose it as a finding.
 
 ### Thresholds and project facts
