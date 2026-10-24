@@ -33,4 +33,12 @@ printf '## Commands\n- **Lint:** `cat >/dev/null`\n' > "$rs/AGENTS.md"
 run_hook "$S" "$(split_cd "$rs" "$rf")"
 assert_out "$rf" "a lint command reading stdin does not hide the next repo"
 
+# A command too long or dense to read in time may commit, so the session's repo is judged (#103).
+long="$(printf '%s' "git status $(printf '%0263000d' 0)" | jq -cRs --arg cwd "$rf" '{cwd:$cwd,tool_input:{command:.}}')"
+run_hook "$S" "$long"
+assert_out "additionalContext" "an unreadable command warns when lint fails"
+assert_out "Could not read" "the warning says why"
+run_hook "$S" "$(printf '%s' "$long" | jq -c --arg cwd "$rp" '.cwd = $cwd')"
+assert_eq "$OUT" "" "an unreadable command warns nothing when lint passes"
+
 finish "lint-warn"

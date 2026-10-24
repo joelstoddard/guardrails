@@ -63,4 +63,18 @@ printf '## Commands\n- **Test:** `cat >/dev/null`\n' > "$rs/AGENTS.md"
 run_hook "$S" "$(split_cd "$rs" "$rf")"
 assert_rc 2 "a test command reading stdin does not hide the next repo"
 
+# A command too long or dense to read in time may push, so the session's repo is judged, and a failure
+# asks rather than blocks, as the command may push nothing (#103).
+long="$(printf '%s' "git status $(printf '%0263000d' 0)" | jq -cRs --arg cwd "$rf" '{cwd:$cwd,tool_input:{command:.}}')"
+run_hook "$S" "$long"
+assert_rc 0 "an unreadable command is not refused outright"
+assert_out '"permissionDecision":"ask"' "an unreadable command asks when the tests fail"
+assert_out 'Could not read' "the question says why"
+run_hook "$S" "$(printf '%s' "$long" | jq -c --arg cwd "$r" '.cwd = $cwd')"
+assert_eq "$OUT" "" "an unreadable command asks nothing when the tests pass"
+export SKIP_TEST_GATE=1
+run_hook "$S" "$long"
+assert_eq "$OUT" "" "the escape hatch asks nothing about an unreadable command"
+unset SKIP_TEST_GATE
+
 finish "test-gate"
