@@ -10,11 +10,15 @@ cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 
 # A command too long or dense to read in time may commit, so the session's repo is judged (#103).
-if unsure="$(_guardrails_unreadable "$cmd")"; then
-  dirs="${cwd:-.}"; unsure="Could not read this command in full to check it does not commit: $unsure. "
+if why="$(_guardrails_unreadable "$cmd")"; then
+  dirs="${cwd:-.}"; unsure="Could not read this command in full to check it does not commit: $why. "
 else
   unsure=""
-  _guardrails_invokes_git "$cmd" commit || exit 0
+  # A shell reading commands from a pipe may commit where no guard can read it (#63).
+  if ! _guardrails_invokes_git "$cmd" commit; then
+    why="$(_guardrails_unseen_shell_stdin "$cmd")" || exit 0
+    unsure="Could not check this command does not commit: $why. "
+  fi
   # Judge the repo git commits in, not the one the shell sits in; where the two splits disagree on it,
   # judge both, each once (#75). See docs/design/git-command-parsing.md.
   dirs="$(_guardrails_git_effective_cwd "$cmd" commit "${cwd:-.}")"

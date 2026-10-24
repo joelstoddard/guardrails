@@ -41,4 +41,10 @@ assert_out "Could not read" "the warning says why"
 run_hook "$S" "$(printf '%s' "$long" | jq -c --arg cwd "$rp" '.cwd = $cwd')"
 assert_eq "$OUT" "" "an unreadable command warns nothing when lint passes"
 
+# A shell reading commands from a pipe may commit where no guard can read it (#63).
+run_hook "$S" "$(json "$rf" "cat cmds.txt | bash")"
+assert_out 'reads commands from stdin' "a pipe into a shell warns, saying why, when lint fails"
+run_hook "$S" "$(json "$rp" "cat cmds.txt | bash")"
+assert_eq "$OUT" "" "a pipe into a shell warns nothing when lint passes"
+
 finish "lint-warn"

@@ -77,4 +77,12 @@ run_hook "$S" "$long"
 assert_eq "$OUT" "" "the escape hatch asks nothing about an unreadable command"
 unset SKIP_TEST_GATE
 
+# A shell reading commands from a pipe may push where no guard can read it, so a failure asks (#63).
+run_hook "$S" "$(json "$rf" "cat cmds.txt | bash")"
+assert_rc 0 "a pipe into a shell is not refused outright"
+assert_out '"permissionDecision":"ask"' "a pipe into a shell asks when the tests fail"
+assert_out 'reads commands from stdin' "the question says why"
+run_hook "$S" "$(json "$r" "cat cmds.txt | bash")"
+assert_eq "$OUT" "" "a pipe into a shell asks nothing when the tests pass"
+
 finish "test-gate"

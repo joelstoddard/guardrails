@@ -11,11 +11,15 @@ cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 
 # A command too long or dense to read in time may push, so the session's repo is judged, and as it may
 # push nothing, a failure asks (#103).
-if unsure="$(_guardrails_unreadable "$cmd")"; then
-  dirs="${cwd:-.}"; unsure="Could not read this command in full to check it does not push: $unsure"
+if why="$(_guardrails_unreadable "$cmd")"; then
+  dirs="${cwd:-.}"; unsure="Could not read this command in full to check it does not push: $why"
 else
   unsure=""
-  _guardrails_invokes_git "$cmd" push || exit 0
+  # A shell reading commands from a pipe may push where no guard can read it, so a failure asks too (#63).
+  if ! _guardrails_invokes_git "$cmd" push; then
+    why="$(_guardrails_unseen_shell_stdin "$cmd")" || exit 0
+    unsure="Could not check this command does not push: $why"
+  fi
   # Judge the repo git pushes from, not the one the shell sits in; where the two splits disagree on it,
   # judge both, each once (#75). See docs/design/git-command-parsing.md.
   dirs="$(_guardrails_git_effective_cwd "$cmd" push "${cwd:-.}")"
