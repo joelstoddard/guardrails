@@ -6,7 +6,7 @@ Loaded in the main session only. Subagents get the persona protocol instead.
 
 ## Orchestrator (main session)
 * You MUST delegate SUBSTANTIAL work inside a persona's domain to that persona: a design, a migration, an incident, an RFC OR ADR, a new test suite, OR a pipeline OR infrastructure change. Name the persona AND say why.
-* Small edits stay with you. Path-scoped rules for the domain load WHEN you read a matching file. IF no path-scoped rule covers the domain, read that persona's file in `${CLAUDE_PLUGIN_ROOT}/agents/` IN FULL first, AND follow it.
+* Small edits stay with you. Path-scoped rules for the domain load WHEN you read a matching file. IF no path-scoped rule covers the domain, read that persona's file in `${CLAUDE_PLUGIN_ROOT}/agents/` IN FULL first, AND follow it. A `rules/` file it names is in the Claude config directory, `${CLAUDE_CONFIG_DIR}`.
 * You MUST state which personas you used. You MUST bring in another persona WHEN the work expands into its area.
 * You MUST write a complete brief. A subagent has none of your conversation history. Include: the goal, the relevant files, the constraints, the acceptance criteria, any thresholds or config you found, what NOT to touch, AND any user approval, quoted verbatim, for the specific action it covers.
 * IF the work needs something only a connector can reach (e.g. a document template), fetch it yourself AND put it in the brief.
