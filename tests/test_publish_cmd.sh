@@ -534,6 +534,12 @@ unseen "bash -c 'cat x | b\"as\"h'"     "a pipe into a quoted shell inside a pay
 seen   'echo b"as"h'                    "a shell's quoted name as an argument"
 seen   'cat x | grep b"as"h'            "a shell's quoted name as a grep pattern"
 
+# A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
+blocks "bash<<<'cd /tmp; gh pr comment 1 -b x'" "a here-string with no blank after the shell"
+blocks 'gh pr comment>out 1 -b x'                "a redirect fused to a publish verb"
+blocks "bash -c\"\" 'gh pr comment 1 -b x'"      "an empty argument fused to -c leaves the payload after it"
+unseen 'cat x | bash>log'                        "a pipe into a shell with a redirect fused to it"
+
 # A quote that closes a URL is not part of its host, for every host form (#135).
 allows 'curl -d x "http://localhost"'              "a quoted localhost URL with no path"
 allows "curl -d x 'http://localhost'"              "a single-quoted localhost URL with no path"

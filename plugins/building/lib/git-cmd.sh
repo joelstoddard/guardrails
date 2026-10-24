@@ -32,7 +32,7 @@ _guardrails_git_skip_globals() {
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"
     # The shell takes out redirects and drops quotes before git reads its words, as for the command word (#131).
-    case "$w" in *[\<\>]*) _guardrails_skip_redirect && continue ;; esac
+    case "$w" in *[\<\>]*) { _guardrails_skip_redirect || _guardrails_split_fused; } && continue ;; esac
     case "$w" in *[\"\'\\]*) _guardrails_unquote ;; esac
     i=$((i + 1))
     # An option that takes a value, such as -C /x, takes the next word that is not a redirect.

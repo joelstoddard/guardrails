@@ -328,4 +328,8 @@ assert_rc 2 "a publish in a heredoc opened before the shell it feeds blocked"
 run_hook "$S" "$(jsonin $'cat <<EOF `true\ngh pr comment 1 -b x\n`\nbody\nEOF')"
 assert_rc 2 "a publish in a backtick spanning lines after an opener blocked"
 
+# A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
+run_hook "$S" "$(jsonin "bash<<<'cd /tmp; gh pr comment 1 -b x'")"
+assert_rc 2 "a publish in a here-string with no blank after the shell blocked"
+
 finish "guard-publish"

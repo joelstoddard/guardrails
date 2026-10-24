@@ -88,6 +88,13 @@ is not read as `-C` or as a publish verb. The publish guard still matches an opt
 written, so a quoted `"-w"` stays a word before a verb, as it was before. A word that is one
 piece of a quoted argument of several words is read differently; see "Known limitation".
 
+A redirect needs no blank before it, so `bash<<<'…'` feeds bash a script and `git>/dev/null
+commit` commits. The lookup, git's skip and the publish guard's lead words read a word with a
+redirect fused to it, outside quotes, as the word alone, and skip the redirect's target when it
+is the next word (#91). A `-c` fused to text, as in `bash -c"…"`, needs no such reading: bash,
+zsh, dash and ksh all take it as a cluster of options and refuse it, and `-c""` leaves the
+script in the next word, which is read as before.
+
 `command -v` and `-V` name a command without running it, so there `command` is the
 command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
 command elsewhere, as you. The lookup sees through them only to a shell, which is then

@@ -234,4 +234,13 @@ no  "git 'commit x' -m y"                  commit "a first piece of a quoted arg
 no  'git commit\ x -m y'                   commit "a word an escaped blank joins to the next is not the subcommand"
 yes "git co'mm'it -m x"                    commit "a word quoted in its middle is whole"
 
+# A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
+yes "bash<<<'git commit -m x'"      commit "a here-string with no blank after the shell"
+yes 'git>/dev/null commit -m x'     commit "a redirect fused to git"
+yes 'git> /dev/null commit -m x'    commit "an operator fused to git, its target after it"
+yes 'git commit>/dev/null -m x'     commit "a redirect fused to the subcommand"
+yes 'sudo> x git commit -m x'       commit "an operator fused to a wrapper, its target after it"
+yes "bash -c\"\" 'git commit -m x'" commit "an empty argument fused to -c leaves the payload after it"
+no  'git log>commit'                commit "a redirect's target is not the subcommand"
+
 finish "git-cmd"

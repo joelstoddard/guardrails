@@ -233,4 +233,8 @@ assert_rc 2 "a commit in a heredoc opened before the shell it feeds on the defau
 run_hook "$S" "$(jsonat "$r13" $'cat <<EOF `true\ngit commit -m x\n`\nbody\nEOF')"
 assert_rc 2 "a commit in a backtick spanning lines after an opener on the default branch blocked"
 
+# A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
+run_hook "$S" "$(jsonat "$r13" 'git>/dev/null commit -m x')"
+assert_rc 2 "a commit by git with a redirect fused to it on the default branch blocked"
+
 finish "guard-default-branch"

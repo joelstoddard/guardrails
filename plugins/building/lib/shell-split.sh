@@ -345,6 +345,19 @@ _guardrails_skip_redirect() {
   case "${toks[$i]:-}" in [0-9]*) i=$((i + 1)) ;; esac
 }
 
+# _guardrails_split_fused → rc 0 if the caller's word w, at its index i, is a word with a redirect after it and no blank
+# between, as in bash<<<'…' or git>out (#91). toks[i] is then that word, or the redirect fused to its target with the word
+# after it, and the caller reads index i again. Callers pass only a word that holds < or > and is no redirect.
+_GUARDRAILS_FUSED='^(([^<>"'"'"'\\]|\\.|"[^"]*"|'"'"'[^'"'"']*'"'"')+)([<>].*)$'
+_guardrails_split_fused() {
+  local j="$i" p
+  [[ $w =~ $_GUARDRAILS_FUSED ]] || return 1
+  p="${BASH_REMATCH[1]}"; w="${BASH_REMATCH[3]}"
+  _guardrails_skip_redirect
+  if [ "$i" -gt "$((j + 1))" ]; then toks[j]="$w${toks[j + 1]}"; toks[j + 1]="$p"; else toks[j]="$p"; fi
+  i="$j"
+}
+
 # _guardrails_unquote → rc 0 with the quotes and backslashes the shell drops removed from the caller's word w, if it is
 # short (#111). Callers pass only a word that holds a quote or backslash.
 _guardrails_unquote() {
@@ -375,6 +388,7 @@ _guardrails_command_skip() {
         case "$w" in
           *'()'*) [[ $w =~ \(\)(.*)$ ]]; w="${BASH_REMATCH[1]}"; w="${w#[{(]}"; _GUARDRAILS_CMD_WRAPPED=1 ;;
           *')') _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
+          *[\<\>]*) _guardrails_split_fused && continue ;;
         esac ;;
     esac
     case "$w" in
