@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Line coverage for the plugins' hook scripts and lib files, checked against per-file floors that only rise.
-# Usage: tests/coverage.sh [--update | [--base REV] --ratchet BASE_FLOOR_FILE | --lines FILE]
+# Usage: tests/coverage.sh [--update | [--base REV] --ratchet BASE_FLOOR_FILE [FLOOR_FILE] | --lines FILE | --files | --trace]
 # See docs/design/coverage.md
 set -euo pipefail
 # Each sort and comm runs with LC_ALL=C, so hits.tsv sorts the same on every host. LC_ALL is not
@@ -188,7 +188,9 @@ if [[ ${1:-} == --base ]]; then
 fi
 case ${1:-} in
   --lines) awk -f "$HERE/coverage/executable.awk" "${2:?--lines needs a file}" ;;
-  --ratchet) ratchet "${2:?--ratchet needs the base floor file}" ;;
+  --ratchet) FLOORS=${3:-$FLOORS}; ratchet "${2:?--ratchet needs the base floor file}" ;;
+  --files) measured ;;
+  --trace) run_suites || exit 1; hits ;;
   --update | "")
     update=0; [[ ${1:-} == --update ]] && update=1
     run_suites || exit 1

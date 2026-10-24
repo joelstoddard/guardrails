@@ -57,3 +57,10 @@ jobs:
         run: bash tests/coverage.sh
       - name: Run the Python tests
         run: python -m unittest discover -s tests -p 'test_*.py'
+      # Mutates only the hook scripts and libs the PR changes: every file takes about 20 minutes on 14 cores, so the
+      # weekly mutation workflow runs them all. See docs/design/coverage.md
+      - name: Check mutation floors of the files this PR changes
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "$GITHUB_BASE_REF"
+          bash tests/mutate.sh --changed FETCH_HEAD

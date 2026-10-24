@@ -1,0 +1,42 @@
+name: mutation
+
+# Every measured file, weekly: a pull request mutates only the files it changes, so a test weakened without touching
+# them shows up here. See docs/design/coverage.md
+on:
+  schedule:
+    - cron: '17 5 * * 1' # Mondays 05:17 UTC
+  workflow_dispatch:
+
+# Read-only like every workflow here, so the run reports in its summary and opens no issue.
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation
+  cancel-in-progress: false
+
+jobs:
+  mutate:
+    name: mutation (weekly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      # test_manifests.sh needs it, and mutate.sh runs every shell suite first.
+      - name: Install the Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code@2.1.289
+      - name: Run mutation testing
+        shell: bash
+        run: bash tests/mutate.sh | tee "$RUNNER_TEMP/mutation.txt"
+      # The table and the survivors print at the end, so a run that stops with an error shows only the error.
+      - name: Summarise the run
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo '## Mutation testing'
+            echo '~~~~'
+            cat "$RUNNER_TEMP/mutation.txt"
+            echo '~~~~'
+          } >>"$GITHUB_STEP_SUMMARY"

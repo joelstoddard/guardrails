@@ -406,4 +406,17 @@ printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
 printf '%s\t66.6\t9\nTOTAL\t66.6\t9\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 0 ]] || fail ratchet-ceiling-new "rc=$RC: $OUTPUT"
 
+echo "--- the ratchet compares the floor file it is given, such as the mutation floors"
+setup
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" | tee "$D/base.tsv" >"$D/tests/coverage-floor.tsv"
+printf '%s\t40.0\nTOTAL\t66.6\n' "$S" >"$D/other.tsv"; cov --ratchet "$D/base.tsv" "$D/other.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor lowered: $S 66.6 -> 40.0"* ]] || fail ratchet-other-file "rc=$RC: $OUTPUT"
+
+echo "--- --files lists the measured files, and --trace writes hits.tsv without a report"
+setup; mkdir -p "$D/plugins/p/bin"; echo 'echo unmeasured' >"$D/plugins/p/bin/other.sh"; cov --files
+assert_eq "$S" "$OUTPUT" "files"
+cov --trace
+[[ $RC == 0 && $OUTPUT != *TOTAL* && $(grep -F "$S" "$D/.coverage/hits.tsv" | cut -f2-) == "$S"$'\t2\n'"$S"$'\t3' ]] ||
+  fail trace "rc=$RC: $OUTPUT"
+
 finish "coverage-tools"

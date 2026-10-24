@@ -1,13 +1,15 @@
-# Line coverage of the hook scripts and lib files
+# Coverage and mutation testing of the hook scripts and lib files
 
 The plugins' logic is bash: the hook scripts that guard publishing, commits and pushes,
 and the `lib/` files that parse the commands they inspect. Without a measurement, an
 agent can add a branch to a hook with no test for it and every check stays green.
-`tests/coverage.sh` measures line coverage and fails when it falls.
+`tests/coverage.sh` measures line coverage and fails when it falls, and
+`tests/mutate.sh` checks that the tests catch a fault in the lines they run; see
+[Mutation](#mutation).
 
-The tool is ported from the
+The tools are ported from the
 [dotfiles](https://github.com/joelstoddard/dotfiles/blob/main/docs/design/coverage-and-mutation.md),
-which measured these scripts before they moved here. Its mutation testing is not ported.
+which measured these scripts before they moved here.
 
 ## Why the tool is in the repo
 
@@ -197,3 +199,192 @@ tracer or a damaged floor file cannot hide a gap.
 - **A relative path after `cd`:** traced paths resolve from the tool's working
   directory. A suite that changes directory and then runs a script by a relative path
   loses those hits. Run such scripts by an absolute path.
+
+## Mutation
+
+Coverage shows that a test ran a line, not that it checks the line. `tests/mutate.sh`
+changes one covered line at a time and runs the tests that cover it. A mutant that
+leaves every test green survived, and the line is not checked. No maintained mutation
+tool exists for shell, so the mutator is plain bash, POSIX awk and perl, ported from the
+dotfiles with the coverage tool.
+
+`tests/coverage/mutants.awk` makes the mutants. It works on the executable lines that
+`coverage.sh --lines` reports and `hits.tsv` shows as covered. An uncovered line gets
+no mutants, because coverage already reports it.
+
+| Operator    | Mutation                                                                     |
+| ----------- | ---------------------------------------------------------------------------- |
+| Comparison  | `==` and `!=` swap; `-eq`/`-ne`, `-lt`/`-ge`, `-gt`/`-le`, `-z`/`-n` swap    |
+| Logic       | `&&` and `\|\|` swap; a leading `! ` is dropped                              |
+| Exit status | `exit` or `return` `0` becomes `1`; `1` becomes `0`; `exit 2` becomes `0`    |
+| Boolean     | `true` and `false` swap, as whole words                                      |
+| Deletion    | a simple command or assignment becomes `:`                                   |
+
+Each restriction keeps a mutant a real fault and not noise:
+
+- **Test operators only inside `[[`, `[` or `test`.** `-n` and `-z` are also options of
+  `head`, `sort` and others. Swapping them breaks a command and not a decision.
+- **Deletion only of simple commands and assignments.** Deleting `if`, `then`, `do`,
+  a line that opens a block, a pipeline or a heredoc, or a continued line gives a script
+  that does not parse. Such a mutant is invalid and tells nothing. Declarations with
+  `local`, `declare`, `export` or `readonly` are not deleted either.
+- **No mutants inside strings or comments.** A changed string is data, and the tests
+  that compare it fail for a reason that is not a logic fault. A comment is not code.
+  The scanner tracks quotes and backslashes so a `==` in a string is not touched.
+
+### Running the mutants
+
+- **Test selection.** `hits.tsv` maps each test to the lines it ran. A mutant runs only
+  the tests that ran its line, and stops at the first one that fails.
+- **Isolation.** The run makes one scratch copy of the working tree for each worker, so
+  a mutant never touches the checkout. Each worker puts the original file back after
+  each mutant. Workers take plan lines by index modulo `-j`, so one worker and many
+  workers give the same results. A test runs as `bash tests/test_*.sh` in the copy,
+  untraced.
+- **Process groups.** A test runs in its own process group, and the wrapper (perl) kills
+  the group after the test exits, after a timeout, and when the run itself gets HUP, INT
+  or TERM. A mutant that hangs, or a test that leaves a background process, leaves
+  nothing running.
+- **Interrupted run.** A worker ignores INT, so the main shell stops the workers itself.
+  When it exits, for any reason, it sends TERM to each worker and to the wrapper of its
+  test, then removes the scratch copies. It does not signal its process group, because
+  the caller may share that group.
+- **Timeout.** Ten times the clean run of that test, with a floor of 2s. A timeout
+  exits 124 and counts as killed: a mutant that makes a test hang is detected. Exit 127
+  or 255 means the wrapper failed to start the test or to fork. That is not a kill: it
+  stops the run with exit 1.
+- **Red baseline.** `bash tests/coverage.sh --trace` runs first, and each selected test
+  runs once unmutated. If one fails, the run stops with exit 1.
+
+The tool needs bash 5 for `EPOCHREALTIME`, perl, and `pkill` and `pgrep` from procps,
+and the suites' own needs, the `claude` CLI among them.
+
+### Invalid mutants and errors that look like a score
+
+A mutant that fails `bash -n` is invalid. It is out of the score, and it is neither
+killed nor survived.
+
+A tool error must never read as a clean score, so these stop the run:
+
+- a measured file that does not parse unmutated (exit 1), because every mutant of it
+  would be invalid and the file would score 0 of 0;
+- a failing `coverage.sh --files` or `coverage.sh --lines` (exit 1), because an empty
+  list reads as nothing to mutate;
+- a measured file with executable lines and no covered line (exit 1), because its tests
+  did not run. A file with no executable lines is skipped without a message;
+- a failing suite (exit 1) and a failed worker (exit 1), which includes a test wrapper
+  that fails by itself (exit 127 or 255).
+
+A floor breach exits 1. Usage errors exit 2: an ignore row without a reason, a `FILE`
+argument that is not measured, `--update` with other arguments, and a `--changed`
+revision git cannot diff against. An ignore row that names an unmeasured file matches
+nothing. A run with survivors and no floor breach exits 0.
+
+### Results, equivalent mutants and the ignore file
+
+Score is killed divided by killed plus survived, for each file and in total. The table
+and the survivors, as `survived file:line operator original -> mutated`, print to
+stdout. `.coverage/mutants.tsv` holds every result.
+
+`tests/mutants-ignore.tsv` lists mutants that cannot change behaviour: file, operator,
+original line trimmed, and a required reason, separated by tabs. A row matches on the
+line text and not the line number, so it survives edits elsewhere in the file. An
+ignored mutant is out of the score. A row without a reason stops the run, so no one can
+silence a survivor without saying why. Each survivor gets a test that kills it, or a
+reasoned ignore row; a survivor that a test could kill stays a survivor, and its file's
+floor sits below 100 until a test kills it.
+
+### Use
+
+- `bash tests/mutate.sh --changed` mutates the measured files that differ from where the
+  branch left `origin/main`, or are untracked, and fails below a file's floor. Run it
+  before a PR that changes measured shell. `--changed REV` compares with `REV` instead.
+- `bash tests/mutate.sh --update` runs every file and raises the floors. It is the one
+  command that re-measures them after a change, and it never lowers one.
+- `bash tests/mutate.sh FILE...` mutates the named measured files.
+- `-j N` sets the number of workers. The default is the number of CPUs. One scratch
+  copy of the tree exists for each worker.
+
+### Floors
+
+`tests/mutation-floor.tsv` has the format of `tests/coverage-floor.tsv`: one
+`path<TAB>percent<TAB>most` line per measured file and a `TOTAL` line, where `percent`
+is the score rounded down to one decimal place and `most` the most surviving mutants
+the row may have.
+
+- A row passes at or above its floor, and also below it while its survivors stay
+  within its ceiling, for the reason given for coverage in
+  [Floors and the ratchet](#floors-and-the-ratchet): deleting code whose mutants were
+  killed lowers the score and tests nothing less, while a weakened test or new code no
+  test checks adds a survivor.
+- Every row of the table shows the file's floor, its ceiling and a status: `ok`, `LOW`,
+  `NO FLOOR` or `BAD` (a floor that is not `digits.digit`, a ceiling that is not a whole
+  number, or a path with two floors). A floor never reads as no limit.
+- The run exits 1 when any reported row is not `ok`. The table and the survivors print
+  first.
+- A full run also checks `TOTAL`. A run of `FILE...` or `--changed` checks only the
+  files it mutated and prints no `TOTAL`, because a partial run has no meaningful total.
+- `bash tests/mutate.sh --update` runs every file, then sets each floor to its current
+  score and each ceiling to its current survivors, never lowering a floor or raising a
+  ceiling. A new measured file gets its floor here. Combined with `--changed` or `FILE`
+  it exits 2. A run that stops with an error writes nothing, and neither does a
+  malformed floor.
+- `bash tests/coverage.sh --ratchet BASE tests/mutation-floor.tsv` makes "floors only
+  rise" a machine check here too, with the rules in
+  [Floors and the ratchet](#floors-and-the-ratchet).
+
+The floors started at the scores measured on the code of `main` at b0d58e5, not at
+100: the tests leave many mutants alive, and the floors record that rather than hide
+it, 499 of 637 mutants killed (78.3%). Only mutants that cannot change behaviour are in
+`tests/mutants-ignore.tsv`. Every other survivor is a test to write, and the weekly run
+lists them. Two full runs differed in two mutants, the depth caps at `git-cmd.sh:94` and
+`publish-cmd.sh:102`, each killed in one run only. Run alone, with no load, every test
+of each passed, so both kills were spurious, and their rows and `TOTAL` take the lower
+counts (see Flaky tests below).
+
+### In CI
+
+On a pull request, the `test` job runs `bash tests/mutate.sh --changed FETCH_HEAD` after
+the coverage step, so a PR that changes a hook script or lib fails if that file's score
+falls below its floor with more survivors than its ceiling. It mutates only the files
+the PR changes: a full run took 21 minutes on 14 cores, too long for every PR on the
+4-CPU runner. A PR that changes no measured file mutates nothing. One that does runs
+the suites under tracing again, inside `mutate.sh`, because the mutants need `hits.tsv`
+fresh, and then each mutant's tests.
+
+The weekly workflow, `.github/workflows/mutation.yml`, runs every file every Monday and
+by hand, and checks `TOTAL`. It catches what `--changed` cannot see: a PR that weakens
+a test without touching the file it tests. It writes the table and the survivors to
+the job summary and fails on a floor breach, which notifies the repo owner. The
+dotfiles' version also keeps a GitHub issue of the survivors up to date, which needs a
+token that can write issues. Every workflow here runs with a read-only token
+(`tests/test_workflow.py`), because main updates every installed machine, so the run
+reports only in its summary.
+
+The ratchet for the mutation floors, `coverage.sh --ratchet` on the base branch's copy
+of `tests/mutation-floor.tsv`, cannot run in the PR that adds that file, as with the
+coverage floors: its base has none, and the step has no fallback. It comes in the next
+PR, whose base has the file.
+
+### Known limits
+
+- **Uncovered lines get no mutants.** A mutation score says nothing about them. Read it
+  with the coverage report.
+- **Tests that write into the tree.** A test that writes inside its scratch copy keeps
+  that state for the next mutant of the same worker. No suite does so today: each
+  writes only under `mktemp`.
+- **Equivalent mutants.** Some survivors cannot be killed. Judge each one before an
+  ignore row. A row matches every line of its file with the same text, so a line whose
+  text another line shares, with a killable mutant, cannot be ignored.
+- **CI and macOS differ line by line.** A platform conditional is covered, and so
+  mutated, on one branch only.
+- **Flaky tests.** A test that fails at random reads as a kill. The run does not retry.
+  The tests with a time budget, such as the 5 s checks in `test_guard_publish.sh`, can
+  fail under the load of one worker per CPU, whatever the mutant. A spurious kill only
+  raises a score, never lowers it, so floors set from the lowest run do not fail at
+  random; a floor set from a run with a spurious kill would.
+- **Code in another language.** The awk and jq programs in shell strings get no mutants.
+- **The scanner reads one line at a time.** It treats a `-n` or `-z` as a test operator
+  when `[[`, `[ ` or `test ` comes earlier on the line, even outside the brackets. It
+  does not track quotes nested inside `$( )`. Such a mutant breaks a command and is
+  killed at once, or changes a string.
