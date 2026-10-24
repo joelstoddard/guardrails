@@ -90,6 +90,8 @@ yes 'echo $(true)#; git commit -m x'           commit "a # after \$( ) is mid-wo
 yes $'cat <<\\EOF\nWe don\'t ship this yet.\nEOF\ngit commit -m x # it\'s done' commit "a backslash-quoted delimiter opens a heredoc"
 yes $'cat <<EOF \\\n  > /dev/null\nbody\nEOF\ngit commit -m x'                commit "a heredoc body starts after its joined line"
 yes $'read -r b <<<"$PWD"\ngit commit -m x'                                    commit "a here-string opens no heredoc"
+yes $'echo \'x\nread -r b <<<"$PWD"\ngit commit -m x'                          commit "a here-string, split on its own, opens none (#61)"
+yes $'echo \'x\ngit <<<y commit -m x'                                          commit "a here-string's word, split on its own (#152)"
 
 # What the per-line split sees still counts, so a quote the carried split misreads hides nothing.
 yes $'bash -c \'\ncd /tmp\ngit commit -m x\n\''       commit "a commit only the per-line split sees"

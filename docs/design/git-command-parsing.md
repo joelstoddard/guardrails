@@ -144,6 +144,14 @@ sees it. When the two disagree on the directory, `_guardrails_git_effective_cwd`
 both and `guard-default-branch` refuses if either is on its default branch. The cost is
 that the per-line split's false positives remain for the git guards.
 
+Where the carried split's quotes never close, bash still runs the lines before them, so the
+carried split also splits every line on its own and the guards read those lines in the same
+pass. It splits them as the per-line split does, but reads a here-string as one word, as the
+shell does. The per-line split reads the `<<` in `<<<"$PWD"` as a heredoc opener, which hides
+every line after it, and drops the here-string's word, so the carried split's rule for a
+here-string would take the next word as its target (#61, #152). Those lines count against
+the segment cap with the carried split. The per-line split itself stays as it was.
+
 ## Reading in time
 
 A hook that runs past its 10 s timeout lets the command through, so `_guardrails_unreadable`

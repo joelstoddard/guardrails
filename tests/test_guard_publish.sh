@@ -258,6 +258,10 @@ run_hook "$S" "$(jsonin 'gh >out pr create --fill')"
 assert_rc 2 "a ready PR behind a redirect after gh blocked"
 run_hook "$S" "$(jsonin 'gh pr "comment" 1 -b x')"
 assert_rc 2 "a quoted publish verb blocked"
+
+# A line split on its own reads a here-string as the shell does, so the lines after it are not lost (#61, #152).
+run_hook "$S" "$(jsonin $'echo \'x\ngrep -q foo <<<"$PWD"\ngh pr comment 1 -b x')"
+assert_rc 2 "a publish after a here-string, split on its own, blocked"
 for c in 'gh pr view 1 > out' 'gh pr create --draft --fill'; do
   run_hook "$S" "$(jsonin "$c")"
   assert_rc 0 "$c allowed"

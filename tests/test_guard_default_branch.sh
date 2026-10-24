@@ -209,4 +209,8 @@ run_hook "$S" "$(jsonat "$r13" 'git "commit -m x"')"
 assert_rc 0 "a piece of a quoted argument is not a commit on the default branch"
 assert_eq "$OUT" "" "a piece of a quoted argument asks nothing"
 
+# A line split on its own reads a here-string as the shell does, so the lines after it are not lost (#61, #152).
+run_hook "$S" "$(jsonat "$r13" $'echo \'x\nread -r b <<<"$PWD"\ngit commit -m x')"
+assert_rc 2 "a commit after a here-string, split on its own, on the default branch blocked"
+
 finish "guard-default-branch"

@@ -23,9 +23,10 @@
 #        _GUARDRAILS_SPLIT_PER_LINE=1 resets quotes on every line, the split from before they carried,
 #        which the guards keep as a cross-check so that carrying never weakens them.
 
-# carry=1 carries quotes across lines and exits 3 if they never close; carry=0 resets them per line.
+# carry=1 carries quotes across lines and exits 3 if they never close; carry=0 resets them per line. here=1, for the
+# lines read on their own when quotes never close, reads a here-string as one word, which opens no heredoc (#61, #152).
 _guardrails_split_awk() {
-  printf '%s' "$2" | awk -v carry="$1" '
+  printf '%s' "$2" | awk -v carry="$1" -v here="${3:-0}" '
     # Carry mode also writes each command inside a $( ), <( ) or >( ) as a segment of its own, after the
     # rest, as backticks are written as sh -c "...". Level k of nesting holds its text from cs[k] on this
     # line, after pieces lp[k, 1..ln[k]] from earlier lines; a nested level leaves its opener and closer.
@@ -161,6 +162,7 @@ _guardrails_split_awk() {
           }
           if (dl != "") {
             wordend()
+            if (here && chars[i - 1] == "<") { out = out substr($0, i, j - i); i = j - 1; continue }
             if (!carry || !fsh) { hd = dl; if (carry && !quoted) hx = 1 }
             out = out "<<"; i = j - 1; wb = 0; continue
           }
@@ -227,6 +229,9 @@ _guardrails_unreadable() {
   fi
   carried="$(_guardrails_split_awk 1 "$1" 2>/dev/null)"; rc=$?
   [ "$rc" = 0 ] || [ "$rc" = 3 ] || { printf 'splitting it failed (awk exit %s)' "$rc"; return 0; }
+  # Where quotes never close, the guards read every line on its own as well, in the same pass.
+  [ "$rc" = 0 ] || carried="$carried"$'\n'"$(_guardrails_split_awk 0 "$1" 1 2>/dev/null)" ||
+    { printf 'splitting it line by line failed (awk exit %s)' "$?"; return 0; }
   per_line="$(_guardrails_split_awk 0 "$1" 2>/dev/null)"; rc=$?
   [ "$rc" = 0 ] || { printf 'splitting it line by line failed (awk exit %s)' "$rc"; return 0; }
   # n counts the segments of both splits, s the shells and evals in the carried split, which drops heredoc bodies as
@@ -262,7 +267,7 @@ _guardrails_split_segments() {
   if [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ]; then _guardrails_split_awk 0 "$1"; return; fi
   segs="$(_guardrails_split_awk 1 "$1")" || closed=0
   [ -z "$segs" ] || printf '%s\n' "$segs"
-  [ "$closed" = 1 ] || _guardrails_split_awk 0 "$1"
+  [ "$closed" = 1 ] || _guardrails_split_awk 0 "$1" 1
 }
 
 # _guardrails_command_at → reads the caller's toks, one segment's words, and sets _GUARDRAILS_CMD_AT to the index of

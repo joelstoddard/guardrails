@@ -231,6 +231,9 @@ blocks $'sh -c "echo hi\ngh pr comment 1 -b x"'               "a multi-line sh -
 # bash runs the lines before a quote that never closes, so they are split as carried too.
 blocks $'grep -q foo <<<"$PWD"\ngh pr comment 1 -b x\necho \'never closed' \
   "lines before an unclosed quote are split as carried"
+# Every line is then split on its own too, where a here-string opens no heredoc and keeps its word (#61, #152).
+blocks $'echo \'x\ngrep -q foo <<<"$PWD"\ngh pr comment 1 -b x' "a line after a here-string, split on its own"
+blocks $'echo \'x\ngh pr <<<y comment 1 -b x'                  "a here-string's word, split on its own"
 
 # A shell runs a -c argument or a here-string as a script, wherever -c sits among its flags.
 blocks "bash <<<'gh pr comment 1 -b x'"                                   "a here-string fed to bash"
@@ -304,6 +307,13 @@ too_much "bash -c '$(printf '$(a)%.0s' {1..6000})'"                  "substituti
 too_much $'cat <<\\EOF\neval "'"$(printf 'a;%.0s' {1..11000})"$'"\nEOF' "a payload only the per-line split reads"
 in_time  "eval \"$(printf 'a;%.0s' {1..4000})\""                     "an eval payload within the segment cap"
 in_time  "git commit -m \"$(printf 'a;%.0s' {1..6000})\" && bash ./x.sh" "text before a shell is not its payload"
+# Where quotes never close, every line is read again on its own, so those lines count too, and an awk that aborts on them
+# leaves the command unread (#61).
+too_much $'echo \'x\n'"$(printf 'a\n%.0s' {1..5000})"              "lines read on their own past the segment cap"
+broken="$(scratch_dir)"; printf '#!/bin/sh\ncase "$*" in *here=1*) exit 2 ;; *carry=1*) exit 3 ;; esac\nexec %s "$@"\n' \
+  "$(command -v awk)" >"$broken/awk"; chmod +x "$broken/awk"
+assert_eq "$(PATH="$broken:$PATH" _guardrails_unreadable x)" 'splitting it line by line failed (awk exit 2)' \
+  "an awk that aborts on the lines read on their own"
 
 # Each depth splits the text again, so the characters a shell or eval reads again count against the length cap (#107).
 words="$(printf 'a b %.0s' {1..32700})"
