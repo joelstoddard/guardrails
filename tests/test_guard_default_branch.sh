@@ -217,4 +217,8 @@ assert_rc 2 "a commit after a here-string, split on its own, on the default bran
 run_hook "$S" "$(jsonat "$r13" $'echo \'a\ngit <<<x commit -m y\n\'')"
 assert_rc 2 "a commit the per-line split sees past a here-string on the default branch blocked"
 
+# A heredoc's delimiter is read as the shell reads it, so <<E\OF ends at EOF and the commit after it is seen (#62).
+run_hook "$S" "$(jsonat "$r13" $'cat <<E\\OF\nbody\nEOF\ngit commit -m x')"
+assert_rc 2 "a commit after a heredoc whose delimiter holds a backslash on the default branch blocked"
+
 finish "guard-default-branch"

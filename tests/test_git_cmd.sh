@@ -88,6 +88,11 @@ yes 'echo $(true)#; git commit -m x'           commit "a # after \$( ) is mid-wo
 
 # A heredoc is recognised by the delimiter the shell reads, and <<< opens none.
 yes $'cat <<\\EOF\nWe don\'t ship this yet.\nEOF\ngit commit -m x # it\'s done' commit "a backslash-quoted delimiter opens a heredoc"
+for d in 'E\OF' 'E"OF"' "E'OF'"; do
+  yes $'cat <<'"$d"$'\nbody\nEOF\ngit commit -m x' commit "the delimiter <<$d is EOF, as the shell reads it (#62)"
+done
+yes $'cat <<.END\nbody\n.END\ngit commit -m x'   commit "a delimiter keeps its punctuation (#62)"
+yes $'cat <<EOF-1\nbody\nEOF-1\ngit commit -m x' commit "a delimiter keeps a dash and digit (#62)"
 yes $'cat <<EOF \\\n  > /dev/null\nbody\nEOF\ngit commit -m x'                commit "a heredoc body starts after its joined line"
 yes $'read -r b <<<"$PWD"\ngit commit -m x'                                    commit "a here-string opens no heredoc"
 yes $'echo \'x\nread -r b <<<"$PWD"\ngit commit -m x'                          commit "a here-string, split on its own, opens none (#61)"
