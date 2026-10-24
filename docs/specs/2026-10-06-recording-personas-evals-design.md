@@ -68,6 +68,16 @@ One `--runs 1` pass per suite on Haiku 4.5, 2026-10-06, with no run errors:
 The personas rows are from the run through the no-dependencies copy. The first personas
 run, before that, loaded no personas at all.
 
+`track-findings-footer` on Haiku 4.5 and Claude Code 2.1.310, 2026-10-24 (#97):
+
+- **Before:** with 0.50, without 0.50, Δ 0.00 (6 runs). The skill fired in all three
+  with-runs, but `gh repo view` cannot reach GitHub from the sandbox, and the model asked
+  which repo to use without drafting the issue.
+- **After an unreadable repo became shared:** with 0.75, without 0.50, Δ +0.25 (4 runs).
+  The run that loaded the skill showed the draft with its footer. The other never loaded
+  it and ran `gh issue create` bare, as did the first before loading it.
+- **The description that leads with its triggers** has had no run yet.
+
 ## Verification
 
 `tests/test_eval_graders.py` pins every new grader against examples built in the trace's
