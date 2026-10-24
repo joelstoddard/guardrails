@@ -1,6 +1,6 @@
 ---
 name: track-findings
-description: File every finding outside scope as a tracked issue, so nothing you noticed is left only in chat. Follow this skill BEFORE ending a turn that lists findings — yours or a persona's — and whenever the user says "track this", "add a todo", or "file an issue". Uses the tracker the session context names (a work project), otherwise GitHub issues.
+description: Follow this skill whenever the user says "file an issue", "track this" or "add a todo", BEFORE any `gh issue create`, and BEFORE ending a turn that lists findings — yours or a persona's. It files each finding outside scope as a tracked issue whose body ends with the Claude Code footer, so nothing you noticed is left only in chat. Uses the tracker the session context names (a work project), otherwise GitHub issues.
 allowed-tools: Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh repo view:*), Bash(gh label list:*), Bash(git remote get-url:*), Bash(git branch --show-current), Read, Grep, Skill
 ---
 
