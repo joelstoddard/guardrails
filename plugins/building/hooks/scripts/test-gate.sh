@@ -12,14 +12,16 @@ cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 _guardrails_invokes_git "$cmd" push || exit 0
 [ "${SKIP_TEST_GATE:-}" = "1" ] && exit 0
 
-repo="$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null)" || exit 0
-testcmd="$(repo_cmd "$repo" test)" || {
-  echo "⚠️  test-gate: no test command in $repo/AGENTS.md or CLAUDE.md — skipping (CI is the backstop). Document it to enable the local gate." >&2
-  exit 0
-}
-
-if ( cd "$repo" && eval "$testcmd" ) >/dev/null 2>&1; then
-  exit 0
-fi
-echo "Tests failed: \`$testcmd\` (from the repo agent doc). Fix them before pushing, or set SKIP_TEST_GATE=1 to override." >&2
-exit 2
+# Judge the repo git pushes from, not the one the shell sits in; where the two splits disagree on it,
+# judge both, each once (#75). See docs/design/git-command-parsing.md.
+while IFS= read -r repo; do
+  testcmd="$(repo_cmd "$repo" test)" || {
+    echo "⚠️  test-gate: no test command in $repo/AGENTS.md or CLAUDE.md — skipping (CI is the backstop). Document it to enable the local gate." >&2
+    continue
+  }
+  ( cd "$repo" && eval "$testcmd" ) </dev/null >/dev/null 2>&1 && continue
+  echo "Tests failed in $repo: \`$testcmd\` (from its agent doc). Fix them before pushing, or set SKIP_TEST_GATE=1 to override." >&2
+  exit 2
+done < <(_guardrails_git_effective_cwd "$cmd" push "${cwd:-.}" |
+  while IFS= read -r dir; do git -C "$dir" rev-parse --show-toplevel 2>/dev/null; done | awk '!seen[$0]++')
+exit 0

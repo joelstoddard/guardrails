@@ -18,4 +18,19 @@ printf '## Commands\n- **Lint:** `true`\n' > "$rp/AGENTS.md"
 run_hook "$S" "$(json "$rp" "git commit -m x")"
 assert_rc 0 "passing lint allowed"
 
+# The hook judges the repo git commits in, not the one the session sits in (#75).
+run_hook "$S" "$(json "$rp" "git -C $rf commit -m x")"
+assert_out "additionalContext" "git -C a repo whose lint fails warns"
+assert_out "$rf" "the warning names the repo"
+run_hook "$S" "$(json "$rf" "cd $rp && git commit -m x")"
+assert_eq "$OUT" "" "cd into a repo whose lint passes, from one whose lint fails, warns nothing"
+
+# Where the two splits disagree on the directory, each repo is judged (#75).
+split_cd() { jq -cn --arg cwd "$1" --arg c $'x=a; echo "${x#"\'"}"\ncd '"$2"$'\n# \'\ngit commit -m x' \
+  '{cwd:$cwd,tool_input:{command:$c}}'; }
+rs="$(make_repo main)"; git -C "$rs" switch -q -c nbc-3-z
+printf '## Commands\n- **Lint:** `cat >/dev/null`\n' > "$rs/AGENTS.md"
+run_hook "$S" "$(split_cd "$rs" "$rf")"
+assert_out "$rf" "a lint command reading stdin does not hide the next repo"
+
 finish "lint-warn"

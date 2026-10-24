@@ -40,4 +40,27 @@ unset SKIP_TEST_GATE
 run_hook "$S" "$(json "$rf" "bash -c 'git push origin HEAD'")"
 assert_rc 2 "push inside bash -c gated"
 
+# The gate judges the repo git pushes from, not the one the session sits in (#75).
+run_hook "$S" "$(json "$rf" "git -C $r push origin HEAD")"
+assert_rc 0 "git -C a repo whose tests pass, from one whose tests fail, pushes"
+run_hook "$S" "$(json "$r" "git -C $rf push origin HEAD")"
+assert_rc 2 "git -C a repo whose tests fail is blocked"
+assert_err "$rf" "the block names the repo"
+run_hook "$S" "$(json "$r" "cd $rf && git push origin HEAD")"
+assert_rc 2 "cd into a repo whose tests fail, then push, is blocked"
+
+# Where the two splits disagree on the directory, each repo is judged, and only once (#75).
+split_cd() { jq -cn --arg cwd "$1" --arg c $'x=a; echo "${x#"\'"}"\ncd '"$2"$'\n# \'\ngit push origin HEAD' \
+  '{cwd:$cwd,tool_input:{command:$c}}'; }
+run_hook "$S" "$(split_cd "$r" "$rf")"
+assert_rc 2 "a failing repo only the per-line split cds into is blocked"
+rn1="$(make_repo main)"; count="$(scratch_file)"
+printf '## Commands\n- **Test:** `echo run >> %s`\n' "$count" > "$rn1/AGENTS.md"
+run_hook "$S" "$(split_cd "$rn1" .)"
+assert_eq "$(wc -l < "$count" | tr -d ' ')" "1" "one repo reached by both splits runs its tests once"
+rs="$(make_repo main)"
+printf '## Commands\n- **Test:** `cat >/dev/null`\n' > "$rs/AGENTS.md"
+run_hook "$S" "$(split_cd "$rs" "$rf")"
+assert_rc 2 "a test command reading stdin does not hide the next repo"
+
 finish "test-gate"
