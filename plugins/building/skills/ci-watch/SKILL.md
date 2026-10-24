@@ -45,7 +45,7 @@ Via the `commit` skill, so each repair is separately revertible.
 3. Green: report the PR URL and that checks passed. Stop.
 4. Red: `gh run view <run-id> --log-failed` for the failing job.
 5. Diagnose. If the log does not identify a specific fixable cause, stop and report the log excerpt rather than guessing.
-6. Fix, commit via the `commit` skill, `git push`.
+6. If the PR's `headRefName` is not the current branch, stop and report: a fix here would land on another branch. Otherwise fix, commit via the `commit` skill, `git push`.
 7. Return to step 2. Increment the round counter; stop at three.
 
 ## Report format
@@ -62,6 +62,7 @@ This skill runs as a background agent — its return value is the only thing the
 | Condition | Behavior |
 |---|---|
 | No PR for the branch | Stop. Nothing to watch. |
+| Red, and the PR's head is not the current branch | Stop. Report the failure. Never fix it from another branch. |
 | Checks green on entry | Report and stop. No commits. |
 | Failure not diagnosable from the log | Stop. Report the excerpt. Do not guess. |
 | Only route to green is changing a test's expectations | Stop. Report. Human decision. |
