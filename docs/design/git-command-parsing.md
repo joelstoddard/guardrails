@@ -52,7 +52,9 @@ the git guards and the shell readers, finds the command word through one lookup,
 
 - `NAME=value` assignments;
 - redirects, such as `2>/dev/null` or `> out`, where an operator alone takes the next word
-  as its target (#109);
+  as its target (#109). The split has already dropped a heredoc's delimiter, and the per-line
+  split a here-string's word, so a `<<` alone takes none, nor a `<<<` in the per-line split,
+  unless the next word starts with a digit, which the split keeps as a shift's operand (#131);
 - the keywords `!`, `{`, `(`, `if`, `then`, `elif`, `else`, `while`, `until`, `do` and
   `in`, and a `(` fused to the next word;
 - a function's header (`f()`, `f ()`, `function f`), a case arm's pattern (a word ending in
@@ -68,6 +70,15 @@ The shell drops a command word's quotes and backslashes, so the lookup does too 
 matches a word: `"bash"`, `'gh'`, `ba\sh` and `$'bash'` are read as `bash`, `gh` and `bash`
 (#111). Only a word of 64 characters or fewer is read this way, which any name it matches
 is, as the substitution is slow on a long word.
+
+The words after the command are read the same way, in `_guardrails_skip_redirect` and
+`_guardrails_unquote`, which the lookup shares. So git's global options and subcommand, and
+the words before a publish verb, are read past redirects and without their quotes: `git
+2>/dev/null commit`, `git "commit"` and `gh >out pr create` are what they run (#131). A
+redirect between `-C` and its directory does not hide the directory, and a redirect's target
+is not read as `-C` or as a publish verb. The publish guard still matches an option as
+written, so a quoted `"-w"` stays a word before a verb, as it was before. A word that is one
+piece of a quoted argument of several words is read differently; see "Known limitation".
 
 `command -v` and `-V` name a command without running it, so there `command` is the
 command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
@@ -171,14 +182,24 @@ The publish guard checks `curl`, `wget`, `http` and `gh api` lines without start
 scan now costs a regex per URL. So past 32 URLs in one segment a write is read as remote,
 which bounds a segment, while the length cap bounds the URLs in a command.
 
-Within the caps, the slowest inputs measured took 4.0 s of the 10 s budget on macOS at load 6:
-32,000 `env` wrappers before a `git commit`, read by guard-default-branch, and one `eval`
-re-reading 480 `curl -d` lines of 32 local hosts each, read by guard-publish (3.4 s on Linux).
-The words the lookup skips since #109, #110, #111 and #116 come next, at 2.7 to 3.9 s for
-26,000 escaped wrappers, 32,000 redirects, 13,100 `timeout 1` wrappers or 7,700
-`sudo --user root` before a commit. Each word before a command costs the lookup a few
-checks, so a word holding none of `<`, `>`, `(` and `)` skips the redirect and function
-checks; that kept 32,000 `env` wrappers at 4.0 s rather than 4.8 s.
+Within the caps, the slowest inputs measured took 4.1 s of the 10 s budget on macOS, on an
+M4 Max at load 3 to 6, when re-measured for #131: 32,000 `env` wrappers before a `git commit`,
+read by guard-default-branch, and one `eval` re-reading 480 `curl -d` lines of 32 local hosts
+each, read by guard-publish (3.4 s on Linux, when last measured there). The words the lookup
+skips since #109, #110, #111 and #116 come next, at 2.7 to 4.0 s for 26,000 escaped
+wrappers, 32,000 redirects, 13,100 `timeout 1` wrappers or 7,700 `sudo --user root` before a
+commit. Each word before a command costs the lookup a few checks, so a word holding none of
+`<`, `>`, `(` and `)` skips the redirect and function checks; that kept 32,000 `env`
+wrappers at 4.0 s rather than 4.8 s.
+
+The words after a command are read the same way since #131, so they are on the slow path
+too: 32,000 redirects or escaped options between `git` and `commit` take guard-default-branch
+3.0 to 3.7 s. A call to the shared redirect or unquote helper costs a few microseconds a word,
+so 32,000 redirects before a commit went from 2.8 to 3.4 s. The pipe check drops quotes as
+bytes (#134): in a UTF-8 locale the substitution took guard-publish 19 s on 126 KB of quoted
+multibyte words, and as bytes it takes 1.1 s. A host that ends in a quote costs two more
+regexes (#135), so one `eval` re-reading 205 lines of 32 quoted local URLs takes
+guard-publish 3.0 s.
 
 ## What was rejected
 
@@ -196,9 +217,19 @@ checks; that kept 32,000 `env` wrappers at 4.0 s rather than 4.8 s.
 Tokens are split on whitespace with no quote handling, so
 `git -C '/path with spaces' commit` is not parsed correctly. This is consistent
 with the tripwire framing: the failure is fail-open, and the guard lets the command
-through rather than blocking it wrongly. For the same reason a quoted subcommand, as in
-`git "commit"`, is not recognised, and a long option that takes a separate value but is
-not in its wrapper's list reads its value as the command word.
+through rather than blocking it wrongly. For the same reason a long option that takes a
+separate value but is not in its wrapper's list reads its value as the command word.
+
+A quoted argument of several words is read as several words, as it always was. Its middle
+words hold no quote, so a verb among them blocks, as before: `python3 x.py "a post here"`. Its
+first and last words, such as `"post` and `it"` in `say "post it"`, are pieces that the split
+on blanks cut, whose quotes do not close within them (`_guardrails_whole_word`). The shell
+passes the argument whole, so a verb read from a piece may not be the command's: the publish
+guard asks rather than blocks, and names the piece (#131). So `claude "review this"` costs a
+question, and `ssh host 'npm publish'`, which publishes from another host, gets one too. The
+per-line split cuts every quoted line into pieces, so a piece read there asks nothing, as
+before. Git's skip leaves a piece as written, as before, so `git "commit -m x"` is not a
+commit.
 
 A shell that runs on another host, as in `ssh host bash <<EOF`, has its script read like
 a local one. So `guard-default-branch` judges a `git commit` in it against the local

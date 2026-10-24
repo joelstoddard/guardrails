@@ -212,8 +212,8 @@ _guardrails_split_awk() {
 
 # A hook that times out lets the command through, so the guards do not read a command past these limits:
 # its length, the segments in its two splits, and the shells and evals it could make them re-read. Within
-# them, the slowest guard measured 4.0 s of its 10 s budget (macOS, load 6), on 32,000 env wrappers before a
-# commit and on one eval re-reading 480 curl lines of 32 local hosts each (#110).
+# them, the slowest guard measured 4.1 s of its 10 s budget (macOS on an M4 Max, load 3 to 6), on 32,000 env
+# wrappers before a commit and on one eval re-reading 480 curl lines of 32 local hosts each (#131).
 _GUARDRAILS_SPLIT_MAX=131072
 _GUARDRAILS_SPLIT_MAX_SEGMENTS=10000
 _GUARDRAILS_SPLIT_MAX_SHELLS=16
@@ -281,28 +281,56 @@ _guardrails_command_at() {
   esac
 }
 
+# _guardrails_skip_redirect → rc 0 if the caller's word w, at its index i, is a redirect (#109), with i past it, and past
+# its target when the operator stands alone. Callers pass only a word that holds < or >.
+_guardrails_skip_redirect() {
+  # Patterns sort the usual forms, as a regex per word costs more; a longer fd goes to the regex. An operator alone takes
+  # the next word as its target.
+  case "$w" in
+    \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \&\> | \&\>\> | [0-9]\< | [0-9]\> | [0-9]\>\> | [0-9]\>\| | \
+      [0-9]\<\> | [0-9]\>\& | [0-9]\<\&) i=$((i + 2)); return 0 ;;
+    \<\< | \<\<- | \<\<\< | [0-9]\<\< | [0-9]\<\<- | [0-9]\<\<\<) ;;
+    \<* | \>* | \&\>* | [0-9]\<* | [0-9]\>*) i=$((i + 1)); return 0 ;;
+    [0-9]*[\<\>]* | \{*[\<\>]*)
+      local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
+      [[ $w =~ $redirect ]] || return 1
+      [ -z "${BASH_REMATCH[3]}" ] || { i=$((i + 1)); return 0; }
+      case "${BASH_REMATCH[2]}" in \<\< | \<\<- | \<\<\<) ;; *) i=$((i + 2)); return 0 ;; esac ;;
+    *) return 1 ;;
+  esac
+  # The split drops a heredoc's delimiter, as the per-line split does a here-string's word, unless the word starts with
+  # a digit, which they read as a shift.
+  i=$((i + 1))
+  case "$w" in *\<\<\<) [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ] || { i=$((i + 1)); return 0; } ;; esac
+  case "${toks[$i]:-}" in [0-9]*) i=$((i + 1)) ;; esac
+}
+
+# _guardrails_unquote → rc 0 with the quotes and backslashes the shell drops removed from the caller's word w, if it is
+# short (#111). Callers pass only a word that holds a quote or backslash.
+_guardrails_unquote() {
+  # A name is short, and a long word would make the substitution slow.
+  [ "${#w}" -le 64 ] || return 1
+  w="${w#\$}"; w="${w//[\"\'\\]/}"
+}
+
+# _guardrails_whole_word → rc 0 if every quote and backslash in the caller's word w closes within it, so the word is
+# whole and not one piece of a quoted argument that the split on blanks cut (#131). A word too long to unquote is not.
+_GUARDRAILS_WHOLE_WORD='^([^"'"'"'\\]|\\.|"([^"\\]|\\.)*"|'"'"'[^'"'"']*'"'"')*$'
+_guardrails_whole_word() {
+  [ "${#w}" -le 64 ] || return 1
+  case "$w" in *[\"\']* | *\\) [[ $w =~ $_GUARDRAILS_WHOLE_WORD ]] ;; esac
+}
+
 _guardrails_command_skip() {
   local i=0 w b="" vals longs o start ops sub remote=-1 rb
-  local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
     # Most words hold none of < > ( ), so they skip these checks, which every word before the command pays for.
     # A ( opens a subshell, fused to the word after it or not; (( is arithmetic.
     case "$w" in
       *[\<\>\(\)]*) case "$w" in '(('*) ;; '('*) w="${w#(}"; _GUARDRAILS_CMD_WRAPPED=1 ;; esac
-        # A redirect can come before the command (#109); an operator alone takes the next word as its target.
-        # Patterns sort the usual forms, as a regex per word costs more; a longer fd goes to the regex.
-        case "$w" in
-          \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \&\> | \&\>\> | \<\< | \<\<- | \<\<\< | [0-9]\< | [0-9]\> | \
-            [0-9]\>\> | [0-9]\>\| | [0-9]\<\> | [0-9]\>\& | [0-9]\<\& | [0-9]\<\< | [0-9]\<\<- | [0-9]\<\<\<)
-            i=$((i + 2)); _GUARDRAILS_CMD_WRAPPED=1; continue ;;
-          \<* | \>* | \&\>* | [0-9]\<* | [0-9]\>*) i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue ;;
-          [0-9]*[\<\>]* | \{*[\<\>]*)
-            if [[ $w =~ $redirect ]]; then
-              [ -n "${BASH_REMATCH[3]}" ] || i=$((i + 1))
-              i=$((i + 1)); _GUARDRAILS_CMD_WRAPPED=1; continue
-            fi ;;
-        esac
+        # A redirect can come before the command (#109).
+        _guardrails_skip_redirect && { _GUARDRAILS_CMD_WRAPPED=1; continue; }
         # A function's header and a case arm's pattern come before the command they run (#110).
         case "$w" in
           *'()'*) [[ $w =~ \(\)(.*)$ ]]; w="${BASH_REMATCH[1]}"; w="${w#[{(]}"; _GUARDRAILS_CMD_WRAPPED=1 ;;
@@ -311,9 +339,8 @@ _guardrails_command_skip() {
     esac
     case "$w" in
       [A-Za-z_]*=*) i=$((i + 1)); continue ;;
-      # The shell drops a command word's quotes and backslashes (#111). A name is short, and a long word would
-      # make the substitution slow, so only a short word is read this way.
-      *[\"\'\\]*) [ "${#w}" -gt 64 ] || { w="${w#\$}"; w="${w//[\"\'\\]/}"; _GUARDRAILS_CMD_WRAPPED=1; } ;;
+      # The shell drops a command word's quotes and backslashes (#111).
+      *[\"\'\\]*) _guardrails_unquote && _GUARDRAILS_CMD_WRAPPED=1 ;;
     esac
     case "$w" in
       '' | '!' | '{' | if | then | elif | else | while | until | do | in) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;
@@ -428,10 +455,13 @@ _guardrails_shell_reads_stdin() {
 
 # _guardrails_names_shell <text> → rc 0 if a shell or eval appears in it as a word, as it must to run.
 _guardrails_names_shell() {
-  local w
-  case "$1" in *sh* | *eval*) ;; *) return 1 ;; esac
+  local w t="$1"
+  # The shell drops quotes, backslashes and a backslash-newline inside a word, so b"as"h is bash (#134). As bytes, as the
+  # substitution is quadratic on long text in a UTF-8 locale.
+  case "$t" in *[\"\'\\]*) local LC_ALL=C; t="${t//\\$'\n'/}"; t="${t//[\"\'\\]/}" ;; esac
+  case "$t" in *sh* | *eval*) ;; *) return 1 ;; esac
   for w in sh bash zsh dash ksh eval; do
-    case " $1 " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
+    case " $t " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
   done
   return 1
 }
