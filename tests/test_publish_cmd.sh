@@ -252,6 +252,9 @@ allows $'bash <<A\ncat <<B\ngh pr comment is only prose here\nB\nA'       "prose
 blocks $'bash <<A; cat <<B\ngh pr comment 1 -b x\nA\nhi\nB'             "a shell's heredoc before another on its line"
 blocks $'cat <<A; bash <<B\nhi\nA\ngh pr comment 1 -b x\nB'             "a shell's heredoc after another on its line"
 allows $'bash <<A; cat <<B\necho hi\nA\ngh pr comment is prose\nB'      "prose in a heredoc after a shell's on its line"
+# A shell's heredoc ends at its delimiter, whatever its script left open there, as the shell reads it.
+blocks $'bash <<EOF\necho \'it\nEOF\ngh pr comment 1 -b x\necho \''       "a command after a shell's heredoc that left a quote open"
+blocks $'bash <<EOF\ncat <<X\nEOF\ngh pr comment 1 -b x'                  "a command after a shell's heredoc that left a heredoc open"
 
 # A shell reading commands from a pipe runs what no guard can see, so guard-publish asks about it.
 unseen() { _guardrails_unseen_shell_stdin "$1" >/dev/null || { echo "  FAIL [$2]: expected unseen stdin — '$1'"; FAILS=1; }; }

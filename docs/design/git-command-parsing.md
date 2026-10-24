@@ -41,7 +41,10 @@ four levels deep, as `publish-cmd.sh` does; a heredoc fed to a shell is split as
 lines by `shell-split.sh`, as are the `$( )` and backticks in an unquoted heredoc body.
 When a line opens several heredocs, as in `bash <<A; cat <<B`, their bodies follow it in
 turn, and each is read by its own rule: a shell's as script lines up to its delimiter, an
-unquoted one's substitutions as commands, a quoted one's not at all (#108).
+unquoted one's substitutions as commands, a quoted one's not at all (#108). A shell reads
+the heredoc its script came from up to the delimiter, whatever the script leaves open there,
+a quote, a substitution or a heredoc of its own, so the splitter ends the script there too,
+the outermost first, and reads on from where it was before the body.
 A `cd` inside `sh -c` ends with that child shell, while one inside `eval` lasts. A pipe
 into a shell runs commands no guard can see, so `guard-default-branch` asks when the
 directory it would run in is on its default branch.

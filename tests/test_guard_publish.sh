@@ -316,4 +316,8 @@ unset ALLOW_PUBLISH_AS_ME
 run_hook "$S" "$(jsonin $'bash <<A; cat <<B\ngh pr comment 1 -b x\nA\nhi\nB')"
 assert_rc 2 "a publish in a shell's heredoc before another on its line blocked"
 
+# A shell's heredoc ends at its delimiter, whatever its script left open there.
+run_hook "$S" "$(jsonin $'bash <<EOF\necho \'it\nEOF\ngh pr comment 1 -b x\necho \'')"
+assert_rc 2 "a publish after a shell's heredoc that left a quote open blocked"
+
 finish "guard-publish"

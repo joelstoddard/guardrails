@@ -50,6 +50,16 @@ _guardrails_split_awk() {
     }
     # A shell word anywhere before a heredoc opener makes the body its script, so no wrapper hides one (#90).
     function wordend() { if (index(" sh bash zsh dash ksh ", " " cw " ")) fsh = 1; cw = ""; qd = 0 }
+    # Level l reads the body at lh[l], and act maps the delimiter of each script being read to the outermost level
+    # reading it.
+    function head(l, e) { e = lh[l]; if (es[e] && !(ed[e] in act)) act[ed[e]] = l }
+    function drop(e) { e = lh[lv]; if (es[e] && (ed[e] in act) && act[ed[e]] == lv) delete act[ed[e]]; en = pb = la[lv] - 1; lv-- }
+    function nexthead(e) {
+      e = lh[lv]
+      if (lh[lv] == en) { drop(); return }
+      if (es[e] && (ed[e] in act) && act[ed[e]] == lv) delete act[ed[e]]
+      lh[lv]++; head(lv)
+    }
     # The shell ends a body at its delimiter line, even inside a substitution, which is then never closed.
     function bodyend() {
       for (; d > hb; d--) subemit(d, cs[d])
@@ -61,17 +71,19 @@ _guardrails_split_awk() {
       if (!carry && hd != "") { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); if (t == hd) hd = ""; next }
       # The carried split reads the body of every heredoc a line opens, in turn (#108). Entries pb+1..en are opened
       # on a line not yet ended, and level lv holds those of one line, from la[lv], with its body read at lh[lv].
-      if (carry && !cont && en > pb) { la[++lv] = pb + 1; lh[lv] = pb + 1; pb = en }
-      # A script ends at its delimiter only where its shell would read a new command.
-      if (lv && (es[h = lh[lv]] ? q == "" && !cont : !cont || inb)) {
+      if (carry && !cont && en > pb) { la[++lv] = pb + 1; lh[lv] = pb + 1; pb = en; lq[lv] = q; ld[lv] = d; head(lv) }
+      if (lv) {
         t = $0
         sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
-        if (t == ed[h]) {
-          if (++lh[lv] > en) { en = pb = la[lv] - 1; lv-- }
+        # A shell reads the heredoc its script came from to the delimiter, whatever the script left open, so the
+        # outermost script with this delimiter ends here, and all it opened with it. Its delimiter line is still read.
+        if (t in act) {
           if (inb) bodyend()
-          # The delimiter line of a script is still read, as it was before.
-          if (!es[h]) next
-        } else if (!es[h]) {
+          for (al = act[t]; lv > al; ) drop()
+          for (; d > ld[al]; d--) subemit(d, cs[d])
+          q = lq[al]; cont = 0; nexthead()
+        } else if (!es[h = lh[lv]] && (!cont || inb)) {
+          if (t == ed[h]) { nexthead(); if (inb) bodyend(); next }
           # The shell runs the $( ) and backticks of an unquoted body, where quotes are text, as in q = "hd".
           if (!ex[h]) next
           if (!inb) { inb = 1; hb = d; hq = q; q = "hd" }
