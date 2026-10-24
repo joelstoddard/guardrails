@@ -6,9 +6,11 @@ allowed-tools: Bash(git branch --show-current), Bash(git status:*), Bash(git dif
 
 ## Current state
 
+These lines show the current branch's PR. If you were given a PR, it may be a different one: ignore them, and use the given PR.
+
 - Branch: !`git branch --show-current`
-- PR: !`gh pr view --json number,url,isDraft,headRefName 2>/dev/null || echo "(no PR for this branch)"`
-- Checks: !`gh pr checks 2>&1 | head -20`
+- This branch's PR: !`gh pr view --json number,url,isDraft,headRefName 2>/dev/null || echo "(no PR for this branch)"`
+- This branch's checks: !`gh pr checks 2>&1 | head -20`
 
 ## Rules
 
@@ -31,14 +33,14 @@ Fix files this PR already touches. If the failure proves the root cause is elsew
 After the third failed repair, stop and report. Repeated failure means the diagnosis is wrong, and more attempts bury the evidence.
 
 ### Infrastructure failures are re-run, not "fixed"
-Runner timeout, network error, rate limit, cancelled job: re-run the job once with `gh run rerun --failed`. If it fails the same way twice, report it as infrastructure and stop.
+Runner timeout, network error, rate limit, cancelled job: re-run the job once with `gh run rerun <run-id> --failed`. If it fails the same way twice, report it as infrastructure and stop.
 
 ### One commit per fix round
 Via the `commit` skill, so each repair is separately revertible.
 
 ## Workflow
 
-1. Resolve the PR — the argument if given, else the current branch's PR. If neither resolves, stop.
+1. Resolve the PR — the argument if given, else the current branch's PR. If neither resolves, stop. Pass its number to every `gh pr` command: without one, `gh` uses the current branch's PR.
 2. `gh pr checks <pr-number> --watch --fail-fast` — blocks until conclusion.
 3. Green: report the PR URL and that checks passed. Stop.
 4. Red: `gh run view <run-id> --log-failed` for the failing job.
