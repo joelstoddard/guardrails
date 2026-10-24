@@ -139,6 +139,41 @@ EOF
 cov --update
 assert_eq "2/3 66.6 NO" "$(row "$S")" "span-uncovered"
 
+echo "--- a hit inside a multi-line \$( ), <( ) or >( ) is credited to the command's counted line"
+setup
+cat >"$D/$S" <<'EOF'
+x=$(
+  echo a
+)
+y=$(cat <<BODY
+hi
+BODY
+)
+cat <(
+  echo p
+) >/dev/null
+echo "$x$y"
+EOF
+echo 'bash "$(dirname "$0")/../plugins/p/hooks/scripts/f.sh" >/dev/null' >"$D/tests/test_f.sh"
+cov --update
+assert_eq "4/4 100.0 NO" "$(row "$S")" "substitution-credit"
+assert_eq "1 4 8 11 " "$(awk -F'\t' -v p="$S" '$2 == p { print $3 }' "$D/.coverage/hits.tsv" | sort -n | tr '\n' ' ')" "substitution-hits"
+
+echo "--- a multi-line \$( ) the test never reaches stays uncovered, and a ( inside it does not end it"
+setup
+cat >"$D/$S" <<'EOF'
+if [[ ${1:-} == yes ]]; then
+  echo "took yes"
+else
+  x=$(
+    (echo no)
+    echo "$(echo nested)"
+  )
+fi
+EOF
+cov --update
+assert_eq "2/3 66.6 NO" "$(row "$S")" "substitution-uncovered"
+
 echo "--- a hit on the continuation of a line that does not count credits no earlier command"
 setup
 cat >"$D/$S" <<'EOF'

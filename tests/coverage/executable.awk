@@ -1,7 +1,7 @@
 # Prints the numbers of the lines in a shell file that count as executable.
 # With -v spans=1, prints "continuation line<TAB>counted line" for each continuation line of a counted command.
 # Consistent rather than exact: floors start at measured values. See docs/design/coverage.md
-BEGIN { sq = 0; dq = 0; here = ""; cont = 0; ar = 0; cur = 0 }
+BEGIN { sq = 0; dq = 0; here = ""; cont = 0; ar = 0; cs = 0; cur = 0 }
 {
   line = $0
   if (here != "") {                          # heredoc body
@@ -9,7 +9,7 @@ BEGIN { sq = 0; dq = 0; here = ""; cont = 0; ar = 0; cur = 0 }
     if (t == here) here = ""
     next
   }
-  in_string = sq || dq
+  inside = sq || dq || cs                    # a string or a substitution open from an earlier line
   was_cont = cont
   code = ""; opens = ""
   n = length(line)
@@ -27,6 +27,10 @@ BEGIN { sq = 0; dq = 0; here = ""; cont = 0; ar = 0; cur = 0 }
     if (c == "#" && (i == 1 || substr(line, i - 1, 1) ~ /[ \t;]/)) break
     if (c == "(" && substr(line, i + 1, 1) == "(") { ar++; code = code "(("; i++; continue }   # inside (( )) or $(( )), even across lines, << is a shift
     if (c == ")" && substr(line, i + 1, 1) == ")" && ar) { ar--; code = code "))"; i++; continue }
+    # bash traces the commands of a $( ), <( ) or >( ) that spans lines on its later lines, so they continue its first
+    if (substr(line, i + 1, 1) == "(" && (index("<>", c) || (c == "$" && substr(line, i + 2, 1) != "("))) { cs++; code = code c "("; i++; continue }
+    if (cs && c == "(") cs++
+    if (cs && c == ")") cs--
     if (!ar && c == "<" && substr(line, i + 1, 1) == "<" && substr(line, i + 2, 1) != "<" && (i == 1 || substr(line, i - 1, 1) != "<")) {
       rest = substr(line, i + 2); sub(/^-/, "", rest); sub(/^[ \t]*/, "", rest); sub(/^["']/, "", rest)
       if (match(rest, /^[A-Za-z_][A-Za-z0-9_]*/)) opens = substr(rest, 1, RLENGTH)
@@ -36,7 +40,7 @@ BEGIN { sq = 0; dq = 0; here = ""; cont = 0; ar = 0; cur = 0 }
   }
   cont = (!sq && !dq && code ~ /\\$/)
   if (opens != "") here = opens              # the body starts on the next line
-  if (in_string || was_cont) {               # continuation of a string or a backslash line
+  if (inside || was_cont) {                  # continuation of a string, a substitution or a backslash line
     if (spans && cur) print NR "\t" cur
     next
   }

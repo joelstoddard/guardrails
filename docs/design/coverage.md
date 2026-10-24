@@ -53,7 +53,8 @@ own tests run in `tests/run.sh`, so the suite needs bash 4.1 too.
 - each line of a case label continued with a backslash, `a | \`, but its last. bash
   never traces a label, so that last line is read on its own, and counts if its arm
   holds a command. A pipeline of single words, `ls | \`, reads the same way;
-- continuation lines of multi-line strings, heredoc bodies and backslash continuations.
+- continuation lines of multi-line strings, heredoc bodies, backslash continuations,
+  and `$( )`, `<( )` and `>( )` substitutions that span lines, quoted or not.
   A `<<` inside `(( ))` or `$(( ))` is a shift and opens no heredoc, even when the
   `(( ))` spans lines;
 - lines ending in `# coverage: ignore <reason>`. The reason is required. Use the marker
@@ -65,17 +66,24 @@ every time changes no result.
 
 A multi-line command counts on its first line, but bash credits its hit to a later
 line, and which line differs between bash 5.2 and 5.3. So a traced hit on a
-continuation line of a counted command, inside a string or after a backslash, is
-credited to the command's counted line. `executable.awk -v spans=1` prints each such
+continuation line of a counted command, inside a string or a substitution or after a
+backslash, is credited to the command's counted line. `executable.awk -v spans=1` prints each such
 continuation line with its counted line, and `hits()` rewrites `hits.tsv` with it. When
 the floors were first set, nine of the fifteen uncovered lines were such first lines.
 
 Known limits:
 
-- A command substitution that spans lines outside quotes, as in `x=$(` on one line and
-  `)` on a later one, is traced on the line of its `)`, for the commands inside it too.
-  That line does not count and is no continuation, so the lines before it read as
-  uncovered. No measured file has one.
+- bash reads the commands inside a `$( )` again as it prints them, and numbers them
+  from the substitution's `)` line, one line for each line it prints. It numbers those
+  inside a `<( )` or `>( )` from the substitution's first line. A substitution whose
+  commands bash prints on one line is traced within its own lines, which credit its
+  counted line. bash prints each line of code, and each part of a compound command such
+  as `while`, `if` or `case`, on a line of its own, even when the source has them on one
+  line. So such a substitution is also traced on the lines after it, where its hits
+  credit whatever command is there, and can make a line that never ran read as covered.
+  `findings-gate.sh:22` is one, and the line after it runs anyway. A `( )` subshell and
+  a function body are traced on their own lines. A backtick substitution that spans
+  lines is traced from the line after its closing backtick, and is not handled.
 - A file a test copies before running is traced under the copy's path and is not
   credited to the original. `test_manifests.sh` runs every hook from a copy under a
   path with a space, so those runs do not count.
