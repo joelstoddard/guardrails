@@ -17,6 +17,36 @@ assert_eq "The cache never expires because the TTL is unset.
 Retries are unbounded in client.go" "$OUT" "bullets, numbers, continuation joined, section ends at next heading"
 
 OUT="$(_guardrails_findings '### Findings outside scope
+1. Cache never expires #12
+
+Next: run these.
+1. `make clean`
+2. `make test`')"
+assert_eq "Cache never expires #12" "$OUT" "a plain line after the list ends the section"
+
+OUT="$(_guardrails_findings '### Findings outside scope
+These are new:
+- Retries are unbounded')"
+assert_eq "Retries are unbounded" "$OUT" "a plain line before the first item does not end the section"
+
+OUT="$(_guardrails_findings '### Findings outside scope
+1. Cache never expires because
+the TTL is unset.
+2. Retries are unbounded')"
+assert_eq "Cache never expires because the TTL is unset.
+Retries are unbounded" "$OUT" "an unindented line straight after an item continues it"
+
+OUT="$(_guardrails_findings '### Findings outside scope
+1. Cache never expires
+> quoted log line
+| a | table |
+<!-- note -->
+---
+2. Retries are unbounded')"
+assert_eq "Cache never expires
+Retries are unbounded" "$OUT" "quotes, tables, comments and rules between items keep the section open"
+
+OUT="$(_guardrails_findings '### Findings outside scope
 None.')"
 assert_eq "" "$OUT" "prose None is no finding"
 

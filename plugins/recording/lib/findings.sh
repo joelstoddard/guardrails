@@ -40,6 +40,7 @@ _guardrails_findings() {
       return s ~ /^((none|nothing)( found| to report)?|no findings( outside scope)?|n\/a)[.!]?$/ ||
         s ~ /^(none|nothing|n\/a)[[:space:]]+(-|–|—)[[:space:]]/
     }
+    { after_blank = blank; blank = ($0 ~ /^[[:space:]]*$/) }
     $0 ~ ENVIRON["H"] {
       flush(); insec = (tolower($0) ~ /findings outside scope/); base = -1; next
     }
@@ -55,8 +56,13 @@ _guardrails_findings() {
       }
     }
     /^[[:space:]]+[^[:space:]]/ { if (item != "") { l = $0; sub(/^[[:space:]]+/, "", l); item = item " " l }; next }
-    /^[[:space:]]*$/ { next }
-    { flush() }
+    blank { next }
+    # An unclosed fence, a quote, a table, a comment OR a rule stays in the section, so it cannot hide what follows.
+    /^[[:space:]]*(```|~~~|>|\||<!--|---)/ { flush(); next }
+    # A plain line straight after an item continues it. After a blank line it ends the section,
+    # so a later list (Next steps) is not read as findings.
+    !after_blank && item != "" { item = item " " $0; next }
+    { flush(); if (base >= 0) insec = 0 }
     END { flush() }'
 }
 

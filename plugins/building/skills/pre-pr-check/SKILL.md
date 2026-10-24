@@ -1,6 +1,6 @@
 ---
 name: pre-pr-check
-description: Run the repo's documented lint and tests, sweep the diff for secrets and over-long comments, grade this change against the compliance checklist, and weigh its impact and risk. Follow this skill before pushing anything to a shared remote or opening a pull request, and whenever the user asks to review changes or for a pre-push review. Pass --full to add the project-level categories that are near-static between PRs.
+description: Run the repo's documented lint and tests, sweep the diff for secrets, over-long comments and code it could do without, grade this change against the compliance checklist, and weigh its impact and risk. Follow this skill before pushing anything to a shared remote or opening a pull request, and whenever the user asks to review changes or for a pre-push review. Pass --full to add the project-level categories that are near-static between PRs.
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Agent, Skill
 ---
 
@@ -15,7 +15,8 @@ allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Agent, Skill
 - Agent doc: !`git ls-files ':/AGENTS.md' ':/CLAUDE.md' | grep . || echo "(neither found at repo root)"`
 
 `Edit` and `Write` are for the comment sweep's in-place rewrites and the design
-docs it may need; `Skill` invokes `concise-comments`. `allowed-tools` grants
+docs it may need; `Skill` invokes `concise-comments`; `Agent` runs the
+command discovery and the simplicity sweep. `allowed-tools` grants
 unrestricted `Bash` deliberately: the lint and test
 commands come from the repo's own agent doc and cannot be enumerated in
 advance. Every other grant is the minimum the workflow uses.
@@ -115,6 +116,26 @@ before the push — an uncommitted rewrite is **NOT READY**. The sweep is a
 backstop: the `comment-warn` hook already warns as an edit writes an over-long
 comment, and this catches what was written outside it.
 
+Then the **simplicity sweep**. It runs here but does not block. Dispatch one
+fresh `general-purpose` sub-agent, because whoever wrote the diff is the worst
+judge of what it could leave out. Brief it with the base, the agent doc path, and
+this task, but not your reasoning about the change:
+
+> Review `git diff <base>...HEAD` against the "Simplicity" section of the
+> engineering rules, and against the rule to follow the patterns already
+> established in the codebase. For conventions, read the agent doc and the
+> code next to each change: naming, file layout, error handling, test style.
+> Review only the lines the diff adds or changes. Report only; edit nothing.
+> For each finding give `file:line`, the rule it breaks, the simpler
+> replacement, and what the replacement removes. For a convention, cite an
+> example of it already in the repo. Skip a finding you cannot back with a
+> concrete replacement.
+
+Check only that each `file:line` is in the diff and each cited example
+exists. Do not drop a finding because you disagree with it: that is the bias
+the fresh sub-agent avoids. Each finding that passes is a concern. Report any
+you drop, with the reason.
+
 ### 4. Grade the categories
 
 Load `references/compliance-checklist.md` now.
@@ -155,6 +176,9 @@ pass.
 | Security | CLEAN / REVIEW: n items |
 | Comments | CLEAN / n rewritten, awaiting commit |
 
+Simplicity:
+  <file:line>   <rule>   <simpler replacement> — removes <what>, or none
+
 Graded — this diff:
   §n  <category>   Missing   — <what is absent>
   §n  <category>   Partial   — <the specific shortfall>
@@ -174,7 +198,8 @@ Gaps: n · Unknown: n · N/A: n
 **NOT READY** when a gate fails, when a comment rewrite is still uncommitted,
 or when a **diff-tier** category is **Missing**.
 
-A concern from step 5 does not make the change NOT READY. Do not recommend the
+A concern from the simplicity sweep or step 5 does not make the change NOT
+READY. Do not recommend the
 push until the user has seen and acknowledged each one.
 
 Everything else is reported without blocking:
@@ -213,5 +238,6 @@ call: this skill does not create issues.
 - About to fold an unknown into the gaps, or into the passes, to make the table tidy.
 - About to mark a category N/A without naming the exception.
 - About to fix a finding instead of reporting it.
+- About to run the simplicity sweep yourself instead of in a fresh sub-agent.
 - About to run the project tier without `--full`, or skip the diff tier with it.
 - About to report before every gate has run.
