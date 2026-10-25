@@ -427,10 +427,12 @@ The floors started at the scores measured on the code of `main` at b0d58e5, not 
 100: the tests leave many mutants alive, and the floors record that rather than hide
 it, 499 of 637 mutants killed (78.3%). Only mutants that cannot change behaviour are in
 `tests/mutants-ignore.tsv`. Every other survivor is a test to write, and the weekly run
-lists them. Two full runs differed in two mutants, the depth caps at `git-cmd.sh:94` and
-`publish-cmd.sh:102`, each killed in one run only. Run alone, with no load, every test
-of each passed, so both kills were spurious, and their rows and `TOTAL` take the lower
-counts (see Flaky tests below).
+lists them. Three full runs differed in four mutants, each killed in one run only: the
+depth caps at `git-cmd.sh:94` and `publish-cmd.sh:102`, `lint-warn.sh:13` and
+`shell-split.sh:231`. Run alone, with no load, every test of each passed, so all four
+kills were spurious, and the floors take the counts with those mutants alive (see
+Flaky tests below). The third run, on more load, scored 501 of 637 against them and
+passed.
 
 ### In CI
 
