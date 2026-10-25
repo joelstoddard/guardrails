@@ -28,6 +28,8 @@ floors() { cat "$D/tests/coverage-floor.tsv"; }
 
 # On a bash older than 4.1 every case below would fail with an empty row, so stop with the tool's reason.
 why="$(bash "$TOOL" --lines /dev/null 2>&1)" || { fail "the bash on PATH runs the tool" "$why"; finish "coverage-tools"; }
+# A report run counts awk statements with gawk, and stops without it.
+command -v gawk >/dev/null || { fail "gawk is on PATH" "coverage.sh needs it for a report run"; finish "coverage-tools"; }
 
 echo "--- a branch the test never takes counts against coverage"
 setup; cov --update
@@ -418,5 +420,55 @@ assert_eq "$S" "$OUTPUT" "files"
 cov --trace
 [[ $RC == 0 && $OUTPUT != *TOTAL* && $(grep -F "$S" "$D/.coverage/hits.tsv" | cut -f2-) == "$S"$'\t2\n'"$S"$'\t3' ]] ||
   fail trace "rc=$RC: $OUTPUT"
+
+echo "--- an awk program in a measured file is measured by statement under gawk, and keeps its output and status"
+setup
+cat >"$D/plugins/p/lib/a.sh" <<'EOF'
+pick() { printf '%s\n' "$1" | awk '{ if ($0 == "a") print "A"; else print "B" }'; }
+three() { awk 'END { exit 3 }' </dev/null; }
+EOF
+cat >"$D/tests/test_a.sh" <<'EOF'
+. "$(dirname "$0")/../plugins/p/lib/a.sh"
+[[ $(pick a) == A ]] || exit 1
+three; [[ $? == 3 ]]
+EOF
+cov --update
+[[ $RC == 0 && $(row awk:plugins/p/lib/a.sh) == "3/4 75.0 NO" ]] || fail awk-statements "rc=$RC: $OUTPUT"
+[[ $(cat "$D/.coverage/awk-missed.tsv") == $'plugins/p/lib/a.sh\tprint "B"' ]] || fail awk-missed "$(cat "$D/.coverage/awk-missed.tsv")"
+[[ $(row awk:tests/test_a.sh) == "" ]] || fail awk-tests-unmeasured "$OUTPUT"
+
+echo "--- both runs of an awk call read a <( ) operand and stdin in full, and stdin it does not read stays the caller's"
+setup
+cat >"$D/plugins/p/lib/a.sh" <<'EOF'
+count() { awk 'END { print NR }' <(printf 'x\ny\n') -; }
+first() { awk '{ print; exit }' "$1"; cat; }
+EOF
+cat >"$D/tests/test_a.sh" <<'EOF'
+. "$(dirname "$0")/../plugins/p/lib/a.sh"
+[[ $(printf 'z\n' | count) == 3 ]] || exit 1
+printf 'one\ntwo\n' >"$(dirname "$0")/lines"
+[[ $(printf 'kept\n' | first "$(dirname "$0")/lines") == $'one\nkept' ]]
+EOF
+cov --update
+[[ $RC == 0 && $(row awk:plugins/p/lib/a.sh) == "3/3 100.0 NO" ]] || fail awk-operands "rc=$RC: $OUTPUT"
+
+echo "--- an awk run gawk leaves no profile of stops the run, so it can never read as nothing to measure"
+setup; mkdir "$D/bin"; printf '#!/bin/sh\nexit 0\n' >"$D/bin/gawk"; chmod +x "$D/bin/gawk"
+echo 'printf "a\n" | awk "{ print }"' >"$D/plugins/p/lib/a.sh"
+echo 'bash "$(dirname "$0")/../plugins/p/lib/a.sh" >/dev/null' >"$D/tests/test_a.sh"
+OUTPUT="$(PATH="$D/bin:$PATH" COVERAGE_ROOT="$D" bash "$TOOL" --update 2>&1)"; RC=$?
+[[ $RC == 1 && $OUTPUT == *"gawk left no profile of an awk run from plugins/p/lib/a.sh"* ]] || fail awk-no-profile "rc=$RC: $OUTPUT"
+
+echo "--- the ratchet follows an awk floor to its file's new path, and lets it go once the file runs no awk"
+setup; git -C "$D" init -q; mkdir -p "$D/plugins/q/lib"; echo 'printf x | awk 1' >"$D/plugins/q/lib/m.sh"
+printf '%s\t66.6\nawk:plugins/p/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\nawk:plugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor lowered: awk:plugins/p/lib/m.sh -> awk:plugins/q/lib/m.sh 50.0 -> 40.0"* ]] ||
+  fail ratchet-awk-moved "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nawk:%s\t50.0\nTOTAL\t66.6\n' "$S" "$S" >"$D/base.tsv"
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-awk-gone "rc=$RC: $OUTPUT"
+echo 'printf x | awk 1' >>"$D/$S"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor removed: awk:$S (was 50.0)"* ]] || fail ratchet-awk-removed "rc=$RC: $OUTPUT"
 
 finish "coverage-tools"

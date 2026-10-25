@@ -51,6 +51,17 @@ jobs:
         run: |
           pip install -r tests/requirements.txt
           npm install -g @anthropic-ai/claude-code@2.1.289
+      # coverage.sh counts the awk programs' statements under gawk. Installing gawk makes it the default awk, so the
+      # default goes back, and the suites still test the awk the runner had. See docs/design/coverage.md
+      - name: Install gawk
+        run: |
+          if ! command -v gawk >/dev/null; then
+            awk=$(readlink -f "$(command -v awk)")
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq gawk
+            sudo update-alternatives --set awk "$awk"
+          fi
+          readlink -f "$(command -v awk)"
       # The shell suites run once, under line tracing, in place of tests/run.sh: the step reports each suite, shows
       # the output of one that fails, and fails with it. See docs/design/coverage.md
       - name: Run the shell suites and check coverage floors

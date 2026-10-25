@@ -30,6 +30,7 @@ measured() { # measured files, relative to ROOT
 run_suites() { # every shell test under tracing, one log per test file; returns 1 if any test fails
   local t rc=0
   rm -rf "$OUT"; mkdir -p "$OUT/logs"
+  [[ -z $awk_runs ]] || mkdir -p "$awk_runs"
   for t in "$ROOT"/tests/test_*.sh; do
     [[ -e $t ]] && { run_one "$t" "$(basename "$t")" || rc=1; }
   done
@@ -37,7 +38,8 @@ run_suites() { # every shell test under tracing, one log per test file; returns 
 }
 
 run_one() { # <test file> <name>; reports the result, and a failing suite's output, which CI shows in place of a test run
-  if COV_LOG="$OUT/logs/$2.log" BASH_ENV="$HERE/coverage/bash_env.sh" bash "$1" >"$OUT/logs/$2.out" 2>&1; then
+  # stdin is /dev/null, so the awk shim, which reads stdin for both its runs, never waits on a terminal.
+  if COV_LOG="$OUT/logs/$2.log" COV_AWK="$awk_runs" BASH_ENV="$HERE/coverage/bash_env.sh" bash "$1" </dev/null >"$OUT/logs/$2.out" 2>&1; then
     echo "coverage: $2 passed"; return 0
   fi
   { echo "coverage: $2 failed, see $OUT/logs/$2.out"; cat "$OUT/logs/$2.out"; } >&2
@@ -73,6 +75,31 @@ credit_spans() { # stdin "test<TAB>path<TAB>line"; moves a hit on a command's la
   awk -F'\t' -v OFS='\t' 'FILENAME == ARGV[1] { first[$1 FS $2] = $3; next } { k = $2 FS $3; if (k in first) $3 = first[k]; print }' "$OUT/spans.tsv" -
 }
 
+awk_rows() { # writes awk.tsv, "path<TAB>statements run<TAB>statements", from the gawk profiles of measured files' awk runs
+  local run caller dir rel f bad=0
+  declare -A measured_file rel_of
+  while IFS= read -r f; do measured_file[$f]=1; done < <(measured)
+  : >"$OUT/awk-missed.tsv"
+  for run in "$awk_runs"/run.*.caller; do
+    [[ -e $run ]] || continue
+    IFS= read -r caller <"$run"; run=${run%.caller}
+    if [[ -z ${rel_of[$caller]+set} ]]; then # resolve each caller once, as hits() does
+      rel_of[$caller]=""
+      if dir=$(cd "$(dirname "$caller")" 2>/dev/null && pwd -P) && [[ $dir/ == "$ROOT"/* ]]; then
+        rel_of[$caller]="${dir#"$ROOT"/}/$(basename "$caller")"
+      fi
+    fi
+    rel=${rel_of[$caller]}
+    [[ -n $rel && -n ${measured_file[$rel]:-} ]] || continue
+    # A run with no profile would read as nothing to measure, so it stops the report.
+    if [[ -s $run.profile ]]; then printf '%s\t%s\n' "$rel" "$run.profile"
+    else echo "coverage: gawk left no profile of an awk run from $rel, see $run.*" >&2; bad=1; fi
+  done >"$OUT/awk-runs.tsv"
+  ((!bad)) || return 1
+  awk -v missed="$OUT/awk-missed.tsv" -f "$HERE/coverage/profiles.awk" "$OUT/awk-runs.tsv" | LC_ALL=C sort >"$OUT/awk.tsv"
+  LC_ALL=C sort -o "$OUT/awk-missed.tsv" "$OUT/awk-missed.tsv"
+}
+
 floor_of() { awk -F'\t' -v p="$1" '$1 == p { print $2 }' "$FLOORS" 2>/dev/null || true; }
 most_of() { awk -F'\t' -v p="$1" '$1 == p { print $3 }' "$FLOORS" 2>/dev/null || true; } # the ceiling on uncovered lines
 
@@ -89,6 +116,7 @@ report() { # <update: 0|1>; prints the table, rewrites floors on update, returns
     row "$f" "$hit_n" "$exec_n"
   done < <(measured)
   row TOTAL "$total_hit" "$total_exec"
+  while IFS=$'\t' read -r f hit_n exec_n; do row "awk:$f" "$hit_n" "$exec_n"; done <"$OUT/awk.tsv"
   if ((update && !invalid)); then printf '%s\n' "${rows[@]}" >"$FLOORS"; fi
   return $bad
 }
@@ -140,7 +168,7 @@ moved_to() { # <path>: where a gone file went, per git since --base, else a file
 }
 
 ratchet() { # <base floor file>: fails if a floor fell, or vanished while its file still exists, here or moved
-  local path old oldmost key new newmost new_tenths old_tenths moved bad=0 base_total=0 changes st a b
+  local path old oldmost key file prefix new newmost new_tenths old_tenths moved bad=0 base_total=0 changes st a b
   declare -A renamed=() # path at --base -> its path now, or "" if deleted
   if [[ -n $base_rev ]]; then
     changes=$(mktemp) || return 1
@@ -159,11 +187,14 @@ ratchet() { # <base floor file>: fails if a floor fell, or vanished while its fi
     [[ -n $path ]] || continue
     [[ $path == TOTAL ]] && base_total=1
     key=$path; new=$(floor_of "$key")
-    if [[ -z $new && $path != TOTAL && ! -e $ROOT/$path ]]; then # renamed per git, or moved with its name
-      moved=$(moved_to "$path") || { echo "cannot list the repo's files to find $path"; bad=1; continue; }
+    file=${path#awk:}; prefix=${path%"$file"} # an awk row, awk:FILE, follows its file
+    if [[ -z $new && $path != TOTAL && ! -e $ROOT/$file ]]; then # renamed per git, or moved with its name
+      moved=$(moved_to "$file") || { echo "cannot list the repo's files to find $file"; bad=1; continue; }
       [[ -n $moved ]] || continue # deleted, so its floor may go
-      key=$moved; new=$(floor_of "$key"); path="$path -> $moved"
+      file=$moved; key=$prefix$moved; new=$(floor_of "$key"); path="$path -> $key"
     fi
+    # An awk row's floor may go once its file names no awk.
+    if [[ -z $new && -n $prefix ]] && ! grep -qw awk "$ROOT/$file" 2>/dev/null; then continue; fi
     if [[ -z $new ]]; then echo "floor removed: $path (was $old)"; bad=1; continue; fi
     if ! new_tenths=$(tenths "$new") || ! old_tenths=$(tenths "$old"); then
       echo "floor invalid: $path"; bad=1
@@ -181,7 +212,7 @@ ratchet() { # <base floor file>: fails if a floor fell, or vanished while its fi
   return $bad
 }
 
-base_rev=""
+base_rev="" awk_runs=""
 if [[ ${1:-} == --base ]]; then
   base_rev=${2:?--base needs a revision}; shift 2
   [[ ${1:-} == --ratchet ]] || die "--base goes only with --ratchet"
@@ -193,8 +224,11 @@ case ${1:-} in
   --trace) run_suites || exit 1; hits ;;
   --update | "")
     update=0; [[ ${1:-} == --update ]] && update=1
+    command -v gawk >/dev/null || die "needs gawk, to measure the awk programs in the measured files"
+    awk_runs=$OUT/awk
     run_suites || exit 1
     hits
+    awk_rows || exit 1
     report "$update"
     ;;
   *) die "unknown option: $1" ;;

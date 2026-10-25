@@ -23,7 +23,8 @@ alike, so an agent can check before opening a PR.
 - `plugins/*/lib/*.sh`
 
 Each glob is one level deep. Trace lines from any other file, including the tests, are
-ignored.
+ignored. The awk programs inside these files are measured too, by statement, in rows of
+their own; see [awk programs](#awk-programs).
 
 The suites that run are `tests/test_*.sh`, each with bash as `tests/run.sh` does. Each
 test file runs on its own with its own trace log. The Python tests check documents and
@@ -90,9 +91,63 @@ Known limits:
   credited to the original. `test_manifests.sh` runs every hook from a copy under a
   path with a space, so those runs do not count.
 
-Known blind spot: code in another language inside a shell string is not measured. The
-awk in `shell-split.sh` and the jq in the hooks count as one shell line each, and a
-test that runs that line covers all of it.
+Known blind spot: the jq programs in the hooks count as one shell line each, and a test
+that runs that line covers all of it. The awk programs have a measure of their own.
+
+## awk programs
+
+Most of the splitter's logic is an awk program in a shell string in `shell-split.sh`,
+and several hooks hold smaller ones. The line tracer counts each as the one shell line
+that runs it, so the splitter read 100% whether or not its branches were tested. So
+coverage also counts the statements of each awk program that ran, under gawk's
+profiler, without changing the measured files:
+
+- **The shim.** For a report run, `coverage.sh` sets `COV_AWK`, and `bash_env.sh` then
+  defines an `awk` function in every traced bash. A call from a file whose path holds
+  `plugins/` goes to `tests/coverage/awk_shim.sh`, with the caller's path; any other
+  call runs awk as before. `--trace`, which mutation uses, sets no `COV_AWK`.
+- **Two runs.** The shim runs the call under `gawk --profile`, its output thrown away,
+  and at the same time with the `awk` on `PATH`, whose output and status the caller
+  gets, and waits for both. So the suites still test the system awk, BSD awk on macOS
+  and mawk or gawk on Linux, and only the count depends on gawk. The function turns
+  xtrace off for the call, as the trace already holds it, and back on after.
+- **The same input for both.** The shim reads awk's POSIX options, `-F`, `-v`, `-f` and
+  `--`, to find the operands. It copies an operand that is not a regular file, such as
+  a `<( )`, which can be read only once. When awk reads stdin, because there is no file
+  operand or one is `-`, the shim saves stdin for both runs; otherwise stdin stays the
+  caller's. The suites run with stdin from `/dev/null`, so the shim never waits on a
+  terminal.
+- **Counting.** gawk writes each run's profile: the program printed again, with each
+  statement's count. `tests/coverage/profiles.awk` merges them for each file and each
+  distinct program in it: a statement counts as run if any run of that program ran it.
+  Braces, `else`, and rule and function headers are not statements; a rule's pattern
+  and an `if`'s condition are.
+- **Rows.** Each measured file with an awk program that ran gets a row `awk:PATH`, with
+  a floor and a ceiling like a file's, counting statements. The rows are not in `TOTAL`,
+  which counts shell lines. `.coverage/awk-missed.tsv` lists each statement no run
+  reached, as gawk prints it.
+- **Cost.** Each call starts a bash, copies its input and runs gawk beside the system
+  awk, about 20 ms on macOS, so the report run of about 1,760 calls takes about a
+  minute longer there. `--trace` and so mutation pay nothing.
+- **Failures.** Without gawk, a report run stops with exit 2. A run whose profile gawk
+  did not write stops the report with exit 1, as it would otherwise read as nothing to
+  measure.
+- **The ratchet.** An `awk:` floor follows its file through a rename or a move, and may
+  go only once the file no longer has the word `awk` in it.
+
+Known limits:
+
+- An awk program that no test runs has no profile, so it is not in its file's row. Its
+  call line reads as uncovered in the file's line row, which every measured file but
+  `publish-cmd.sh` holds at 100%.
+- The shim reads all of a stdin that awk reads, before either run, even when the
+  program stops early, as the one in `allow-gh-api-read.sh` does: a command writing
+  into the pipe then never sees awk stop. A program that writes a file or runs a
+  command would do it twice; no measured program does.
+- gawk and the system awk can differ, as BSD awk does on invalid bytes (#76); the count
+  is gawk's path through the program.
+- A copied `<( )` operand has a different name, which a program that reads `FILENAME`
+  would see. No measured program does.
 
 ## Floors and the ratchet
 
@@ -153,10 +208,11 @@ file whose name another file still has reads as moved to that file. CI passes `-
 Exit codes: 0 for success; 1 for a failed test, a missing, low or invalid floor, a
 missing argument after `--lines`, `--ratchet` or `--base`, an unreadable base file, a
 revision git cannot diff against, or a repo git cannot list; 2 for an unknown option,
-`--base` without `--ratchet`, or a bash older than 4.1.
+`--base` without `--ratchet`, a bash older than 4.1, or no gawk for a report run.
 
 Output goes to `.coverage/`, which git ignores. `.coverage/hits.tsv` lists every traced
 line as `test<TAB>path<TAB>line`, with a continuation line's hit on its counted line.
+`.coverage/awk-missed.tsv` lists the awk statements no run reached.
 
 ## In CI
 

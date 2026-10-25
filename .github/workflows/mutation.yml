@@ -27,6 +27,17 @@ jobs:
       # test_manifests.sh needs it, and mutate.sh runs every shell suite first.
       - name: Install the Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code@2.1.289
+      # test_coverage_tools.sh runs coverage.sh, which counts awk statements under gawk. Installing gawk makes it the
+      # default awk, so the default goes back, and the suites still test the awk the runner had.
+      - name: Install gawk
+        run: |
+          if ! command -v gawk >/dev/null; then
+            awk=$(readlink -f "$(command -v awk)")
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq gawk
+            sudo update-alternatives --set awk "$awk"
+          fi
+          readlink -f "$(command -v awk)"
       - name: Run mutation testing
         shell: bash
         run: bash tests/mutate.sh | tee "$RUNNER_TEMP/mutation.txt"
