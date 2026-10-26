@@ -332,6 +332,12 @@ assert_rc 2 "a publish in a heredoc opened before the shell it feeds blocked"
 run_hook "$S" "$(jsonin $'cat <<EOF `true\ngh pr comment 1 -b x\n`\nbody\nEOF')"
 assert_rc 2 "a publish in a backtick spanning lines after an opener blocked"
 
+# The shell takes out redirects and drops quotes before gh and httpie read their words (#146).
+run_hook "$S" "$(jsonin 'gh "api" -X POST repos/o/r/issues/1/comments -f body=x')"
+assert_rc 2 "a quoted api with a write method blocked"
+run_hook "$S" "$(jsonin 'http >out POST api.example.com text=hi')"
+assert_rc 2 "an httpie write behind a redirect blocked"
+
 # Help as the first option creates nothing (#78).
 run_hook "$S" "$(jsonin "gh pr create --help | grep -E -- '--draft'")"
 assert_rc 0 "help for pr create allowed"

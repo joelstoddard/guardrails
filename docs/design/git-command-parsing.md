@@ -86,10 +86,11 @@ is, as the substitution is slow on a long word.
 The words after the command are read the same way, in `_guardrails_skip_redirect` and
 `_guardrails_unquote`, which the lookup shares. So git's global options and subcommand, and
 the words before a publish verb, are read past redirects and without their quotes: `git
-2>/dev/null commit`, `git "commit"` and `gh >out pr create` are what they run (#131). A
-redirect between `-C` and its directory does not hide the directory, and a redirect's target
-is not read as `-C` or as a publish verb. The publish guard still matches an option as
-written, so a quoted `"-w"` stays a word before a verb, as it was before. A word that is one
+2>/dev/null commit`, `git "commit"` and `gh >out pr create` are what they run (#131). So are
+`gh api`'s method and body flags and httpie's method: `gh "api" -X "POST"` and `http >out POST`
+write (#146). A redirect between `-C` and its directory does not hide the directory, and a redirect's target
+is not read as `-C` or as a publish verb. The publish guard still matches an option before a
+verb as written, so a quoted `"-w"` stays a word before a verb, as it was before. A word that is one
 piece of a quoted argument of several words is read differently; see "Known limitation".
 
 A redirect needs no blank before it, so `bash<<<'…'` feeds bash a script and `git>/dev/null

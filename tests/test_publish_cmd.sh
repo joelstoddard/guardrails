@@ -74,6 +74,25 @@ blocks 'gh api --method PATCH repos/o/r/issues/1'              "gh api --method 
 blocks 'gh api repos/o/r/issues/1/comments -f body=x'          "gh api -f implies POST"
 allows 'gh api repos/o/r/pulls/1'                              "gh api GET"
 allows 'gh api --method GET repos/o/r/issues'                  "gh api explicit GET"
+# The shell takes out redirects and drops quotes before gh and httpie read their words (#146).
+blocks 'gh "api" -X POST repos/o/r/issues/1/comments -f body=x' "a quoted api"
+blocks 'gh >out api -X POST repos/o/r'                          "a redirect before api"
+blocks 'gh api>out -X POST repos/o/r'                           "a redirect fused to api"
+blocks 'gh api -X "POST" repos/o/r'                             "a quoted gh api method"
+blocks "gh api --method 'PUT' repos/o/r"                        "a single-quoted gh api method"
+blocks 'gh api -X >out POST repos/o/r'                          "a redirect between -X and its method"
+blocks 'gh api repos/o/r "-f" body=x'                           "a quoted body flag"
+blocks 'http "POST" api.example.com text=hi'                    "a quoted httpie method"
+blocks 'http >out POST api.example.com text=hi'                 "a redirect before httpie's method"
+blocks "curl -X 'DELETE' https://api.example.com/thing"         "a single-quoted curl method"
+blocks 'wget --method=DELETE https://api.example.com/thing'     "wget's method"
+blocks 'wget --method PUT https://api.example.com/thing'        "wget's method as the next word"
+allows 'gh api -X >out GET repos/o/r'                           "a GET behind a redirect"
+allows 'gh >out api repos/o/r'                                  "a read behind a redirect"
+allows 'http >out GET api.example.com'                          "an httpie GET behind a redirect"
+# A method or api read from one piece of a quoted argument asks, as a verb read from one does (#131).
+asks   'gh "api repos/o/r" -f body=x'                           "api read from a piece of a quoted argument"
+asks   'http "POST api.example.com" text=hi'                    "a method read from a piece of a quoted argument"
 
 # The checks run per segment without starting a process (#126). httpie uppercases its method as Python does, so the
 # long s in poſt makes a POST.

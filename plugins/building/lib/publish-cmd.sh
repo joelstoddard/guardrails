@@ -32,21 +32,23 @@ _guardrails_is_write_verb() {
   esac
 }
 
-# `gh api` and friends default to GET, but a method or body flag promotes them to writes.
+# `gh api` and friends default to GET, but a method or body flag promotes them to writes. Reads the caller's toks from
+# <index>, past redirects and with quotes dropped, as the shell takes them out (#146).
 _guardrails_gh_api_writes() {
-  local -a toks=("$@")
-  local i=0
+  local i="$1" w m=0
   while [ "$i" -lt "${#toks[@]}" ]; do
-    case "${toks[$i]}" in
-      -X | --method)
-        _guardrails_is_write_verb "${toks[$((i + 1))]:-}" && return 0
-        i=$((i + 2)); continue ;;
-      -X*) _guardrails_is_write_verb "${toks[$i]#-X}" && return 0 ;;
-      --method=*) _guardrails_is_write_verb "${toks[$i]#--method=}" && return 0 ;;
+    w="${toks[$i]}"
+    case "$w" in *[\<\>]*) _guardrails_skip_redirect && continue ;; esac
+    case "$w" in *[\"\'\\]*) _guardrails_unquote ;; esac
+    i=$((i + 1))
+    if [ "$m" = 1 ]; then _guardrails_is_write_verb "$w" && return 0; m=0; continue; fi
+    case "$w" in
+      -X | --method) m=1 ;;
+      -X*) _guardrails_is_write_verb "${w#-X}" && return 0 ;;
+      --method=*) _guardrails_is_write_verb "${w#--method=}" && return 0 ;;
       -f | -F | --field | --raw-field | --input) return 0 ;;
       -f* | --field=* | --raw-field=* | --input=*) return 0 ;;
     esac
-    i=$((i + 1))
   done
   return 1
 }
@@ -54,7 +56,7 @@ _guardrails_gh_api_writes() {
 # A regex fails on text holding an invalid byte in a UTF-8 locale, on macOS even before the byte, so such text is
 # read as bytes.
 _guardrails_http_has_body() {
-  local method='(^|[[:space:]])(-X|--request)[[:space:]]*=?[[:space:]]*"?(POST|PUT|PATCH|DELETE)'
+  local method='(^|[[:space:]])(-X|--request|--method)[[:space:]]*=?[[:space:]]*["'"'"']?(POST|PUT|PATCH|DELETE)'
   local data='(^|[[:space:]])(-d|-F|--data|--data-raw|--data-binary|--data-urlencode|--json|--form|--upload-file|--post-data|--post-file)([[:space:]]|=)'
   [[ $1 =~ ^.*$ ]] || local LC_ALL=C
   [[ $1 =~ $method || $1 =~ $data ]]
@@ -111,7 +113,7 @@ _guardrails_publishes_as_user() {
       return 0 ;;
   esac
 
-  local seg i base n w reason
+  local seg i at base n w reason
   local -a toks lead piece
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
@@ -133,23 +135,34 @@ _guardrails_publishes_as_user() {
         return 0 ;;
     esac
 
+    # The command and the words after it before the first option, past redirects and with quotes dropped, as the command
+    # reads them (#131, #146). An option is matched as written, so a quoted one stays a word, as it was before.
+    at="$i"; lead=("$base"); piece=(); i=$((i + 1))
+    while [ "$i" -lt "${#toks[@]}" ] && [ "${#lead[@]}" -lt 4 ]; do
+      w="${toks[$i]}"
+      case "$w" in -*) break ;; *[\<\>]*) _guardrails_skip_redirect && continue ;; esac
+      case "$w" in *[\"\'\\]*) _guardrails_whole_word || piece[${#lead[@]}]="$w"; _guardrails_unquote ;; esac
+      lead+=("$w")
+      i=$((i + 1))
+    done
+
+    # A method or api read from one piece of a quoted argument of several words may not be the command's, as the shell
+    # passes the argument whole, so it asks, as a verb read from one does.
     case "$base" in
       curl | wget | http | https | httpie | xh | xhs)
         # httpie takes the method as its first argument: `http POST url field=v`.
-        if _guardrails_is_write_verb "${toks[$((i + 1))]:-}" ||
-          _guardrails_http_has_body "$seg"; then
-          if _guardrails_has_remote_target "$seg"; then
-            printf 'HTTP write to a remote host'
-            return 0
-          fi
+        if _guardrails_http_has_body "$seg" || { _guardrails_is_write_verb "${lead[1]:-}" && [ -z "${piece[1]:-}" ]; }; then
+          _guardrails_has_remote_target "$seg" && { printf 'HTTP write to a remote host'; return 0; }
+        elif _guardrails_is_write_verb "${lead[1]:-}" && _guardrails_has_remote_target "$seg"; then
+          : "${_GUARDRAILS_PUBLISH_ASK:=HTTP write to a remote host, read from ${piece[1]}, one piece of a quoted argument}"
         fi
         continue ;;
     esac
 
-    if [ "${toks[$((i + 1))]:-}" = "api" ] &&
-      _guardrails_gh_api_writes "${toks[@]:$((i + 2))}"; then
-      printf '%s api with a write method or body flag' "$base"
-      return 0
+    if [ "${lead[1]:-}" = api ] && _guardrails_gh_api_writes "$((at + 1))"; then
+      printf -v reason '%s api with a write method or body flag' "$base"
+      [ -n "${piece[1]:-}" ] || { printf '%s' "$reason"; return 0; }
+      : "${_GUARDRAILS_PUBLISH_ASK:=$reason, read from ${piece[1]}, one piece of a quoted argument}"
     fi
 
     # A publish verb in subcommand position. Leading non-flag tokens only, so a verb
@@ -157,16 +170,6 @@ _guardrails_publishes_as_user() {
     case " $_GUARDRAILS_TEXT_TOOLS " in
       *" $base "*) continue ;;
     esac
-    lead=(); piece=()
-    while [ "$i" -lt "${#toks[@]}" ] && [ "${#lead[@]}" -lt 4 ]; do
-      w="${toks[$i]}"
-      # The shell takes out redirects and drops quotes before the command reads its words (#131). An option is matched
-      # as written, so a quoted one stays a word, as it was before.
-      case "$w" in -*) break ;; *[\<\>]*) _guardrails_skip_redirect && continue ;; esac
-      case "$w" in *[\"\'\\]*) _guardrails_whole_word || piece[${#lead[@]}]="$w"; _guardrails_unquote ;; esac
-      lead+=("$w")
-      i=$((i + 1))
-    done
     # A ready review request notifies reviewers, so only a draft is safe unasked.
     # Scan the whole segment, because the flag's position can change.
     case "${lead[1]:-}/${lead[2]:-}" in
