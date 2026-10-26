@@ -239,5 +239,7 @@ assert_rc 2 "a commit in a backtick spanning lines after an opener on the defaul
 # A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
 run_hook "$S" "$(jsonat "$r13" 'git>/dev/null commit -m x')"
 assert_rc 2 "a commit by git with a redirect fused to it on the default branch blocked"
+run_hook "$S" "$(jsonat "$r13" 'git commit>/dev/null -m x')"
+assert_rc 2 "a commit with a redirect fused to the subcommand on the default branch blocked (#147)"
 
 finish "guard-default-branch"

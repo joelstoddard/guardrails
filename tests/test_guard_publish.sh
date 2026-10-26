@@ -335,5 +335,7 @@ assert_rc 2 "a publish in a backtick spanning lines after an opener blocked"
 # A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
 run_hook "$S" "$(jsonin "bash<<<'cd /tmp; gh pr comment 1 -b x'")"
 assert_rc 2 "a publish in a here-string with no blank after the shell blocked"
+run_hook "$S" "$(jsonin 'gh pr comment>/dev/null 1 -b x')"
+assert_rc 2 "a publish verb with a redirect fused to its end blocked (#147)"
 
 finish "guard-publish"
