@@ -48,7 +48,7 @@ _guardrails_gh_api_writes() {
       -X*) _guardrails_is_write_verb "${w#-X}" && return 0 ;;
       --method=*) _guardrails_is_write_verb "${w#--method=}" && return 0 ;;
       -f | -F | --field | --raw-field | --input) return 0 ;;
-      -f* | --field=* | --raw-field=* | --input=*) return 0 ;;
+      -f* | -F* | --field=* | --raw-field=* | --input=*) return 0 ;;
     esac
   done
   return 1

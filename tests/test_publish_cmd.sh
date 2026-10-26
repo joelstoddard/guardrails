@@ -74,6 +74,16 @@ blocks 'gh api --method PATCH repos/o/r/issues/1'              "gh api --method 
 blocks 'gh api repos/o/r/issues/1/comments -f body=x'          "gh api -f implies POST"
 allows 'gh api repos/o/r/pulls/1'                              "gh api GET"
 allows 'gh api --method GET repos/o/r/issues'                  "gh api explicit GET"
+# Each flag in its attached form (#70).
+blocks 'gh api -XPOST repos/o/r/issues'                         "an attached -X method"
+blocks 'gh api --method=PATCH repos/o/r/issues/1'               "an attached --method"
+blocks 'gh api repos/o/r/issues -fbody=x'                       "an attached -f"
+blocks 'gh api repos/o/r/issues -Fbody=@x.md'                   "an attached -F"
+blocks 'gh api repos/o/r/issues --field=body=x'                 "--field="
+blocks 'gh api repos/o/r/issues --raw-field=body=x'             "--raw-field="
+blocks 'gh api repos/o/r/issues --input=body.json'              "--input="
+allows 'gh api -XGET repos/o/r/issues'                          "an attached GET"
+allows 'gh api --method=GET repos/o/r/issues'                   "an attached --method GET"
 # The shell takes out redirects and drops quotes before gh and httpie read their words (#146).
 blocks 'gh "api" -X POST repos/o/r/issues/1/comments -f body=x' "a quoted api"
 blocks 'gh >out api -X POST repos/o/r'                          "a redirect before api"
