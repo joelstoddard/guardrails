@@ -246,4 +246,9 @@ assert_rc 2 "a commit by git with a redirect fused to it on the default branch b
 run_hook "$S" "$(jsonat "$r13" 'git commit>/dev/null -m x')"
 assert_rc 2 "a commit with a redirect fused to the subcommand on the default branch blocked (#147)"
 
+# With no command, chroot starts a shell, which reads commands from stdin (#133).
+run_hook "$S" "$(jsonat "$r13" 'cat cmds.txt | chroot /srv/jail')"
+assert_out '"permissionDecision":"ask"' "a pipe into chroot asks on a default branch"
+assert_out 'reads commands from stdin' "the question says why for chroot"
+
 finish "guard-default-branch"

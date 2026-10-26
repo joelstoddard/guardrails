@@ -236,6 +236,11 @@ no  "git 'commit x' -m y"                  commit "a first piece of a quoted arg
 no  'git commit\ x -m y'                   commit "a word an escaped blank joins to the next is not the subcommand"
 yes "git co'mm'it -m x"                    commit "a word quoted in its middle is whole"
 
+# With no command, sudo -s or -i, doas -s and chroot start a shell, which reads a heredoc as its script (#133).
+yes $'sudo -s <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to sudo -s"
+yes $'chroot /srv/jail <<EOF\ngit commit -m x\nEOF'  commit "a heredoc fed to chroot"
+no  $'sudo tee f <<EOF\ngit commit -m x\nEOF'        commit "a heredoc fed to sudo tee is data"
+
 # A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
 yes "bash<<<'git commit -m x'"      commit "a here-string with no blank after the shell"
 yes 'git>/dev/null commit -m x'     commit "a redirect fused to git"

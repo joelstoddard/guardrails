@@ -351,4 +351,9 @@ assert_rc 2 "a publish in a here-string with no blank after the shell blocked"
 run_hook "$S" "$(jsonin 'gh pr comment>/dev/null 1 -b x')"
 assert_rc 2 "a publish verb with a redirect fused to its end blocked (#147)"
 
+# With no command, sudo -s or -i, doas -s and chroot start a shell, which reads commands from stdin (#133).
+pipe_asks 'cat x | sudo -s' "a pipe into sudo -s asks"
+run_hook "$S" "$(jsonin $'sudo -i <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc fed to sudo -i blocked"
+
 finish "guard-publish"

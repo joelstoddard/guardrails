@@ -100,6 +100,11 @@ is the next word (#91). A `-c` fused to text, as in `bash -c"…"`, needs no suc
 zsh, dash and ksh all take it as a cluster of options and refuse it, and `-c""` leaves the
 script in the next word, which is read as before.
 
+A wrapper with no command after it usually fails or prints something, but `chroot DIR`,
+`sudo -s` or `-i` and `doas -s` start a shell that reads commands from stdin, so a pipe
+into one asks, as a pipe into a shell does, and so does a here-string (#133). The lookup
+notes such a wrapper in `_GUARDRAILS_CMD_SHELL` when no command follows it.
+
 `command -v` and `-V` name a command without running it, so there `command` is the
 command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
 command elsewhere, as you. The lookup sees through them only to a shell, which is then
@@ -129,6 +134,10 @@ Two readers use the lookup with care:
   the first word counts, and only when the quote ends with it or an option follows it,
   as in `ssh host 'bash -s' <<EOF`. So prose such as `--title "bash fix"` does not make a
   heredoc after it a script.
+  With no command, `chroot DIR`, `sudo -s` or `-i` and `doas -s` start a shell, so
+  `chroot` counts as a shell's name, and so does an option with an `s` or `i` among its
+  first five characters after `sudo` or `doas` (#133). `sudo -u root tee f <<EOF` stays
+  data, and `sudo -i tee f <<EOF` costs a false positive.
 - **The directory walk follows only a plain `cd`.** A `cd` in a subshell, `(cd /x)`, does
   not last, and one after a keyword, `if false; then cd /x; fi`, may not run. Following
   either could judge a repo other than the one the commit lands in, which is weaker than

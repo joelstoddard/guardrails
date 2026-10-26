@@ -50,10 +50,17 @@ _guardrails_split_awk() {
       if (k > hb + 1) cs[k - 1] = e
     }
     # A shell word anywhere in a segment makes the body of a heredoc opened in it its script, so no wrapper hides one
-    # (#90), nor a redirect before the shell, as in <<EOF bash (#132). seal decides for the heredocs opened from pseg on
-    # once their segment ends, or a substitution opens in it, whose own heredocs it decides for when it closes.
-    function wordend() { if (index(" sh bash zsh dash ksh ", " " cw " ")) fsh = 1; cw = ""; qd = 0 }
-    function seal(f, k) { for (k = pseg; k <= en; k++) if (es[k] < 0) es[k] = f; pseg = en + 1 }
+    # (#90), nor a redirect before the shell, as in <<EOF bash (#132). So does chroot, or an option with s or i after
+    # sudo or doas, as either starts a shell with no command (#133); fsh is 2 after sudo or doas. seal decides for the
+    # heredocs opened from pseg on once their segment ends, or a substitution opens in it, whose own heredocs it decides
+    # for when it closes.
+    function wordend() {
+      if (index(" sh bash zsh dash ksh chroo ", " " cw " ")) fsh = 1
+      else if (cw == "sudo" || cw == "doas") { if (!fsh) fsh = 2 }
+      else if (fsh == 2 && (cw ~ /^-[^-]*[si]/ || cw == "--she" || cw == "--log")) fsh = 1
+      cw = ""; qd = 0
+    }
+    function seal(f, k) { f = (f == 1); for (k = pseg; k <= en; k++) if (es[k] < 0) es[k] = f; pseg = en + 1 }
     # Level l reads the body at lh[l], and act maps the delimiter of each script being read to the outermost level
     # reading it.
     function head(l, e) { e = lh[l]; if (es[e] && !(ed[e] in act)) act[ed[e]] = l }
@@ -379,7 +386,7 @@ _guardrails_whole_word() {
 }
 
 _guardrails_command_skip() {
-  local i=0 w b="" vals longs o start ops sub remote=-1 rb
+  local i=0 w b="" vals longs o start ops sub remote=-1 rb so ws=""
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
     # Most words hold none of < > ( ), so they skip these checks, which every word before the command pays for.
@@ -410,9 +417,11 @@ _guardrails_command_skip() {
     b="$w"; [[ $b == */* && $b =~ /([^/]*)$ ]] && b="${BASH_REMATCH[1]}"
     # A wrapper runs the command after its options and its operand, if it has one: a duration, root, host or
     # container. vals are its short options that take a value, and longs its long ones (#116).
-    ops=0; sub=0; longs=""
+    ops=0; sub=0; longs=""; so=""
     case "$b" in
-      sudo) vals=CDghpRrTtUu; longs='--user --group --chdir --close-from --host --prompt --role --type --command-timeout --other-user --chroot' ;;
+      sudo)
+        vals=CDghpRrTtUu; so='^-[^CDghpRrTtUu]*[si]'
+        longs='--user --group --chdir --close-from --host --prompt --role --type --command-timeout --other-user --chroot' ;;
       env) vals=CPSu; longs='--unset --chdir --split-string' ;;
       exec) vals=a ;;
       time) vals=fo; longs='--output --format' ;;
@@ -420,7 +429,7 @@ _guardrails_command_skip() {
       timeout) vals=ks; ops=1; longs='--signal --kill-after' ;;
       nice) vals=n; longs='--adjustment' ;;
       stdbuf) vals=ioe; longs='--input --output --error' ;;
-      doas) vals=Cu ;;
+      doas) vals=Cu; so='^-[^Cu]*s' ;;
       chroot) vals=ugG; ops=1; longs='--userspec --groups' ;;
       nohup | command | setsid) vals="" ;;
       # These run their command elsewhere, as you, so only a shell there is read, like a shell here.
@@ -435,16 +444,22 @@ _guardrails_command_skip() {
       *) [ "${toks[$((i + 1))]:-}" != '()' ] || { _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue; }; break ;;
     esac
     start="$i"; _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1 + sub))
+    # With no command, chroot starts a shell, as sudo -s or -i and doas -s do, which reads commands from stdin (#133).
+    ws=""; [ "$b" != chroot ] || ws="$b"
     while :; do
       for (( ; i < ${#toks[@]}; i++)); do
         o="${toks[$i]}"
         case "$o" in
           --) i=$((i + 1)); break ;;
           # A long option written with = holds its value.
-          --*) case " $longs " in *" $o "*) i=$((i + 1)) ;; esac ;;
+          --*)
+            case " $longs " in *" $o "*) i=$((i + 1)) ;; esac
+            case "$o" in --shell | --login) [ -z "$so" ] || ws="$b" ;; esac ;;
           -?*)
             # command -v and -V name a command without running it.
             [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 3; }
+            # A shell option counts before the first option in its cluster that takes a value, which takes the rest.
+            [[ -n $so && $o =~ $so ]] && ws="$b"
             # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
             [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1)) ;;
           *) break ;;
@@ -455,7 +470,7 @@ _guardrails_command_skip() {
       ops=0; i=$((i + 1)); [ "$b" = kubectl ] || break
     done
   done
-  [ "$i" -lt "${#toks[@]}" ] || b=""
+  _GUARDRAILS_CMD_SHELL=""; [ "$i" -lt "${#toks[@]}" ] || { b=""; _GUARDRAILS_CMD_SHELL="$ws"; }
   if [ "$remote" -ge 0 ]; then case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$remote"; b="$rb" ;; esac; fi
   _GUARDRAILS_CMD_AT="$i"; _GUARDRAILS_CMD="$b"
 }
@@ -494,10 +509,19 @@ _guardrails_shell_payload() {
 _guardrails_shell_reads_stdin() {
   local i shell
   local -a toks
-  case "$1" in *'<'*) return 1 ;; esac
+  # The splits read a here-string as a script only when a shell is the command, so it falls through.
+  case "$1" in *'<<<'*) ;; *'<'*) return 1 ;; esac
   read -r -a toks <<<"$1" || return 1
   _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; shell="$_GUARDRAILS_CMD"
-  case "$shell" in sh | bash | zsh | dash | ksh) ;; *) return 1 ;; esac
+  case "$shell" in
+    sh | bash | zsh | dash | ksh) ;;
+    '')
+      [ -n "$_GUARDRAILS_CMD_SHELL" ] || return 1
+      printf '%s with no command starts a shell that reads commands from stdin, which the command line does not show' \
+        "$_GUARDRAILS_CMD_SHELL"
+      return 0 ;;
+    *) return 1 ;;
+  esac
   for ((i = i + 1; i < ${#toks[@]}; i++)); do
     case "${toks[$i]}" in
       -o | +o | -O | +O | --rcfile | --init-file) i=$((i + 1)) ;;
@@ -510,14 +534,15 @@ _guardrails_shell_reads_stdin() {
   printf '%s reads commands from stdin, which the command line does not show' "$shell"
 }
 
-# _guardrails_names_shell <text> → rc 0 if a shell or eval appears in it as a word, as it must to run.
+# _guardrails_names_shell <text> → rc 0 if a shell, eval or a wrapper that can start a shell appears in it as a word, as
+# it must to run.
 _guardrails_names_shell() {
   local w t="$1"
   # The shell drops quotes, backslashes and a backslash-newline inside a word, so b"as"h is bash (#134). As bytes, as the
   # substitution is quadratic on long text in a UTF-8 locale.
   case "$t" in *[\"\'\\]*) local LC_ALL=C; t="${t//\\$'\n'/}"; t="${t//[\"\'\\]/}" ;; esac
-  case "$t" in *sh* | *eval*) ;; *) return 1 ;; esac
-  for w in sh bash zsh dash ksh eval; do
+  case "$t" in *sh* | *eval* | *sudo* | *doas* | *chroot*) ;; *) return 1 ;; esac
+  for w in sh bash zsh dash ksh eval sudo doas chroot; do
     case " $t " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
   done
   return 1
