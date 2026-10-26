@@ -127,6 +127,13 @@ allows 'gh pr create -h'                          "short help for pr create"
 allows 'glab mr create --help'                    "help for mr create on another forge"
 blocks 'gh pr create --title -h --fill'           "-h as another option's value"
 blocks 'gh pr create --fill --help'               "help after another option, which could have taken it"
+# gh stack leaves PRs drafts unless --open marks them ready for review, which notifies reviewers.
+blocks 'gh stack link --open https://github.com/o/r/pull/1 https://github.com/o/r/pull/2' "gh stack link --open"
+blocks 'gh stack submit --auto --open'             "gh stack submit --open"
+blocks "gh stack link '--open' a b"                "a quoted --open"
+allows 'gh stack link https://github.com/o/r/pull/1 https://github.com/o/r/pull/2' "gh stack link of drafts"
+allows 'gh stack submit --auto'                    "gh stack submit of drafts"
+asks   'gh "stack link" --open a b'                "gh stack link --open read from pieces of a quoted argument"
 
 # ---------------------------------------------------------------------------
 # Composition must not hide the call.

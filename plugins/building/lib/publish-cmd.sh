@@ -187,6 +187,14 @@ _guardrails_publishes_as_user() {
             [ -n "${piece[1]:-}${piece[2]:-}" ] || { printf '%s' "$reason"; return 0; }
             : "${_GUARDRAILS_PUBLISH_ASK:=$reason, read from ${piece[1]:-${piece[2]:-}}, one piece of a quoted argument}" ;;
         esac ;;
+      # gh stack links or opens PRs as drafts, unless --open marks them ready for review, written plain or quoted.
+      stack/link | stack/submit)
+        case " $seg " in
+          *[[:space:]]--open* | *[[:space:]][\"\'\\]--open*)
+            printf -v reason '%s stack %s --open marks PRs ready for review (drafts only; promoting is yours)' "$base" "${lead[2]}"
+            [ -n "${piece[1]:-}${piece[2]:-}" ] || { printf '%s' "$reason"; return 0; }
+            : "${_GUARDRAILS_PUBLISH_ASK:=$reason, read from ${piece[1]:-${piece[2]:-}}, one piece of a quoted argument}" ;;
+        esac ;;
     esac
 
     # A verb read from one piece of a quoted argument of several words may not be the command's, as the shell passes the

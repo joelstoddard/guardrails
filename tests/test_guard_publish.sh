@@ -378,4 +378,12 @@ assert_rc 0 "a publish five evals deep is not refused outright"
 assert_out '"permissionDecision":"ask"' "a publish five evals deep asks"
 assert_out 'more than four shells or evals deep' "the question names the depth"
 
+# gh stack leaves PRs drafts unless --open marks them ready for review.
+run_hook "$S" "$(jsonin 'gh stack link --open https://github.com/o/r/pull/1 https://github.com/o/r/pull/2')"
+assert_rc 2 "gh stack link --open blocked"
+assert_err 'ready for review' "the refusal says why"
+run_hook "$S" "$(jsonin 'gh stack link https://github.com/o/r/pull/1 https://github.com/o/r/pull/2')"
+assert_rc 0 "gh stack link of drafts allowed"
+assert_eq "$OUT" "" "gh stack link of drafts asks nothing"
+
 finish "guard-publish"
