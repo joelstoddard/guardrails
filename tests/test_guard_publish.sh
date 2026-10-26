@@ -107,6 +107,10 @@ unset ALLOW_PUBLISH_AS_ME
 run_hook "$S" "$(jsonc $'bash <<EOF\ngh pr comment 1 -b x\nEOF')"
 assert_rc 2 "a heredoc fed to bash blocked"
 
+# A shell with -c can still run its heredoc, so the body stays a script (#93).
+run_hook "$S" "$(jsonc $'bash -c \'source /dev/stdin\' <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a heredoc fed to a shell that also has -c blocked"
+
 # A pipe into a shell runs commands no guard can see, so it asks (#63).
 pipe_asks() {
   run_hook "$S" "$(jsonc "$1")"

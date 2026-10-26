@@ -248,6 +248,9 @@ blocks $'cd /tmp && /bin/zsh - <<EOF\nset -e\ngh pr comment 1 -b x\nEOF'  "a her
 blocks $'FOO=1 dash <<-EOF\n\tgh pr comment 1 -b x\n\tEOF'                "a heredoc fed to a shell after an assignment"
 blocks $'bash <<A\ncat <<B\nprose\nB\ngh pr comment 1 -b x\nA'            "a command after a heredoc nested in one"
 allows $'bash <<A\ncat <<B\ngh pr comment is only prose here\nB\nA'       "prose in a heredoc nested in a shell heredoc"
+# A shell with -c or a script file can still run its heredoc, as source /dev/stdin does, so the body stays a script (#93).
+blocks $'bash -c \'source /dev/stdin\' <<EOF\ngh pr comment 1 -b x\nEOF'   "a heredoc fed to a shell that also has -c"
+blocks $'bash script.sh <<EOF\ngh pr comment 1 -b x\nEOF'                  "a heredoc fed to a shell that also has a script file"
 # Each heredoc a line opens has its body read in turn, by its own rule (#108).
 blocks $'bash <<A; cat <<B\ngh pr comment 1 -b x\nA\nhi\nB'             "a shell's heredoc before another on its line"
 blocks $'cat <<A; bash <<B\nhi\nA\ngh pr comment 1 -b x\nB'             "a shell's heredoc after another on its line"

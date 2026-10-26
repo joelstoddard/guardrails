@@ -114,6 +114,8 @@ no  $'cat <<EOF\ngit commit -m x\nEOF'            commit "a heredoc fed to cat i
 yes $'bash <<A; cat <<B\ngit commit -m x\nA\nhi\nB' commit "a shell's heredoc before another on its line (#108)"
 yes $'<<EOF bash\ngit commit -m x\nEOF'           commit "a heredoc opened before the shell it feeds (#132)"
 yes $'cat <<EOF `true\ngit commit -m x\n`\nbody\nEOF' commit "a backtick spanning lines after an opener runs first"
+yes $'bash -c \'source /dev/stdin\' <<EOF\ngit commit -m x\nEOF' commit "a heredoc fed to a shell that also has -c (#93)"
+yes $'bash script.sh <<EOF\ngit commit -m x\nEOF'  commit "a heredoc fed to a shell that also has a script file (#93)"
 
 # A shell or eval payload is a script of its own (#65).
 yes "bash -c 'git commit -m x'"                   commit "inside bash -c"

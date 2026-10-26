@@ -39,6 +39,10 @@ A command that runs a script of its own is read as one too. `bash -c '…'` (or 
 cluster such as `-lc`), a here-string fed to a shell, and `eval '…'` are re-scanned to
 four levels deep, as `publish-cmd.sh` does; a heredoc fed to a shell is split as script
 lines by `shell-split.sh`, as are the `$( )` and backticks in an unquoted heredoc body.
+The body stays a script when the shell also has `-c` or a script file, because either can
+run it: `bash -c 'source /dev/stdin' <<EOF` does, and the guards cannot tell which
+payloads read their stdin. The cost is a false positive where the payload reads the body
+as data, as `bash -c 'cat' <<EOF` does (#93).
 When a line opens several heredocs, as in `bash <<A; cat <<B`, their bodies follow it in
 turn, and each is read by its own rule: a shell's as script lines up to its delimiter, an
 unquoted one's substitutions as commands, a quoted one's not at all (#108). A shell reads

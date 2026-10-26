@@ -99,6 +99,9 @@ unset ALLOW_DEFAULT_COMMIT
 r13="$(make_repo main)"
 run_hook "$S" "$(jq -cn --arg cwd "$r13" --arg c $'bash <<EOF\ngit commit -m x\nEOF' '{cwd:$cwd,tool_input:{command:$c}}')"
 assert_rc 2 "a commit in a heredoc fed to bash blocked"
+# A shell with -c can still run its heredoc, so the body stays a script (#93).
+run_hook "$S" "$(jq -cn --arg cwd "$r13" --arg c $'bash -c \'source /dev/stdin\' <<EOF\ngit commit -m x\nEOF' '{cwd:$cwd,tool_input:{command:$c}}')"
+assert_rc 2 "a commit in a heredoc fed to a shell that also has -c blocked"
 
 # A pipe into a shell could commit unseen: on a default branch it asks, elsewhere it passes (#63).
 r14b="$(make_repo main)"; git -C "$r14b" switch -q -c nbc-8-s
