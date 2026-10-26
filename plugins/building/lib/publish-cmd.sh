@@ -68,8 +68,9 @@ _guardrails_has_remote_target() {
   local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
   # The host follows the last @ before the first /, ? or #, as no client reaches a host before it (#149).
   local authority='^([^/?#]*@)?(\[[^]]*\]|[^/?#:@]*)'
-  local first='https?://[^[:space:]/?#]*@[^[:space:]]*|https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
-  local next='https?://[^[:space:]/?#]*@[^[:space:]]*|https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
+  # curl reads a URL's scheme in any case.
+  local first='[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
+  local next='[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
   local -a toks
   # Quotes and backslashes can hide the dot or the :// of a URL.
   case "$seg" in *.* | *://* | *[\"\'\\]*) ;; *) return 1 ;; esac
@@ -102,7 +103,7 @@ _guardrails_has_remote_target() {
     # Regexes and a guarded ${url#*://}, as ${host%%/*} and an unmatched ${url#*://} are quadratic. The host comes from
     # the URL's whole word, as a match can stop before an @ (#149), and ends at its first /, though a :// follows (#128).
     [[ $rest =~ $word ]]; host="$url${BASH_REMATCH[0]}"
-    case "$host" in http://* | https://*) host="${host#*://}" ;; esac
+    case "$host" in [Hh][Tt][Tt][Pp]://* | [Hh][Tt][Tt][Pp][Ss]://*) host="${host#*://}" ;; esac
     [[ $host =~ $authority ]]; host="${BASH_REMATCH[2]}"
     # A public name can start with 127., so only a dotted address is loopback (#128).
     case "$host" in

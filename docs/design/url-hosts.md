@@ -52,6 +52,9 @@ before the last `@`. The walk finds a URL with userinfo through its own pattern,
 patterns do. A host is read from the URL's whole word, as a match for a dotted name
 stops before an `@`: `a.local@evil.com` goes to `evil.com`.
 
+**Scheme.** curl reads `HTTP://` and `Https://` as `http://` and `https://`, so the
+URL patterns match a scheme in any case.
+
 The 32-URL bound and the walk that finds URLs as `grep -o` does (#126) are as they
 were. What the new reading costs is in the timing section of
 [git-command-parsing.md](git-command-parsing.md#reading-in-time).

