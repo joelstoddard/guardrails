@@ -279,4 +279,37 @@ assert_eq "$OUT" "" "a commit whose message comes from a heredoc asks nothing on
 run_hook "$S" "$(jsonat "$r13" "> 'a b c' git commit -m x")"
 assert_rc 2 "a commit after a quoted target with blanks on the default branch blocked"
 
+# A library that does not load checks nothing, so the guard asks rather than allows.
+# broken_hook <library> <how> → the path of a copy of the hook whose library is broken that way: a syntax error at its
+# end or in its middle, or the file missing.
+broken_hook() {
+  local d lib; d="$(scratch_dir)"; mkdir -p "$d/hooks/scripts" "$d/lib"
+  cp "$S" "$d/hooks/scripts/"; cp "$DIR/../plugins/building/lib/"*.sh "$d/lib/"
+  lib="$d/lib/$1"
+  case "$2" in
+    end) printf 'f() {\n' >>"$lib" ;;
+    middle) awk 'NR == 20 { print "if then fi" } { print }' "$lib" >"$lib.x" && mv "$lib.x" "$lib" ;;
+    missing) rm "$lib" ;;
+  esac
+  printf '%s' "$d/hooks/scripts/${S##*/}"
+}
+# The hook's own library breaks in its middle, shell-split.sh at its end or by going missing.
+for how in end middle missing; do
+  lib=shell-split.sh; [ "$how" != middle ] || lib=git-cmd.sh
+  run_hook "$(broken_hook "$lib" "$how")" "$(jsonat "$r2" 'git status')"
+  assert_rc 0 "a hook whose library is broken ($how) is not refused outright"
+  assert_out '"permissionDecision":"ask"' "a hook whose library is broken ($how) asks"
+  assert_out 'Could not load' "the question says the library did not load ($how)"
+done
+# The hook itself asks too, where a function in its environment shadows the . that sources its library and fails, or
+# loads nothing. The copies above break real files; this runs the hook the coverage floor measures.
+for dot in 'return 1' ':'; do
+  OUT="$(.() { $dot; }; export -f .; printf '%s' "$(jsonat "$r2" 'git status')" | bash "$S" 2>/dev/null)"
+  assert_out 'Could not load' "the hook asks when its . does $dot"
+done
+export ALLOW_DEFAULT_COMMIT=1
+run_hook "$(broken_hook shell-split.sh missing)" "$(jsonat "$r2" 'git status')"
+assert_eq "$OUT" "" "the override asks nothing about a library that did not load"
+unset ALLOW_DEFAULT_COMMIT
+
 finish "guard-default-branch"

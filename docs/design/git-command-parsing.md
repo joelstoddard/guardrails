@@ -215,6 +215,10 @@ A hook that runs past its 10 s timeout lets the command through, so `_guardrails
 asks about a command the guards could not read in time. It has three caps: 128 KiB of text,
 10,000 segments, and 16 shells and evals. The text is counted in bytes, as the split reads
 it: a UTF-8 locale counts characters, which let in up to four times as many bytes (#151).
+A guard whose library does not load, as with a syntax error or a missing file, checks
+nothing, so it asks too. `publish-cmd.sh` and `git-cmd.sh` return the status of their own
+source of `shell-split.sh`, and each guard checks that the functions it calls are defined,
+as a syntax error stops a source partway.
 
 A shell or eval splits its payload again, at up to four more depths, so both the segment and
 the length caps count what the guards read again, not only the command (#107). Four nested

@@ -12,7 +12,8 @@
 #                                                    rc 1 otherwise.
 
 _GUARDRAILS_PUBLISH_CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$_GUARDRAILS_PUBLISH_CMD_DIR/shell-split.sh"
+# A guard that sources this one learns so, and fails closed, if the splitter does not load.
+. "$_GUARDRAILS_PUBLISH_CMD_DIR/shell-split.sh" || return
 
 # Verbs that mean "make this visible to other people" wherever they appear as a
 # subcommand. Matched exactly, so `publish-docs` and `notes` do not trip them.

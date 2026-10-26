@@ -2,10 +2,19 @@
 # Block `git commit` while HEAD is the repo's default branch. Fail-open.
 command -v jq >/dev/null 2>&1 || exit 0
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SELF_DIR/../../lib/git-cmd.sh"
 input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
+
+# Fail closed: a library that does not load, or loads in part, checks nothing, so the command gets a question.
+if ! . "$SELF_DIR/../../lib/git-cmd.sh" ||
+  ! declare -F _guardrails_unreadable _guardrails_invokes_git _guardrails_unseen_shell_stdin _guardrails_git_effective_cwd \
+    >/dev/null; then
+  [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
+  jq -cn --arg r "Could not load the default-branch guard's library, so it cannot check this command does not commit on a default branch." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+fi
 
 # Fail closed: a command the guard cannot read in full might cd anywhere and commit, so ask.
 if why="$(_guardrails_unreadable "$cmd")"; then

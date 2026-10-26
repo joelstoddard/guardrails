@@ -12,7 +12,8 @@
 # script a shell or eval runs from its command line, as publish-cmd.sh does.
 
 _GUARDRAILS_GIT_CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$_GUARDRAILS_GIT_CMD_DIR/shell-split.sh"
+# A guard that sources this one learns so, and fails closed, if the splitter does not load.
+. "$_GUARDRAILS_GIT_CMD_DIR/shell-split.sh" || return
 
 # Git global options that consume a following, separate argument.
 _guardrails_git_opt_takes_value() {

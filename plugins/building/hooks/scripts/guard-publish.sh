@@ -5,10 +5,18 @@
 # matching the other hooks in this plugin.
 command -v jq >/dev/null 2>&1 || exit 0
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SELF_DIR/../../lib/publish-cmd.sh"
 input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
+
+# Fail closed: a library that does not load, or loads in part, checks nothing, so the command gets a question.
+if ! . "$SELF_DIR/../../lib/publish-cmd.sh" ||
+  ! declare -F _guardrails_unreadable _guardrails_publishes_as_user _guardrails_unseen_shell_stdin >/dev/null; then
+  [ "${ALLOW_PUBLISH_AS_ME:-}" = "1" ] && exit 0
+  jq -cn --arg r "Could not load the publish guard's library, so it cannot check this command does not publish as you. Allow it only if nothing here posts under your name." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+fi
 
 # Fail closed: a command the guard cannot read in full gets a question, not a pass.
 if why="$(_guardrails_unreadable "$cmd")"; then
