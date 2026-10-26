@@ -224,9 +224,12 @@ too: 32,000 redirects or escaped options between `git` and `commit` take guard-d
 3.0 to 3.7 s. A call to the shared redirect or unquote helper costs a few microseconds a word,
 so 32,000 redirects before a commit went from 2.8 to 3.4 s. The pipe check drops quotes as
 bytes (#134): in a UTF-8 locale the substitution took guard-publish 19 s on 126 KB of quoted
-multibyte words, and as bytes it takes 1.1 s. A host that ends in a quote costs two more
-regexes (#135), so one `eval` re-reading 205 lines of 32 quoted local URLs takes
-guard-publish 3.0 s.
+multibyte words, and as bytes it takes 1.1 s. The host check drops the quotes of each
+word that holds one, as bytes, and reads each host past its userinfo with two more
+regexes (#148, #149). At load 20 to 30, one `eval` re-reading 480 lines of 32 bare
+local hosts takes guard-publish 4.6 s (4.2 s before), 4,990 lines that each write to a
+quoted local host 4.0 s (3.0 s), and 32,000 words with a backslash in one write 3.8 s
+(1.6 s). See [url-hosts.md](url-hosts.md).
 
 A word with a redirect fused to it, as in `git>/dev/null` or `-p>x`, is split since #91, so the
 lookup and git's skip read on past it where they stopped at it before. Each such word costs a
