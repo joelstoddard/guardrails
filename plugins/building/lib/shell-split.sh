@@ -515,8 +515,8 @@ _guardrails_shell_payload() {
   _GUARDRAILS_PAYLOAD="$inner"
 }
 
-# _guardrails_shell_reads_stdin <segment> → rc 0 and a reason if the segment is a shell reading commands
-# from a stdin the command line does not show, such as a pipe; not a heredoc, here-string, file or script.
+# _guardrails_shell_reads_stdin <segment> → rc 0 and a reason if the segment is a shell or another interpreter reading
+# commands from a stdin the command line does not show, such as a pipe; not a heredoc, here-string, file or script.
 _guardrails_shell_reads_stdin() {
   local i shell w
   local -a toks
@@ -525,7 +525,21 @@ _guardrails_shell_reads_stdin() {
   read -r -a toks <<<"$1" || return 1
   _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; shell="$_GUARDRAILS_CMD"
   case "$shell" in
-    sh | bash | zsh | dash | ksh) ;;
+    sh | bash | zsh | dash | ksh)
+      for ((i = i + 1; i < ${#toks[@]}; i++)); do
+        w="${toks[$i]}"
+        # A redirect after the shell is not its script; i is left on its last word.
+        case "$w" in *[\<\>]*) _guardrails_skip_redirect && { i=$((i - 1)); continue; } ;; esac
+        case "$w" in
+          -o | +o | -O | +O | --rcfile | --init-file) i=$((i + 1)) ;;
+          --*) ;;
+          - | -*s*) break ;;
+          -* | +*) ;;
+          *) return 1 ;;
+        esac
+      done ;;
+    python | python[23] | python[23].[0-9]* | node | nodejs | perl | ruby | php | lua | deno | bun)
+      _guardrails_interp_reads_stdin || return 1 ;;
     '' | ssh)
       [ -n "$_GUARDRAILS_CMD_SHELL" ] || return 1
       printf '%s with no command starts a shell that reads commands from stdin, which the command line does not show' \
@@ -533,32 +547,65 @@ _guardrails_shell_reads_stdin() {
       return 0 ;;
     *) return 1 ;;
   esac
-  for ((i = i + 1; i < ${#toks[@]}; i++)); do
-    w="${toks[$i]}"
-    # A redirect after the shell is not its script; i is left on its last word.
-    case "$w" in *[\<\>]*) _guardrails_skip_redirect && { i=$((i - 1)); continue; } ;; esac
-    case "$w" in
-      -o | +o | -O | +O | --rcfile | --init-file) i=$((i + 1)) ;;
-      --*) ;;
-      - | -*s*) break ;;
-      -* | +*) ;;
-      *) return 1 ;;
-    esac
-  done
   printf '%s reads commands from stdin, which the command line does not show' "$shell"
 }
 
-# _guardrails_names_shell <text> → rc 0 if a shell, eval or a wrapper that can start a shell appears in it as a word, as
-# it must to run.
+# _guardrails_interp_reads_stdin → rc 0 if the interpreter at the caller's index i, named by its shell, reads its script
+# from stdin: there is no script file, no code or module on its command line, and no option that exits first (#92). In a
+# cluster of short options, stop ends the reading, and the first of rest takes the rest of the word as its value, or
+# the next word if it is in next and last. Reads the caller's toks.
+_guardrails_interp_reads_stdin() {
+  local w stop rest next lstop="--version --help" lnext=""
+  case "$shell" in
+    python*) stop=cmVh; rest=WX; next=WX; lnext=--check-hash-based-pycs ;;
+    node*)
+      stop=epcvh; rest=rC; next=rC; lstop="$lstop --eval --print --check --test --run --v8-options"
+      lnext='--require --import --loader --experimental-loader --conditions --env-file --title' ;;
+    perl) stop=eEvhV; rest=ilx0CdDMmIF; next=I ;;
+    ruby) stop=evh; rest=0CEFIKrTWx; next=CEIr ;;
+    php)
+      stop=rfBREFSlswimvh; rest=cdzt; next=cdzt; lnext='--php-ini --define --zend-extension --docroot'
+      lstop="$lstop --run --file --process-begin --process-code --process-file --process-end --server --lint --info --modules" ;;
+    lua) stop=ev; rest=l; next=l ;;
+    # deno and bun read one from stdin only when it is named -, as in deno run -.
+    *) for w in "${toks[@]:$((i + 1))}"; do [ "$w" != - ] || return 0; done; return 1 ;;
+  esac
+  for ((i = i + 1; i < ${#toks[@]}; i++)); do
+    w="${toks[$i]}"
+    case "$w" in *[\<\>]*) _guardrails_skip_redirect && { i=$((i - 1)); continue; } ;; esac
+    case "$w" in *[\"\'\\]*) _guardrails_unquote ;; esac
+    case "$w" in
+      -) return 0 ;;
+      # A script file follows --, if anything does.
+      --) [ "$((i + 1))" -ge "${#toks[@]}" ]; return ;;
+      --*=*) ;;
+      --*)
+        case " $lstop " in *" $w "*) return 1 ;; esac
+        case " $lnext " in *" $w "*) i=$((i + 1)) ;; esac ;;
+      -*)
+        [[ $w =~ ^-[^$rest]*[$stop] ]] && return 1
+        [[ $w =~ ^-[^$rest]*[$next]$ ]] && i=$((i + 1)) ;;
+      *) return 1 ;;
+    esac
+  done
+  return 0
+}
+
+# _guardrails_names_shell <text> → rc 0 if a shell, eval, another interpreter or a wrapper that can start a shell appears in
+# it as a word, as it must to run.
 _guardrails_names_shell() {
   local w t="$1"
   # The shell drops quotes, backslashes and a backslash-newline inside a word, so b"as"h is bash (#134). As bytes, as the
   # substitution is quadratic on long text in a UTF-8 locale.
   case "$t" in *[\"\'\\]*) local LC_ALL=C; t="${t//\\$'\n'/}"; t="${t//[\"\'\\]/}" ;; esac
-  case "$t" in *sh* | *eval* | *sudo* | *doas* | *chroot*) ;; *) return 1 ;; esac
-  for w in sh bash zsh dash ksh eval sudo doas chroot ssh; do
+  case "$t" in *sh* | *eval* | *sudo* | *doas* | *chroot* | *python* | *node* | *perl* | *ruby* | *php* | *lua* | *deno* | *bun*) ;;
+    *) return 1 ;;
+  esac
+  for w in sh bash zsh dash ksh eval sudo doas chroot ssh python python2 python3 node nodejs perl ruby php lua deno bun; do
     case " $t " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
   done
+  # A python by version, such as python3.12.
+  case " $t " in *[!A-Za-z0-9_.-]python[23].[0-9]*) return 0 ;; esac
   return 1
 }
 

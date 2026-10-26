@@ -255,4 +255,10 @@ assert_out 'reads commands from stdin' "the question says why for chroot"
 run_hook "$S" "$(jsonat "$r13" 'cat cmds.txt | ssh host')"
 assert_out '"permissionDecision":"ask"' "a pipe into ssh with no command asks on a default branch"
 
+# A pipe into another interpreter could commit unseen (#92).
+run_hook "$S" "$(jsonat "$r13" 'cat cmds.txt | node')"
+assert_out '"permissionDecision":"ask"' "a pipe into node asks on a default branch"
+run_hook "$S" "$(jsonat "$r13" "echo '{}' | python3 -m json.tool")"
+assert_eq "$OUT" "" "a pipe into a python module asks nothing on a default branch"
+
 finish "guard-default-branch"

@@ -364,4 +364,12 @@ run_hook "$S" "$(jsonin "ssh host 'npm publish'")"
 assert_rc 2 "a quoted publish ssh runs on another host blocked"
 pipe_asks 'cat x | ssh host' "a pipe into ssh with no command asks"
 
+# Another interpreter reads its script from stdin when given none, so a pipe into one asks (#92).
+pipe_asks 'cat x | python3' "a pipe into python3 asks"
+for c in "echo '{}' | python3 -m json.tool" 'python3 script.py' "node -e 'console.log(1)'" 'node --version'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 0 "$c allowed"
+  assert_eq "$OUT" "" "$c asks nothing"
+done
+
 finish "guard-publish"

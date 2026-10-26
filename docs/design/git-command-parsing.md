@@ -53,7 +53,16 @@ command that opened it ends, as the shell reads it: after a quote, backtick or s
 that the command carries across lines, whose commands run first.
 A `cd` inside `sh -c` ends with that child shell, while one inside `eval` lasts. A pipe
 into a shell runs commands no guard can see, so `guard-default-branch` asks when the
-directory it would run in is on its default branch.
+directory it would run in is on its default branch, as `guard-publish` asks.
+
+So does a pipe into another interpreter that reads its script from stdin: python, node,
+perl, ruby, php or lua given no script file, no code (`-c`, `-e`, `-r` and the like), no
+module (`-m`) and no option that exits first, such as `--version`, and deno or bun given
+`-` as their script (#92). `python3 script.py`, `node -e '…'` and `python3 -m json.tool`
+are not, and `jq` is not an interpreter here. Short options are read as getopt reads them,
+from a list for each interpreter, so the value in `python3 -W ignore` or `perl -I lib` is
+not taken for a script. An option that takes a value but is not in its list has the value
+read as a script file, so the pipe asks nothing, as before.
 
 ## Finding the command word
 
