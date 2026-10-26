@@ -97,6 +97,8 @@ unreadable() {  # <command> <label> [PATH prefix]
 unreadable "echo $(printf '%0263000d' 0)" "a command too long to read in time asks"
 broken="$(scratch_dir)"; printf '#!/bin/sh\nexit 2\n' > "$broken/awk"; chmod +x "$broken/awk"
 unreadable "gh pr view 12" "a split that aborts asks" "$broken"
+# The cap counts bytes, as a UTF-8 locale would count these as 33,005 characters (#151).
+LC_ALL=C.UTF-8 unreadable "echo $(printf '\360\237\230\200%.0s' {1..33000})" "four-byte characters past 128 KiB ask"
 
 export ALLOW_PUBLISH_AS_ME=1
 run_hook "$S" "$(jsonin "echo $(printf '%0263000d' 0)")"

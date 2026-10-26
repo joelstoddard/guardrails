@@ -178,7 +178,8 @@ the segment cap with the carried split. The per-line split itself stays as it wa
 
 A hook that runs past its 10 s timeout lets the command through, so `_guardrails_unreadable`
 asks about a command the guards could not read in time. It has three caps: 128 KiB of text,
-10,000 segments, and 16 shells and evals.
+10,000 segments, and 16 shells and evals. The text is counted in bytes, as the split reads
+it: a UTF-8 locale counts characters, which let in up to four times as many bytes (#151).
 
 A shell or eval splits its payload again, at up to four more depths, so both the segment and
 the length caps count what the guards read again, not only the command (#107). Four nested

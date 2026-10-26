@@ -351,6 +351,10 @@ too_much "bash -c '$(printf '$(a)%.0s' {1..6000})'"                  "substituti
 too_much $'cat <<\\EOF\neval "'"$(printf 'a;%.0s' {1..11000})"$'"\nEOF' "a payload only the per-line split reads"
 in_time  "eval \"$(printf 'a;%.0s' {1..4000})\""                     "an eval payload within the segment cap"
 in_time  "git commit -m \"$(printf 'a;%.0s' {1..6000})\" && bash ./x.sh" "text before a shell is not its payload"
+# The length cap counts bytes, which bound what the split reads, where a UTF-8 locale counts characters (#151).
+wide="echo $(printf '\360\237\230\200%.0s' {1..33000})"
+utf8 _guardrails_unreadable "$wide" >/dev/null || { echo "  FAIL [33,000 four-byte characters past 128 KiB]: readable"; FAILS=1; }
+assert_eq "$(utf8 _guardrails_unreadable "$wide")" '132005 bytes is too long to read in time' "the reason counts bytes"
 # Where quotes never close, every line is read again on its own, so those lines count too, and an awk that aborts on them
 # leaves the command unread (#61).
 too_much $'echo \'x\n'"$(printf 'a\n%.0s' {1..5000})"              "lines read on their own past the segment cap"

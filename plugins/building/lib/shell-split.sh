@@ -259,8 +259,10 @@ _GUARDRAILS_SPLIT_MAX_SHELLS=16
 # too much to read in time, or a split whose awk aborted, as BSD awk does on invalid bytes (#76).
 _guardrails_unreadable() {
   local rc carried per_line n s r
-  if [ "${#1}" -gt "$_GUARDRAILS_SPLIT_MAX" ]; then
-    printf '%s characters is too long to read in time' "${#1}"; return 0
+  # Bytes bound what the split reads, where a UTF-8 locale counts characters (#151).
+  n="$(LC_ALL=C; printf '%s' "${#1}")"
+  if [ "$n" -gt "$_GUARDRAILS_SPLIT_MAX" ]; then
+    printf '%s bytes is too long to read in time' "$n"; return 0
   fi
   carried="$(_guardrails_split_awk 1 "$1" 2>/dev/null)"; rc=$?
   [ "$rc" = 0 ] || [ "$rc" = 3 ] || { printf 'splitting it failed (awk exit %s)' "$rc"; return 0; }
