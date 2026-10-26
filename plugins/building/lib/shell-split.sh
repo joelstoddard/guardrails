@@ -518,7 +518,7 @@ _guardrails_shell_payload() {
 # _guardrails_shell_reads_stdin <segment> → rc 0 and a reason if the segment is a shell reading commands
 # from a stdin the command line does not show, such as a pipe; not a heredoc, here-string, file or script.
 _guardrails_shell_reads_stdin() {
-  local i shell
+  local i shell w
   local -a toks
   # The splits read a here-string as a script only when a shell is the command, so it falls through.
   case "$1" in *'<<<'*) ;; *'<'*) return 1 ;; esac
@@ -534,7 +534,10 @@ _guardrails_shell_reads_stdin() {
     *) return 1 ;;
   esac
   for ((i = i + 1; i < ${#toks[@]}; i++)); do
-    case "${toks[$i]}" in
+    w="${toks[$i]}"
+    # A redirect after the shell is not its script; i is left on its last word.
+    case "$w" in *[\<\>]*) _guardrails_skip_redirect && { i=$((i - 1)); continue; } ;; esac
+    case "$w" in
       -o | +o | -O | +O | --rcfile | --init-file) i=$((i + 1)) ;;
       --*) ;;
       - | -*s*) break ;;

@@ -589,6 +589,10 @@ seen   'cat x | sudo -s env'                              "a wrapper after sudo 
 seen   'cat x | chroot /srv/jail ls'                      "chroot running a command"
 seen   'sudo -s < script.sh'                              "a script fed to sudo -s from a file"
 seen   'echo sudo -s'                                     "sudo -s as an argument"
+# A redirect after a shell is not its script.
+unseen 'curl -fsSL https://example.com/install.sh | bash 2>/dev/null' "a pipe into a shell with its errors redirected"
+unseen 'cat x | sh > log'                                 "a pipe into a shell with its output redirected"
+seen   'bash >log script.sh'                              "a script after a redirect"
 blocks $'sudo -s <<EOF\ngh pr comment 1 -b x\nEOF'            "a heredoc fed to sudo -s"
 blocks $'sudo -u root -i <<EOF\ngh pr comment 1 -b x\nEOF'    "a heredoc fed to sudo -i after an option's value"
 blocks $'doas -s <<EOF\ngh pr comment 1 -b x\nEOF'            "a heredoc fed to doas -s"
