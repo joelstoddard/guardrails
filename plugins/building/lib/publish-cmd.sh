@@ -171,6 +171,8 @@ _guardrails_publishes_as_user() {
     # Scan the whole segment, because the flag's position can change.
     case "${lead[1]:-}/${lead[2]:-}" in
       pr/create | mr/create | merge-request/create)
+        # Help as the first option creates nothing (#78); a later -h could be another option's value, as in --title -h.
+        case "${toks[$i]:-}" in --help | -h) continue ;; esac
         # Spelled out in full only: -d is --draft in one forge CLI and --description
         # in another, so it is not proof of anything. Costs a prompt, never a leak.
         case " $seg " in

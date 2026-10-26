@@ -102,6 +102,12 @@ blocks 'gh pr create --fill'                      "ready PR via --fill blocked"
 blocks 'glab mr create --title x'                 "ready MR on another forge"
 # -d is --draft in gh but --description in glab, so it is not proof of a draft.
 blocks 'glab mr create -d "some description" --title x' "-d is not a draft flag"
+# Help as the first option creates nothing (#78). A later one may be another option's value, as in --title -h.
+allows 'gh pr create --help'                      "help for pr create"
+allows 'gh pr create -h'                          "short help for pr create"
+allows 'glab mr create --help'                    "help for mr create on another forge"
+blocks 'gh pr create --title -h --fill'           "-h as another option's value"
+blocks 'gh pr create --fill --help'               "help after another option, which could have taken it"
 
 # ---------------------------------------------------------------------------
 # Composition must not hide the call.

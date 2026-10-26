@@ -332,6 +332,11 @@ assert_rc 2 "a publish in a heredoc opened before the shell it feeds blocked"
 run_hook "$S" "$(jsonin $'cat <<EOF `true\ngh pr comment 1 -b x\n`\nbody\nEOF')"
 assert_rc 2 "a publish in a backtick spanning lines after an opener blocked"
 
+# Help as the first option creates nothing (#78).
+run_hook "$S" "$(jsonin "gh pr create --help | grep -E -- '--draft'")"
+assert_rc 0 "help for pr create allowed"
+assert_eq "$OUT" "" "help for pr create asks nothing"
+
 # A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
 run_hook "$S" "$(jsonin "bash<<<'cd /tmp; gh pr comment 1 -b x'")"
 assert_rc 2 "a publish in a here-string with no blank after the shell blocked"
