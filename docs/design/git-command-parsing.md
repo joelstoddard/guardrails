@@ -253,9 +253,10 @@ The publish guard checks `curl`, `wget`, `http` and `gh api` lines without start
 scan now costs a regex per URL. So past 32 URLs in one segment a write is read as remote,
 which bounds a segment, while the length cap bounds the URLs in a command.
 
-Within the caps, the slowest input measured takes guard-default-branch 5.9 s of the 10 s
-budget on macOS, on an M4 Max at load 6 to 30: 25,000 options with a redirect fused to each
-between `git` and `commit` (#91), as described below. Before #91, the slowest took 4.1 s,
+Within the caps, the slowest input measured takes guard-default-branch 6.3 s of the 10 s
+budget on macOS, on an M4 Max at load 13 to 17: 25,000 options with a redirect fused to each
+between `git` and `commit` (#91), as described below. It took 5.9 s at load 6 to 30 before a
+redirect's target was read for an open quote. Before #91, the slowest took 4.1 s,
 when re-measured for #131: 32,000 `env` wrappers before a `git commit`,
 read by guard-default-branch, and one `eval` re-reading 480 `curl -d` lines of 32 local hosts
 each, read by guard-publish (3.4 s on Linux, when last measured there). The words the lookup
@@ -304,6 +305,15 @@ result reads the same. guard-default-branch now reads that segment once for each
 times: 5.2 s before a pipe into python3. The lookup also reads a word whose redirect it
 splits off at the redirect's target, where it reads next, rather than moving the redirect
 there, which took a read of 14,000 such wrappers from 1.2 s to 1.0 s.
+
+The checks added with the kept lookup cost less than the slowest input. The stdin check now
+reads a segment that names `sudo`, `doas`, `chroot`, `ssh`, `/dev/stdin` or another
+interpreter (#92, #113, #133), so guard-publish reads 14,000 `sudo> x` wrappers before a
+commit a third time, in 5.8 s where it took 3.9 s, and in 5.5 to 5.6 s before a pipe into
+bash, python3 or `sudo -s`. A redirect's target holding a quote costs a regex: 16,000
+`> 'a b'` before a commit take guard-default-branch 4.4 s. 30,000 options after `ssh h` take
+guard-publish 2.1 s, one `ssh` over 128 KiB of words 3.0 s, and `gh api` with 30,000
+redirects among its flags 3.5 s (#146). These were measured at load 13 to 17.
 
 ## What was rejected
 

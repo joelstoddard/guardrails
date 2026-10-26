@@ -262,7 +262,7 @@ _guardrails_split_awk() {
 
 # A hook that times out lets the command through, so the guards do not read a command past these limits:
 # its length, the segments in its two splits, and the shells and evals it could make them re-read. Within
-# them, the slowest guard measured 5.9 s of its 10 s budget (macOS on an M4 Max, load 6 to 30), on 25,000 options with
+# them, the slowest guard measured 6.3 s of its 10 s budget (macOS on an M4 Max, load 13 to 17), on 25,000 options with
 # a redirect fused to each between git and commit (#91). See docs/design/git-command-parsing.md
 _GUARDRAILS_SPLIT_MAX=131072
 _GUARDRAILS_SPLIT_MAX_SEGMENTS=10000
