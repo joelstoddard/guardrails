@@ -33,7 +33,7 @@ _guardrails_split_awk() {
     # Levels at or below hb enclose an unquoted heredoc body being read, whose text is data, not theirs.
     function subopen(k, start) {
       if (k > hb + 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
-      cs[k] = start; ln[k] = 0; seal(sf[k])
+      cs[k] = start; ln[k] = 0; seal(sf[k] == 1 || ev[k - 1])
     }
     function subemit(k, e,   j, t) {
       t = substr($0, cs[k], e - cs[k])
@@ -45,7 +45,7 @@ _guardrails_split_awk() {
       xp[++nxp] = "\n"; ln[k] = 0
     }
     function subclose(k, e) {
-      wordend(); seal(fsh)
+      wordend(); seal(fsh == 1 || ev[k])
       subemit(k, e)
       if (k > hb + 1) cs[k - 1] = e
     }
@@ -53,11 +53,16 @@ _guardrails_split_awk() {
     # (#90), nor a redirect before the shell, as in <<EOF bash (#132). So do chroot and ssh, or an option with s or i
     # after sudo or doas, as each starts a shell with no command (#113, #133); fsh is 2 after sudo or doas. seal decides for the
     # heredocs opened from pseg on once their segment ends, or a substitution opens in it, whose own heredocs it decides
-    # for when it closes.
+    # for when it closes. So does source or . of /dev/stdin or -, which ps notes the first word of. fev notes eval, or a
+    # -c after a shell, which runs a substitution in its words as a script, so ev[k] marks level k as one, and a heredoc
+    # opened in it as its script; so does a shell or source before a <( ).
     function wordend() {
       if (index(" sh bash zsh dash ksh chroo ssh ", " " cw " ")) fsh = 1
       else if (cw == "sudo" || cw == "doas") { if (!fsh) fsh = 2 }
       else if (fsh == 2 && (cw ~ /^-[^-]*[si]/ || cw == "--she" || cw == "--log")) fsh = 1
+      if (cw == "eval" || (fsh == 1 && cw ~ /^-[^-]*c/)) fev = 1
+      if (ps && (cw == "stdin" || cw == "-")) fsh = 1
+      if (cw != "") ps = (cw == "sourc" || cw == ".")
       cw = ""; qd = 0
     }
     function seal(f, k) { f = (f == 1); for (k = pseg; k <= en; k++) if (es[k] < 0) es[k] = f; pseg = en + 1 }
@@ -86,7 +91,7 @@ _guardrails_split_awk() {
       # after them on its line, whose text the shell reads first, at depth pd or less.
       if (carry && !cont) {
         if (q == "") wordend()
-        seal(fsh)
+        seal(fsh == 1 || ev[d])
         if (en > pb && q == "" && d <= pd) { la[++lv] = pb + 1; lh[lv] = pb + 1; pb = en; lq[lv] = q; ld[lv] = d; head(lv) }
       }
       if (lv) {
@@ -109,7 +114,7 @@ _guardrails_split_awk() {
       if (!carry) q = ""
       if (!cont) wb = 1
       # cw is the end of the word being read, and fsh notes a shell word before it in the segment.
-      if (carry && q == "" && !cont) { cw = ""; fsh = 0; qd = 0 }
+      if (carry && q == "" && !cont) { cw = ""; fsh = 0; qd = 0; fev = 0; ps = 0 }
       # Indexing the line split into characters keeps the scan linear: substr rescans the line on each call.
       cont = 0; ar = 0; n = split($0, chars, "")
       for (i = 1; i <= n; i++) {
@@ -130,14 +135,14 @@ _guardrails_split_awk() {
         # a <<WORD is a real opener. Depth outlives the line because the closing )
         # of a `-m "$(cat <<EOF ...)"` body lands on a later one.
         if (q != sq && q != "ansi" && q != "bt" && c == "$" && chars[i + 1] == "(" && chars[i + 2] != "(") {
-          st[++d] = q; sw[d] = cw; sf[d] = fsh; q = ""; cw = ""; fsh = 0; qd = 0; out = out "$("
+          st[++d] = q; sw[d] = cw; sf[d] = fsh; sv[d] = fev; ev[d] = fev; q = ""; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; out = out "$("
           if (carry) { kind[d] = "$"; subopen(d, i + 2) }
           i++; wb = 1; continue
         }
         # A backtick substitution ends at the next unescaped backtick, whatever quotes it holds.
-        if (carry && c == "`" && q == "bt") { subclose(d, i); cw = sw[d]; fsh = sf[d]; qd = 1; q = st[d--]; out = out c; wb = 0; continue }
+        if (carry && c == "`" && q == "bt") { subclose(d, i); cw = sw[d]; fsh = sf[d]; fev = sv[d]; qd = 1; q = st[d--]; out = out c; wb = 0; continue }
         if (carry && c == "`" && (q == "" || q == dq || q == "hd")) {
-          st[++d] = q; sw[d] = cw; sf[d] = fsh; kind[d] = "`"; subopen(d, i + 1); q = "bt"; out = out c; continue
+          st[++d] = q; sw[d] = cw; sf[d] = fsh; sv[d] = fev; ev[d] = fev; kind[d] = "`"; subopen(d, i + 1); q = "bt"; out = out c; continue
         }
         # An ANSI-C string ends only at a single quote, so its marker is longer than any character.
         if (q != "") {
@@ -154,7 +159,8 @@ _guardrails_split_awk() {
         if (carry && c == "$" && chars[i + 1] == sq) { q = "ansi"; out = out c sq; i++; continue }
         if (c == sq || c == dq) { q = c; out = out c; continue }
         if (carry && (c == "<" || c == ">") && chars[i + 1] == "(") {
-          st[++d] = q; sw[d] = cw; sf[d] = fsh; cw = ""; fsh = 0; qd = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
+          wordend(); st[++d] = q; sw[d] = cw; sf[d] = fsh; sv[d] = fev; ev[d] = (fsh == 1 || ps)
+          cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; kind[d] = "$"; subopen(d, i + 2); out = out c "("; i++; wb = 1; continue
         }
 
         # A word that starts with # comments out the rest of the line. wb marks a word start: after a
@@ -165,7 +171,7 @@ _guardrails_split_awk() {
         # Miscounting only suppresses heredoc detection, which is the safe way to err.
         if (c == "(" && chars[i + 1] == "(") { ad[++ar] = (chars[i - 1] == "$"); out = out "(("; i++; wb = 0; continue }
         if (c == ")" && chars[i + 1] == ")" && ar > 0) { wb = !ad[ar--]; out = out "))"; i++; continue }
-        if (c == ")" && d > 0) { if (carry) subclose(d, i); cw = sw[d]; fsh = sf[d]; qd = 1; q = st[d--]; out = out c; wb = 0; continue }
+        if (c == ")" && d > 0) { if (carry) subclose(d, i); cw = sw[d]; fsh = sf[d]; fev = sv[d]; qd = 1; q = st[d--]; out = out c; wb = 0; continue }
 
         # <<WORD / <<-WORD / <<"WORD" opens a heredoc; <<< is a here-string.
         if (carry && c == "<" && (chars[i + 1] chars[i + 2]) == "<<") { out = out "<<<"; i += 2; wb = 1; continue }
@@ -211,8 +217,8 @@ _guardrails_split_awk() {
         if ((c == "&" && chars[i + 1] == "&") ||
             (c == "|" && chars[i + 1] == "|")) {
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
-          if (carry) { wordend(); seal(fsh) }
-          out = out "\n"; i++; wb = 1; cw = ""; fsh = 0; qd = 0; continue
+          if (carry) { wordend(); seal(fsh == 1 || ev[d]) }
+          out = out "\n"; i++; wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
         }
         # A lone & ends a command as ; does, but the & in >&, <&, &> and |& belongs to a redirect or pipe.
         if (carry && ((index("<>", c) && chars[i + 1] == "&") || (c == "&" && chars[i + 1] == ">"))) {
@@ -221,9 +227,9 @@ _guardrails_split_awk() {
         if (c == "|" || c == ";" || (carry && c == "&")) {
           j = (carry && c == "|" && chars[i + 1] == "&")
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 + j }
-          if (carry) { wordend(); seal(fsh) }
+          if (carry) { wordend(); seal(fsh == 1 || ev[d]) }
           i += j
-          out = out "\n"; wb = 1; cw = ""; fsh = 0; qd = 0; continue
+          out = out "\n"; wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
         }
         if (carry) wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         # cw keeps only what a shell name needs, five characters after the last slash, so a long word stays linear.
@@ -552,6 +558,7 @@ _guardrails_shell_reads_stdin() {
       done ;;
     python | python[23] | python[23].[0-9]* | node | nodejs | perl | ruby | php | lua | deno | bun)
       _guardrails_interp_reads_stdin || return 1 ;;
+    source | .) case "${toks[$((i + 1))]:-}" in /dev/stdin | -) ;; *) return 1 ;; esac ;;
     '' | ssh)
       [ -n "$_GUARDRAILS_CMD_SHELL" ] || return 1
       printf '%s with no command starts a shell that reads commands from stdin, which the command line does not show' \
@@ -604,13 +611,15 @@ _guardrails_interp_reads_stdin() {
 }
 
 # _guardrails_names_shell <text> → rc 0 if a shell, eval, another interpreter or a wrapper that can start a shell appears in
-# it as a word, as it must to run.
+# it as a word, as it must to run, or /dev/stdin, which source can run.
 _guardrails_names_shell() {
   local w t="$1"
   # The shell drops quotes, backslashes and a backslash-newline inside a word, so b"as"h is bash (#134). As bytes, as the
   # substitution is quadratic on long text in a UTF-8 locale.
   case "$t" in *[\"\'\\]*) local LC_ALL=C; t="${t//\\$'\n'/}"; t="${t//[\"\'\\]/}" ;; esac
-  case "$t" in *sh* | *eval* | *sudo* | *doas* | *chroot* | *python* | *node* | *perl* | *ruby* | *php* | *lua* | *deno* | *bun*) ;;
+  case "$t" in
+    */dev/stdin*) return 0 ;;
+    *sh* | *eval* | *sudo* | *doas* | *chroot* | *python* | *node* | *perl* | *ruby* | *php* | *lua* | *deno* | *bun*) ;;
     *) return 1 ;;
   esac
   for w in sh bash zsh dash ksh eval sudo doas chroot ssh python python2 python3 node nodejs perl ruby php lua deno bun; do

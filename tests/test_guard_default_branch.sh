@@ -268,4 +268,11 @@ assert_out 'more than four shells or evals deep' "the question names the depth"
 run_hook "$S" "$(jsonat "$r2" 'eval eval eval eval eval git commit -m x')"
 assert_eq "$OUT" "" "a commit five evals deep asks nothing off the default branch"
 
+# A heredoc body runs indirectly through eval's substitution, but a commit message from one is data.
+run_hook "$S" "$(jsonat "$r13" $'eval "$(cat <<EOF\ngit commit -m x\nEOF\n)"')"
+assert_rc 2 "a commit in a heredoc that eval runs on the default branch blocked"
+run_hook "$S" "$(jsonat "$r2" $'git commit -m "$(cat <<EOF\ngit commit is prose\nEOF\n)"')"
+assert_rc 0 "a commit whose message comes from a heredoc allowed on a feature branch"
+assert_eq "$OUT" "" "a commit whose message comes from a heredoc asks nothing on a feature branch"
+
 finish "guard-default-branch"

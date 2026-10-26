@@ -151,7 +151,14 @@ Two readers use the lookup with care:
   With no command, `chroot DIR`, `sudo -s` or `-i`, `doas -s` and `ssh host` start a
   shell, so `chroot` and `ssh` count as a shell's name, and so does an option with an `s`
   or `i` among its first five characters after `sudo` or `doas` (#113, #133). So
-  `ssh host 'cat > f' <<EOF` costs a false positive, as `grep -w bash <<EOF` does. `sudo -u root tee f <<EOF` stays
+  `ssh host 'cat > f' <<EOF` costs a false positive, as `grep -w bash <<EOF` does.
+  A body is run indirectly, too, and read as a script: where `source` or `.` reads
+  `/dev/stdin` or `-`, where a substitution that holds the heredoc is `eval`'s argument or
+  follows a shell's `-c`, as in `eval "$(cat <<EOF …)"`, and where a shell or `source`
+  reads it through a `<( )`. A substitution anywhere else keeps its heredoc data, so
+  `gh pr create --draft --body "$(cat <<'EOF' …)"` and `git commit -m "$(cat <<EOF …)"`
+  read the body as the text it is. A pipe into `source /dev/stdin` asks, as a pipe into a
+  shell does. `sudo -u root tee f <<EOF` stays
   data, and `sudo -i tee f <<EOF` costs a false positive.
 - **The directory walk follows only a plain `cd`.** A `cd` in a subshell, `(cd /x)`, does
   not last, and one after a keyword, `if false; then cd /x; fi`, may not run. Following

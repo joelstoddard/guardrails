@@ -255,6 +255,11 @@ yes 'sudo> x git commit -m x'       commit "an operator fused to a wrapper, its 
 yes "bash -c\"\" 'git commit -m x'" commit "an empty argument fused to -c leaves the payload after it"
 no  'git log>commit'                commit "a redirect's target is not the subcommand"
 
+# A heredoc body runs indirectly through source of /dev/stdin, or eval's or a shell's -c substitution.
+yes $'. /dev/stdin <<EOF\ngit commit -m x\nEOF'               commit "a heredoc dotted from /dev/stdin"
+yes $'eval "$(cat <<EOF\ngit commit -m x\nEOF\n)"'             commit "a heredoc that eval runs through a substitution"
+no  $'git tag -m "$(cat <<EOF\ngit commit -m x\nEOF\n)" v1'     commit "a tag message from a heredoc stays data"
+
 # A long segment's lookup is kept for the guards' later passes, per split, as the loop would find it again.
 lookups() { local -a toks; read -r -a toks <<<"$1"; _guardrails_command_at; got="$got $_GUARDRAILS_CMD_AT/$_GUARDRAILS_CMD"; }
 long="$(printf 'a=1 %.0s' {1..64})<<< w git commit"

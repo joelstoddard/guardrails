@@ -685,6 +685,25 @@ seen   'eval eval eval eval true'                                 "a script four
 assert_eq "$(_guardrails_unseen_shell_stdin 'eval eval eval eval eval true')" \
   'it nests a script more than four shells or evals deep, past what the guards read' "the reason names the depth"
 
+# A heredoc body runs indirectly when source or . reads it from /dev/stdin or -, when it is eval's or a shell's -c
+# payload through a substitution, and when a shell or source reads it through a process substitution.
+blocks $'source /dev/stdin <<EOF\ngh pr comment 1 -b x\nEOF'                    "a heredoc sourced from /dev/stdin"
+blocks $'. /dev/stdin <<EOF\ngh pr comment 1 -b x\nEOF'                         "a heredoc dotted from /dev/stdin"
+blocks $'source - <<EOF\ngh pr comment 1 -b x\nEOF'                             "a heredoc sourced from -"
+blocks $'eval "$(cat <<EOF\ngh pr comment 1 -b x\nEOF\n)"'                       "a heredoc that eval runs through a substitution"
+blocks $'bash -c "$(cat <<\'EOF\'\ngh pr comment 1 -b x\nEOF\n)"'                "a heredoc that bash -c runs through a substitution"
+blocks $'eval "`cat <<EOF\ngh pr comment 1 -b x\nEOF\n`"'                        "a heredoc that eval runs through backticks"
+blocks $'source <(cat <<EOF\ngh pr comment 1 -b x\nEOF\n)'                       "a heredoc sourced through a process substitution"
+blocks $'bash <(cat <<EOF\ngh pr comment 1 -b x\nEOF\n)'                         "a heredoc bash runs through a process substitution"
+allows $'gh pr create --draft --body "$(cat <<\'EOF\'\ngh pr comment is prose\nEOF\n)"' "a PR body from a heredoc stays data"
+allows $'git commit -m "$(cat <<EOF\nlinear comment ENG-1 is prose\nEOF\n)"'      "a commit message from a heredoc stays data"
+allows $'source x.sh <<EOF\ngh pr comment is prose\nEOF'                        "a heredoc beside a sourced file is data"
+allows $'diff <(cat <<A\ngh pr comment is prose\nA\n) b.txt'                      "a heredoc in a process substitution diff reads is data"
+unseen 'cat x | source /dev/stdin'                                              "a pipe into source /dev/stdin"
+unseen 'cat x | . /dev/stdin'                                                   "a pipe into . /dev/stdin"
+seen   'source ./env.sh'                                                        "a sourced file"
+per_line $'eval "$(cat <<EOF\ngh pr comment 1 -b x\nEOF\n)"' $'eval "$(cat <<\n)"'  "a heredoc that eval runs through a substitution"
+
 # A quote that closes a URL is not part of its host, for every host form (#135).
 allows 'curl -d x "http://localhost"'              "a quoted localhost URL with no path"
 allows "curl -d x 'http://localhost'"              "a single-quoted localhost URL with no path"

@@ -386,4 +386,13 @@ run_hook "$S" "$(jsonin 'gh stack link https://github.com/o/r/pull/1 https://git
 assert_rc 0 "gh stack link of drafts allowed"
 assert_eq "$OUT" "" "gh stack link of drafts asks nothing"
 
+# A heredoc body runs indirectly through source of /dev/stdin, or eval's or a shell's -c substitution.
+run_hook "$S" "$(jsonin $'source /dev/stdin <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc sourced from /dev/stdin blocked"
+run_hook "$S" "$(jsonin $'bash -c "$(cat <<\'EOF\'\ngh pr comment 1 -b x\nEOF\n)"')"
+assert_rc 2 "a publish in a heredoc that bash -c runs through a substitution blocked"
+run_hook "$S" "$(jsonin $'gh pr create --draft --body "$(cat <<\'EOF\'\ngh pr comment is prose\nEOF\n)"')"
+assert_rc 0 "a draft PR whose body comes from a heredoc allowed"
+assert_eq "$OUT" "" "a draft PR whose body comes from a heredoc asks nothing"
+
 finish "guard-publish"
