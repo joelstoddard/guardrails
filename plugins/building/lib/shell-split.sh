@@ -50,12 +50,12 @@ _guardrails_split_awk() {
       if (k > hb + 1) cs[k - 1] = e
     }
     # A shell word anywhere in a segment makes the body of a heredoc opened in it its script, so no wrapper hides one
-    # (#90), nor a redirect before the shell, as in <<EOF bash (#132). So does chroot, or an option with s or i after
-    # sudo or doas, as either starts a shell with no command (#133); fsh is 2 after sudo or doas. seal decides for the
+    # (#90), nor a redirect before the shell, as in <<EOF bash (#132). So do chroot and ssh, or an option with s or i
+    # after sudo or doas, as each starts a shell with no command (#113, #133); fsh is 2 after sudo or doas. seal decides for the
     # heredocs opened from pseg on once their segment ends, or a substitution opens in it, whose own heredocs it decides
     # for when it closes.
     function wordend() {
-      if (index(" sh bash zsh dash ksh chroo ", " " cw " ")) fsh = 1
+      if (index(" sh bash zsh dash ksh chroo ssh ", " " cw " ")) fsh = 1
       else if (cw == "sudo" || cw == "doas") { if (!fsh) fsh = 2 }
       else if (fsh == 2 && (cw ~ /^-[^-]*[si]/ || cw == "--she" || cw == "--log")) fsh = 1
       cw = ""; qd = 0
@@ -283,8 +283,8 @@ _guardrails_unreadable() {
   read -r n s r < <(LC_ALL=C awk '
     FNR == 1 { f++ }
     {
-      # A shell reads what follows its -c or <<< as a script, and eval what follows it, so each place after one where
-      # a split could cut is a segment, and each character after one is read again (#107).
+      # A shell reads what follows its -c or <<< as a script, and eval and ssh what follow them, so each place after one
+      # where a split could cut is a segment, and each character after one is read again (#107, #113).
       L = length($0); np = split($0, part, /[;|&`]|[$<>][(]/)
       for (last = np; last > 0 && part[last] !~ /(^|[ \t])-([^ \t-][^ \t]*)?c|<<</; last--) ;
       n++; k = 0; pre = 0
@@ -292,8 +292,9 @@ _guardrails_unreadable() {
         t = part[i]; gsub(/["\047\\]/, "", t); nw = split(t, w, /[^A-Za-z0-9_.-]+/); at = pre
         for (j = 1; j <= nw; j++) {
           at += length(w[j]); sh = (w[j] == "sh" || w[j] == "bash" || w[j] == "zsh" || w[j] == "dash" || w[j] == "ksh")
-          if (f == 1 && (sh || w[j] == "eval")) s++
-          if (w[j] == "eval" || (sh && i <= last)) { k++; r[f] += L - at }
+          ev = (w[j] == "eval" || w[j] == "ssh")
+          if (f == 1 && (sh || ev)) s++
+          if (ev || (sh && i <= last)) { k++; r[f] += L - at }
         }
         n += k; pre += length(part[i]) + 1
       }
@@ -386,7 +387,7 @@ _guardrails_whole_word() {
 }
 
 _guardrails_command_skip() {
-  local i=0 w b="" vals longs o start ops sub remote=-1 rb so ws=""
+  local i=0 w b="" vals longs o start ops sub remote=-1 rb ra so no ws=""
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
     # Most words hold none of < > ( ), so they skip these checks, which every word before the command pays for.
@@ -417,7 +418,7 @@ _guardrails_command_skip() {
     b="$w"; [[ $b == */* && $b =~ /([^/]*)$ ]] && b="${BASH_REMATCH[1]}"
     # A wrapper runs the command after its options and its operand, if it has one: a duration, root, host or
     # container. vals are its short options that take a value, and longs its long ones (#116).
-    ops=0; sub=0; longs=""; so=""
+    ops=0; sub=0; longs=""; so=""; no=""
     case "$b" in
       sudo)
         vals=CDghpRrTtUu; so='^-[^CDghpRrTtUu]*[si]'
@@ -432,8 +433,10 @@ _guardrails_command_skip() {
       doas) vals=Cu; so='^-[^Cu]*s' ;;
       chroot) vals=ugG; ops=1; longs='--userspec --groups' ;;
       nohup | command | setsid) vals="" ;;
-      # These run their command elsewhere, as you, so only a shell there is read, like a shell here.
-      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; ops=1; remote="$i"; rb="$b" ;;
+      # These run their command elsewhere, as you, so only a shell there is the command word, read like a shell here.
+      # ssh takes options after its host as well, and its command is read as a payload (#113).
+      # With -N, -W, -O, -G, -Q or -V it starts no shell.
+      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; no='^-[^BbcDEeFIiJLlmOoPpQRSWw]*[NWOGQV]'; ops=1; remote="$i"; rb="$b" ;;
       docker)
         [ "${toks[$((i + 1))]:-}" = exec ] || break
         vals=euw; ops=1; sub=1; remote="$i"; rb="$b"; longs='--env --env-file --user --workdir --detach-keys' ;;
@@ -444,8 +447,9 @@ _guardrails_command_skip() {
       *) [ "${toks[$((i + 1))]:-}" != '()' ] || { _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue; }; break ;;
     esac
     start="$i"; _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1 + sub))
-    # With no command, chroot starts a shell, as sudo -s or -i and doas -s do, which reads commands from stdin (#133).
-    ws=""; [ "$b" != chroot ] || ws="$b"
+    # With no command, chroot and ssh start a shell, as sudo -s or -i and doas -s do, which reads commands from stdin
+    # (#113, #133).
+    ws=""; case "$b" in chroot | ssh) ws="$b" ;; esac
     while :; do
       for (( ; i < ${#toks[@]}; i++)); do
         o="${toks[$i]}"
@@ -460,32 +464,39 @@ _guardrails_command_skip() {
             [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 3; }
             # A shell option counts before the first option in its cluster that takes a value, which takes the rest.
             [[ -n $so && $o =~ $so ]] && ws="$b"
+            [[ -n $no && $o =~ $no ]] && ws=""
             # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
             [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1)) ;;
           *) break ;;
         esac
       done
       [ "$ops" -gt 0 ] || break
-      # kubectl takes options after its pod as well.
-      ops=0; i=$((i + 1)); [ "$b" = kubectl ] || break
+      # kubectl and ssh take options after their pod or host as well.
+      ops=0; i=$((i + 1)); case "$b" in kubectl | ssh) ;; *) break ;; esac
     done
+    [ "$start" != "$remote" ] || ra="$i"
   done
   _GUARDRAILS_CMD_SHELL=""; [ "$i" -lt "${#toks[@]}" ] || { b=""; _GUARDRAILS_CMD_SHELL="$ws"; }
-  if [ "$remote" -ge 0 ]; then case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$remote"; b="$rb" ;; esac; fi
+  # _GUARDRAILS_CMD_ARGS is where the command that ssh runs starts.
+  if [ "$remote" -ge 0 ]; then
+    case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$remote"; b="$rb"; _GUARDRAILS_CMD_ARGS="$ra" ;; esac
+  fi
   _GUARDRAILS_CMD_AT="$i"; _GUARDRAILS_CMD="$b"
 }
 
 # _guardrails_shell_payload <segment> → rc 0 with _GUARDRAILS_PAYLOAD set to the script a shell runs from
-# its command line (a -c argument, alone or in a cluster such as -lc, or a here-string) or eval runs,
-# else rc 1. It sets a variable rather than printing, since a subshell for every segment is slow.
+# its command line (a -c argument, alone or in a cluster such as -lc, or a here-string), eval runs, or ssh runs on its
+# host (#113), else rc 1. It sets a variable rather than printing, since a subshell for every segment is slow.
 _guardrails_shell_payload() {
   local seg="$1" i k inner="" here='<<<[[:space:]]*(.*)$'
   local -a toks
-  case "$seg" in *eval* | *'<<<'* | *-*c* | *[\"\'\\]*) ;; *) return 1 ;; esac
+  case "$seg" in *eval* | *'<<<'* | *-*c* | *[\"\'\\]* | *ssh*) ;; *) return 1 ;; esac
   read -r -a toks <<<"$seg" || return 1
   _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"
   case "$_GUARDRAILS_CMD" in
     eval) inner="${toks[*]:$((i + 1))}" ;;
+    # With no command, ssh has none, though a redirect may follow its host.
+    ssh) [ -z "$_GUARDRAILS_CMD_SHELL" ] || return 1; inner="${toks[*]:$_GUARDRAILS_CMD_ARGS}" ;;
     sh | bash | zsh | dash | ksh)
       for ((k = i + 1; k < ${#toks[@]}; k++)); do
         case "${toks[$k]}" in
@@ -515,7 +526,7 @@ _guardrails_shell_reads_stdin() {
   _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; shell="$_GUARDRAILS_CMD"
   case "$shell" in
     sh | bash | zsh | dash | ksh) ;;
-    '')
+    '' | ssh)
       [ -n "$_GUARDRAILS_CMD_SHELL" ] || return 1
       printf '%s with no command starts a shell that reads commands from stdin, which the command line does not show' \
         "$_GUARDRAILS_CMD_SHELL"
@@ -542,7 +553,7 @@ _guardrails_names_shell() {
   # substitution is quadratic on long text in a UTF-8 locale.
   case "$t" in *[\"\'\\]*) local LC_ALL=C; t="${t//\\$'\n'/}"; t="${t//[\"\'\\]/}" ;; esac
   case "$t" in *sh* | *eval* | *sudo* | *doas* | *chroot*) ;; *) return 1 ;; esac
-  for w in sh bash zsh dash ksh eval sudo doas chroot; do
+  for w in sh bash zsh dash ksh eval sudo doas chroot ssh; do
     case " $t " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
   done
   return 1

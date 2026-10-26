@@ -101,15 +101,19 @@ zsh, dash and ksh all take it as a cluster of options and refuse it, and `-c""` 
 script in the next word, which is read as before.
 
 A wrapper with no command after it usually fails or prints something, but `chroot DIR`,
-`sudo -s` or `-i` and `doas -s` start a shell that reads commands from stdin, so a pipe
-into one asks, as a pipe into a shell does, and so does a here-string (#133). The lookup
-notes such a wrapper in `_GUARDRAILS_CMD_SHELL` when no command follows it.
+`sudo -s` or `-i`, `doas -s` and `ssh host` start a shell that reads commands from stdin, so
+a pipe into one asks, as a pipe into a shell does, and so does a here-string (#113, #133).
+The lookup notes such a wrapper in `_GUARDRAILS_CMD_SHELL` when no command follows it. `ssh`
+with `-N`, `-W`, `-O`, `-G`, `-Q` or `-V` starts none.
 
 `command -v` and `-V` name a command without running it, so there `command` is the
 command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
 command elsewhere, as you. The lookup sees through them only to a shell, which is then
 read like a shell here. `ssh host gh …` and `docker exec c ls` keep `ssh` and `docker` as
-their command word, as before.
+their command word, as before. ssh joins the words after its host into a command line that
+the shell there reads, so that is a payload, read like `eval`'s, with `_GUARDRAILS_CMD_ARGS`
+marking where it starts, and the publish guard still reads the words after `ssh` too, as
+before (#113). ssh reads options after its host as well, as kubectl does after its pod.
 
 The lookup is on the guards' slowest path: a command at the caps can make them read some
 65,000 segments. Two measured costs shape it:
@@ -134,9 +138,10 @@ Two readers use the lookup with care:
   the first word counts, and only when the quote ends with it or an option follows it,
   as in `ssh host 'bash -s' <<EOF`. So prose such as `--title "bash fix"` does not make a
   heredoc after it a script.
-  With no command, `chroot DIR`, `sudo -s` or `-i` and `doas -s` start a shell, so
-  `chroot` counts as a shell's name, and so does an option with an `s` or `i` among its
-  first five characters after `sudo` or `doas` (#133). `sudo -u root tee f <<EOF` stays
+  With no command, `chroot DIR`, `sudo -s` or `-i`, `doas -s` and `ssh host` start a
+  shell, so `chroot` and `ssh` count as a shell's name, and so does an option with an `s`
+  or `i` among its first five characters after `sudo` or `doas` (#113, #133). So
+  `ssh host 'cat > f' <<EOF` costs a false positive, as `grep -w bash <<EOF` does. `sudo -u root tee f <<EOF` stays
   data, and `sudo -i tee f <<EOF` costs a false positive.
 - **The directory walk follows only a plain `cd`.** A `cd` in a subshell, `(cd /x)`, does
   not last, and one after a keyword, `if false; then cd /x; fi`, may not run. Following
@@ -205,13 +210,14 @@ counts are bounds, made in one awk pass over both splits:
   two splits' totals counts against the 128 KiB cap, as each pass reads one split.
 
 A word can take a payload if `_guardrails_shell_payload` could read one from it: `eval`
-always, and `sh`, `bash`, `zsh`, `dash` or `ksh` when a `-c`, alone or in a cluster such
+and `ssh` always, and `sh`, `bash`, `zsh`, `dash` or `ksh` when a `-c`, alone or in a cluster such
 as `-lc`, or a `<<<` follows it in its line. That payload is always text after the word in
 the same segment, so these are bounds. A nested payload is counted again through its own
 word. Neither depends on which word is the command, so a wrapper before the shell cannot
 hide one.
 
-They over-count a shell's name in prose that a `-c` or `<<<` follows, and `eval` in any prose.
+They over-count a shell's name in prose that a `-c` or `<<<` follows, and `eval` and `ssh` in
+any prose, so a command running ssh 17 times asks (#113).
 In the suites, a 300-line commit message naming shells 12 times counts 306 segments and no
 text read again. A 5,000-line script fed to bash counts 5,004 segments and 23 characters, a
 `bash -c` over a 100 KiB script reads 102,000 characters again, and every other command
@@ -285,14 +291,16 @@ first and last words, such as `"post` and `it"` in `say "post it"`, are pieces t
 on blanks cut, whose quotes do not close within them (`_guardrails_whole_word`). The shell
 passes the argument whole, so a verb read from a piece may not be the command's: the publish
 guard asks rather than blocks, and names the piece (#131). So `claude "review this"` costs a
-question, and `ssh host 'npm publish'`, which publishes from another host, gets one too. The
+question. `ssh host 'npm publish'` publishes from another host, and is refused, as ssh's
+command is read as a command line (#113). The
 per-line split cuts every quoted line into pieces, so a piece read there asks nothing, as
 before. Git's skip leaves a piece as written, as before, so `git "commit -m x"` is not a
 commit.
 
 A shell that runs on another host, as in `ssh host bash <<EOF`, has its script read like
-a local one. So `guard-default-branch` judges a `git commit` in it against the local
-checkout, and refuses it when that checkout is on its default branch.
+a local one, as does the command `ssh host git commit` runs (#113). So `guard-default-branch`
+judges a `git commit` in either against the local checkout, and refuses it when that
+checkout is on its default branch.
 
 ## Failure mode if you change this
 

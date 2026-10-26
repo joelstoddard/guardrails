@@ -241,6 +241,11 @@ yes $'sudo -s <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to su
 yes $'chroot /srv/jail <<EOF\ngit commit -m x\nEOF'  commit "a heredoc fed to chroot"
 no  $'sudo tee f <<EOF\ngit commit -m x\nEOF'        commit "a heredoc fed to sudo tee is data"
 
+# ssh's command is read like a local one, as a shell's script on another host is (#113).
+yes 'ssh host git commit -m x'                        commit "a commit ssh runs on another host"
+yes $'ssh host <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to ssh with no command"
+no  'ssh host git status'                             commit "ssh running another subcommand"
+
 # A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
 yes "bash<<<'git commit -m x'"      commit "a here-string with no blank after the shell"
 yes 'git>/dev/null commit -m x'     commit "a redirect fused to git"
