@@ -671,6 +671,13 @@ seen   'bun run build'                                    "a bun script"
 seen   'cat x | jq .'                                     "jq is not an interpreter"
 seen   'echo python3'                                     "python3 as an argument"
 
+# A script nested past the four depths the guards read is one they cannot see, so it asks (#102).
+unseen 'eval eval eval eval eval gh pr comment 1 -b x'            "a script five evals deep"
+unseen "bash -c 'eval eval eval \"ssh h true\"'"                  "a script five shells, evals and ssh deep"
+seen   'eval eval eval eval true'                                 "a script four evals deep is read"
+assert_eq "$(_guardrails_unseen_shell_stdin 'eval eval eval eval eval true')" \
+  'it nests a script more than four shells or evals deep, past what the guards read' "the reason names the depth"
+
 # A quote that closes a URL is not part of its host, for every host form (#135).
 allows 'curl -d x "http://localhost"'              "a quoted localhost URL with no path"
 allows "curl -d x 'http://localhost'"              "a single-quoted localhost URL with no path"

@@ -622,10 +622,10 @@ _guardrails_names_shell() {
 }
 
 # _guardrails_unseen_shell_stdin <cmdline> → rc 0 and a reason if a shell in it, or in a script it runs,
-# reads commands from stdin that the command line does not show.
+# reads commands from stdin that the command line does not show, or it nests a script deeper than the guards read (#102).
 _guardrails_unseen_shell_stdin() {
   local depth="${2:-0}" seg
-  [ "$depth" -gt 4 ] && return 1
+  [ "$depth" -le 4 ] || { printf 'it nests a script more than four shells or evals deep, past what the guards read'; return 0; }
   # This pass runs on every command, so only text naming a shell or eval as a word is looked at closely.
   _guardrails_names_shell "$1" || return 1
   while IFS= read -r seg; do

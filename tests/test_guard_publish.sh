@@ -372,4 +372,10 @@ for c in "echo '{}' | python3 -m json.tool" 'python3 script.py' "node -e 'consol
   assert_eq "$OUT" "" "$c asks nothing"
 done
 
+# A script nested past the four depths the guards read asks (#102).
+run_hook "$S" "$(jsonin 'eval eval eval eval eval gh pr comment 1 -b x')"
+assert_rc 0 "a publish five evals deep is not refused outright"
+assert_out '"permissionDecision":"ask"' "a publish five evals deep asks"
+assert_out 'more than four shells or evals deep' "the question names the depth"
+
 finish "guard-publish"

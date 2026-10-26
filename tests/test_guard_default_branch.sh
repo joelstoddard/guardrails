@@ -261,4 +261,11 @@ assert_out '"permissionDecision":"ask"' "a pipe into node asks on a default bran
 run_hook "$S" "$(jsonat "$r13" "echo '{}' | python3 -m json.tool")"
 assert_eq "$OUT" "" "a pipe into a python module asks nothing on a default branch"
 
+# A script nested past the four depths the guards read could commit unseen (#102).
+run_hook "$S" "$(jsonat "$r13" 'eval eval eval eval eval git commit -m x')"
+assert_out '"permissionDecision":"ask"' "a commit five evals deep asks on a default branch"
+assert_out 'more than four shells or evals deep' "the question names the depth"
+run_hook "$S" "$(jsonat "$r2" 'eval eval eval eval eval git commit -m x')"
+assert_eq "$OUT" "" "a commit five evals deep asks nothing off the default branch"
+
 finish "guard-default-branch"
