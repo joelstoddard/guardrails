@@ -255,4 +255,13 @@ yes 'sudo> x git commit -m x'       commit "an operator fused to a wrapper, its 
 yes "bash -c\"\" 'git commit -m x'" commit "an empty argument fused to -c leaves the payload after it"
 no  'git log>commit'                commit "a redirect's target is not the subcommand"
 
+# A long segment's lookup is kept for the guards' later passes, per split, as the loop would find it again.
+lookups() { local -a toks; read -r -a toks <<<"$1"; _guardrails_command_at; got="$got $_GUARDRAILS_CMD_AT/$_GUARDRAILS_CMD"; }
+long="$(printf 'a=1 %.0s' {1..64})<<< w git commit"
+got=""; lookups "$long"; lookups "$long"; _GUARDRAILS_SPLIT_PER_LINE=1 lookups "$long"; _GUARDRAILS_SPLIT_PER_LINE=1 lookups "$long"
+assert_eq "$got" " 66/git 66/git 65/w 65/w" "a long segment's kept lookup is its split's own"
+fused="$(printf 'sudo> x %.0s' {1..40})git -C /y commit -m x"
+yes "$fused" commit "a commit behind 40 wrappers with a redirect fused to each"
+cwd "$fused" commit /start /y "the same commit's directory, its lookup kept"
+
 finish "git-cmd"

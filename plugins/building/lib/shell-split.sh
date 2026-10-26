@@ -357,8 +357,8 @@ _guardrails_skip_redirect() {
 }
 
 # _guardrails_split_fused → rc 0 if the caller's word w, at its index i, is a word with a redirect after it and no blank
-# between, as in bash<<<'…' or git>out (#91). toks[i] is then that word, or the redirect fused to its target with the word
-# after it, as only an operator alone takes the next word. _guardrails_skip_redirect calls it on a word that is no redirect.
+# between, as in bash<<<'…' or git>out (#91). toks[i] is then that word, for the caller to read next, at the redirect's
+# target when an operator alone takes the next word. _guardrails_skip_redirect calls it on a word that is no redirect.
 _GUARDRAILS_FUSED='^(([^<>"'"'"'\\]|\\.|"[^"]*"|'"'"'[^'"'"']*'"'"')+)([<>].*)$'
 _guardrails_split_fused() {
   local j="$i" p
@@ -366,7 +366,7 @@ _guardrails_split_fused() {
   p="${BASH_REMATCH[1]}"; w="${BASH_REMATCH[3]}"; toks[j]="$p"
   case "$w" in \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \<\< | \<\<- | \<\<\<) ;; *) return 0 ;; esac
   _guardrails_skip_redirect
-  [ "$i" -gt "$((j + 1))" ] && { toks[j]="$w${toks[j + 1]}"; toks[j + 1]="$p"; }
+  [ "$i" -gt "$((j + 1))" ] && { i=$((i - 1)); toks[i]="$p"; return 0; }
   i="$j"; return 0
 }
 
@@ -386,8 +386,20 @@ _guardrails_whole_word() {
   case "$w" in *[\"\']* | *\\) [[ $w =~ $_GUARDRAILS_WHOLE_WORD ]] ;; esac
 }
 
+# The guards' passes read a segment up to five times, and the loop is linear in the words before the command, so a long
+# segment's lookup is kept, keyed by the split and its words; a subshell inherits it. Callers read toks only past the
+# command, which the loop's splitting of fused redirects leaves as they were. See docs/design/git-command-parsing.md
+declare -A _GUARDRAILS_CMD_CACHE
 _guardrails_command_skip() {
-  local i=0 w b="" vals longs o start ops sub remote=-1 rb ra so no ws=""
+  local i=0 w b="" vals longs o start ops sub remote=-1 rb ra so no ws="" key=""
+  if [ "${#toks[@]}" -ge 64 ]; then
+    key="${_GUARDRAILS_SPLIT_PER_LINE:-} ${toks[*]}"
+    if [ -n "${_GUARDRAILS_CMD_CACHE[$key]+x}" ]; then
+      IFS=/ read -r _GUARDRAILS_CMD_AT _GUARDRAILS_CMD_WRAPPED _GUARDRAILS_CMD_SHELL _GUARDRAILS_CMD_ARGS _GUARDRAILS_CMD \
+        <<<"${_GUARDRAILS_CMD_CACHE[$key]}"
+      return
+    fi
+  fi
   while [ "$i" -lt "${#toks[@]}" ]; do
     w="${toks[$i]}"; b=""
     # Most words hold none of < > ( ), so they skip these checks, which every word before the command pays for.
@@ -417,8 +429,9 @@ _guardrails_command_skip() {
     # ${w##*/} is quadratic on a long word, enough to time the hook out; this regex is linear.
     b="$w"; [[ $b == */* && $b =~ /([^/]*)$ ]] && b="${BASH_REMATCH[1]}"
     # A wrapper runs the command after its options and its operand, if it has one: a duration, root, host or
-    # container. vals are its short options that take a value, and longs its long ones (#116).
-    ops=0; sub=0; longs=""; so=""; no=""
+    # container. vals are its short options that take a value, and longs its long ones (#116). ws names it if, with no
+    # command, it starts a shell that reads stdin, as chroot and ssh do, and sudo or doas with an option in so (#113, #133).
+    ops=0; sub=0; longs=""; so=""; no=""; ws=""
     case "$b" in
       sudo)
         vals=CDghpRrTtUu; so='^-[^CDghpRrTtUu]*[si]'
@@ -431,12 +444,12 @@ _guardrails_command_skip() {
       nice) vals=n; longs='--adjustment' ;;
       stdbuf) vals=ioe; longs='--input --output --error' ;;
       doas) vals=Cu; so='^-[^Cu]*s' ;;
-      chroot) vals=ugG; ops=1; longs='--userspec --groups' ;;
+      chroot) vals=ugG; ops=1; longs='--userspec --groups'; ws="$b" ;;
       nohup | command | setsid) vals="" ;;
       # These run their command elsewhere, as you, so only a shell there is the command word, read like a shell here.
       # ssh takes options after its host as well, and its command is read as a payload (#113).
       # With -N, -W, -O, -G, -Q or -V it starts no shell.
-      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; no='^-[^BbcDEeFIiJLlmOoPpQRSWw]*[NWOGQV]'; ops=1; remote="$i"; rb="$b" ;;
+      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; no='^-[^BbcDEeFIiJLlmOoPpQRSWw]*[NWOGQV]'; ops=1; remote="$i"; rb="$b"; ws="$b" ;;
       docker)
         [ "${toks[$((i + 1))]:-}" = exec ] || break
         vals=euw; ops=1; sub=1; remote="$i"; rb="$b"; longs='--env --env-file --user --workdir --detach-keys' ;;
@@ -447,9 +460,6 @@ _guardrails_command_skip() {
       *) [ "${toks[$((i + 1))]:-}" != '()' ] || { _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue; }; break ;;
     esac
     start="$i"; _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1 + sub))
-    # With no command, chroot and ssh start a shell, as sudo -s or -i and doas -s do, which reads commands from stdin
-    # (#113, #133).
-    ws=""; case "$b" in chroot | ssh) ws="$b" ;; esac
     while :; do
       for (( ; i < ${#toks[@]}; i++)); do
         o="${toks[$i]}"
@@ -463,8 +473,8 @@ _guardrails_command_skip() {
             # command -v and -V name a command without running it.
             [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 3; }
             # A shell option counts before the first option in its cluster that takes a value, which takes the rest.
-            [[ -n $so && $o =~ $so ]] && ws="$b"
-            [[ -n $no && $o =~ $no ]] && ws=""
+            [[ -n $so && $o == *[si]* && $o =~ $so ]] && ws="$b"
+            [[ -n $no && $o == *[NWOGQV]* && $o =~ $no ]] && ws=""
             # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
             [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1)) ;;
           *) break ;;
@@ -474,7 +484,7 @@ _guardrails_command_skip() {
       # kubectl and ssh take options after their pod or host as well.
       ops=0; i=$((i + 1)); case "$b" in kubectl | ssh) ;; *) break ;; esac
     done
-    [ "$start" != "$remote" ] || ra="$i"
+    ((start != remote)) || ra="$i"
   done
   _GUARDRAILS_CMD_SHELL=""; [ "$i" -lt "${#toks[@]}" ] || { b=""; _GUARDRAILS_CMD_SHELL="$ws"; }
   # _GUARDRAILS_CMD_ARGS is where the command that ssh runs starts.
@@ -482,6 +492,8 @@ _guardrails_command_skip() {
     case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$remote"; b="$rb"; _GUARDRAILS_CMD_ARGS="$ra" ;; esac
   fi
   _GUARDRAILS_CMD_AT="$i"; _GUARDRAILS_CMD="$b"
+  # A name holds no /, as the loop reads it from the last one.
+  [ -z "$key" ] || _GUARDRAILS_CMD_CACHE[$key]="$i/$_GUARDRAILS_CMD_WRAPPED/$_GUARDRAILS_CMD_SHELL/${_GUARDRAILS_CMD_ARGS:-}/$b"
 }
 
 # _guardrails_shell_payload <segment> → rc 0 with _GUARDRAILS_PAYLOAD set to the script a shell runs from

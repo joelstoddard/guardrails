@@ -275,6 +275,20 @@ line read again on its own in the carried split's pass, and those lines are no l
 after a here-string (#61), so 4,990 lines after one take guard-publish 2.1 s, where they took
 1.3 s.
 
+The guards read a segment several times. guard-default-branch reads it in its git check, in
+each split's directory walk and in its stdin check, and reads the per-line split's copy too
+where the splits differ. Each read of the words before the command is linear, so 14,000
+wrappers with an operator fused to each, `sudo> x`, before a pipe into bash took it 8.8 s at
+load 15, where a quote spanning lines made the splits differ: five reads. So the lookup's
+result for a segment of 64 words or more is kept, keyed by the split and the words, and the
+subshells the later passes run in inherit it. Callers read a segment's words only past its
+command, which the lookup's splitting of fused redirects leaves as they were, so a kept
+result reads the same. guard-default-branch now reads that segment once for each split, in
+4.4 s. guard-publish runs each pass in a subshell of its own, so it still reads it three
+times: 5.2 s before a pipe into python3. The lookup also reads a word whose redirect it
+splits off at the redirect's target, where it reads next, rather than moving the redirect
+there, which took a read of 14,000 such wrappers from 1.2 s to 1.0 s.
+
 ## What was rejected
 
 - **Substring matching.** The original approach; produced the `gh pr create` false

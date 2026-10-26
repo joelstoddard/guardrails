@@ -136,7 +136,7 @@ _guardrails_git_walk_cwd() {
           printf '%s' "$d"
           return 0
         fi
-        [ "${toks[$i]}" = eval ] && [ "$wrapped" = 0 ] && cur="$d"
+        [ "$_GUARDRAILS_CMD" = eval ] && [ "$wrapped" = 0 ] && cur="$d"
         ;;
     esac
   done < <(_guardrails_split_segments "$cmdline")
