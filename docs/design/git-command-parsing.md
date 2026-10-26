@@ -76,7 +76,11 @@ the git guards and the shell readers, finds the command word through one lookup,
 - redirects, such as `2>/dev/null` or `> out`, where an operator alone takes the next word
   as its target (#109). The split has already dropped a heredoc's delimiter, and the per-line
   split a here-string's word, so a `<<` alone takes none, nor a `<<<` in the per-line split,
-  unless the next word starts with a digit, which the split keeps as a shift's operand (#131);
+  unless the next word starts with a digit, which the split keeps as a shift's operand (#131).
+  A target is one shell word, though a quote or an escaped blank in it spans several words
+  of the split, as in `> 'a b c'`, so the words up to the one that closes it go with it.
+  Where it does not close in its segment, as in a line cut from a quote spanning lines, only
+  its first word does, as before;
 - the keywords `!`, `{`, `(`, `if`, `then`, `elif`, `else`, `while`, `until`, `do` and
   `in`, and a `(` fused to the next word;
 - a function's header (`f()`, `f ()`, `function f`), a case arm's pattern (a word ending in

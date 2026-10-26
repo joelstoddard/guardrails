@@ -260,6 +260,19 @@ yes $'. /dev/stdin <<EOF\ngit commit -m x\nEOF'               commit "a heredoc 
 yes $'eval "$(cat <<EOF\ngit commit -m x\nEOF\n)"'             commit "a heredoc that eval runs through a substitution"
 no  $'git tag -m "$(cat <<EOF\ngit commit -m x\nEOF\n)" v1'     commit "a tag message from a heredoc stays data"
 
+# A redirect's target is one shell word, though a quote or an escaped blank in it spans several words of the split.
+yes "> 'a b c' git commit -m x"                       commit "a quoted target with blanks before git"
+yes 'git > "a b" commit -m x'                         commit "a quoted target with blanks before the subcommand"
+yes "git>'a b' commit -m x"                           commit "a quoted target with blanks fused to git"
+yes "git -C > 'a b' /x commit -m y"                   commit "a quoted target between -C and its directory"
+cwd "git -C > 'a b' /x commit -m y"                   commit /start /x "-C's directory after a quoted target"
+# A quote opened later in a target may close one opened before it, in a piece of a quoted argument, so it joins nothing.
+yes '> out" git commit -m "x'                         commit "a quote opened inside a target joins no words"
+yes 'git -c "a >out" -c "b" commit -m x'              commit "a piece of a quoted value that holds a redirect"
+# A quote that does not close in its line is read as before, as the line may be one piece of a quote spanning lines.
+yes $'echo \'x\n> \'y git commit -m x'                  commit "a target whose quote does not close in its line"
+yes $'echo \'x\ngit>\'y commit -m x'                    commit "a fused target whose quote does not close in its line"
+
 # A long segment's lookup is kept for the guards' later passes, per split, as the loop would find it again.
 lookups() { local -a toks; read -r -a toks <<<"$1"; _guardrails_command_at; got="$got $_GUARDRAILS_CMD_AT/$_GUARDRAILS_CMD"; }
 long="$(printf 'a=1 %.0s' {1..64})<<< w git commit"

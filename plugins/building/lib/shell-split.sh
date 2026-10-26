@@ -341,25 +341,58 @@ _guardrails_command_at() {
 # its target when the operator stands alone, or a word with a redirect fused to it, split for the caller to read index i
 # again (#91). Callers pass only a word that holds < or >.
 _guardrails_skip_redirect() {
+  local t
   # Patterns sort the usual forms, as a regex per word costs more; a longer fd goes to the regex. An operator alone takes
-  # the next word as its target.
+  # the next word as its target, t=2, and one fused to its target takes none, t=1.
   case "$w" in
     \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \&\> | \&\>\> | [0-9]\< | [0-9]\> | [0-9]\>\> | [0-9]\>\| | \
-      [0-9]\<\> | [0-9]\>\& | [0-9]\<\&) i=$((i + 2)); return 0 ;;
-    \<\< | \<\<- | \<\<\< | [0-9]\<\< | [0-9]\<\<- | [0-9]\<\<\<) ;;
-    \<* | \>* | \&\>* | [0-9]\<* | [0-9]\>*) i=$((i + 1)); return 0 ;;
+      [0-9]\<\> | [0-9]\>\& | [0-9]\<\&) t=2 ;;
+    \<\< | \<\<- | \<\<\< | [0-9]\<\< | [0-9]\<\<- | [0-9]\<\<\<) t=h ;;
+    \<* | \>* | \&\>* | [0-9]\<* | [0-9]\>*) t=1 ;;
     [0-9]*[\<\>]* | \{*[\<\>]*)
       local redirect='^([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?(&>>|&>|>>|>&|>\||<<<|<<-|<<|<>|<&|>|<)(.*)$'
       [[ $w =~ $redirect ]] || { _guardrails_split_fused; return; }
-      [ -z "${BASH_REMATCH[3]}" ] || { i=$((i + 1)); return 0; }
-      case "${BASH_REMATCH[2]}" in \<\< | \<\<- | \<\<\<) ;; *) i=$((i + 2)); return 0 ;; esac ;;
+      t=1; [ -n "${BASH_REMATCH[3]}" ] || case "${BASH_REMATCH[2]}" in \<\< | \<\<- | \<\<\<) t=h ;; *) t=2 ;; esac ;;
     *) _guardrails_split_fused; return ;;
   esac
-  # The split drops a heredoc's delimiter, as the per-line split does a here-string's word, unless the word starts with
-  # a digit, which they read as a shift.
-  i=$((i + 1))
-  case "$w" in *\<\<\<) [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ] || { i=$((i + 1)); return 0; } ;; esac
-  case "${toks[$i]:-}" in [0-9]*) i=$((i + 1)) ;; esac
+  case "$t" in
+    1) i=$((i + 1)); t="$w" ;;
+    2) i=$((i + 2)); t="${toks[$((i - 1))]:-}" ;;
+    *)
+      # The split drops a heredoc's delimiter, as the per-line split does a here-string's word, unless the word starts
+      # with a digit, which they read as a shift.
+      i=$((i + 1)); t=""
+      case "$w" in *\<\<\<) [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ] || { i=$((i + 1)); t="${toks[$((i - 1))]:-}"; } ;; esac
+      [ -n "$t" ] || case "${toks[$i]:-}" in [0-9]*) i=$((i + 1)) ;; esac ;;
+  esac
+  case "$t" in *[\"\'\\]*) _guardrails_skip_quoted "$t" ;; esac
+  return 0
+}
+
+# _guardrails_skip_quoted <target> → moves the caller's i past the words that a redirect's target, which ends before i,
+# joins to itself with a quote it opens or an escaped blank, as the shell reads them as one word. A quote opened later in
+# the target, as in >out", may close a quote opened before it, in a piece of a quoted argument, so it joins nothing. If
+# the quote does not close in the caller's toks, as in a line cut from a quote spanning lines, i stays.
+_GUARDRAILS_OPEN_QUOTE='^(([0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})?[<>&|-]*)('"'"'[^'"'"']*|"([^"\\]|\\.)*\\?)$|^([^"'"'"'\\]|\\.|"([^"\\]|\\.)*"|'"'"'[^'"'"']*'"'"')*\\$'
+_GUARDRAILS_SQ_REST="^[^']*'(.*)$"
+_GUARDRAILS_DQ_REST='^([^"\\]|\\.)*"(.*)$'
+_guardrails_skip_quoted() {
+  local t="$1" k="$i" q
+  while [[ $t =~ $_GUARDRAILS_OPEN_QUOTE ]]; do
+    q="${BASH_REMATCH[3]:0:1}"; q="${q:-\\}"
+    # An escaped blank joins the next word, read from its start; a quote, the words up to the one that closes it, read
+    # from after the quote.
+    while :; do
+      [ "$k" -lt "${#toks[@]}" ] || return 0
+      t="${toks[$k]}"; k=$((k + 1))
+      case "$q" in
+        \\) break ;;
+        \') [[ $t =~ $_GUARDRAILS_SQ_REST ]] && { t="${BASH_REMATCH[1]}"; break; } ;;
+        *) [[ $t =~ $_GUARDRAILS_DQ_REST ]] && { t="${BASH_REMATCH[2]}"; break; } ;;
+      esac
+    done
+  done
+  i="$k"
 }
 
 # _guardrails_split_fused → rc 0 if the caller's word w, at its index i, is a word with a redirect after it and no blank
@@ -370,7 +403,13 @@ _guardrails_split_fused() {
   local j="$i" p
   [[ $w =~ $_GUARDRAILS_FUSED ]] || return 1
   p="${BASH_REMATCH[1]}"; w="${BASH_REMATCH[3]}"; toks[j]="$p"
-  case "$w" in \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \<\< | \<\<- | \<\<\<) ;; *) return 0 ;; esac
+  case "$w" in
+    \< | \> | \>\> | \>\| | \<\> | \>\& | \<\& | \<\< | \<\<- | \<\<\<) ;;
+    # A target whose quote stays open joins the words after it, so the word goes in place of the last of them.
+    *[\"\'\\]*) i=$((j + 1)); _guardrails_skip_quoted "$w"; [ "$i" -gt "$((j + 1))" ] && { i=$((i - 1)); toks[i]="$p"; return 0; }
+      i="$j"; return 0 ;;
+    *) return 0 ;;
+  esac
   _guardrails_skip_redirect
   [ "$i" -gt "$((j + 1))" ] && { i=$((i - 1)); toks[i]="$p"; return 0; }
   i="$j"; return 0

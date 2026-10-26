@@ -275,4 +275,8 @@ run_hook "$S" "$(jsonat "$r2" $'git commit -m "$(cat <<EOF\ngit commit is prose\
 assert_rc 0 "a commit whose message comes from a heredoc allowed on a feature branch"
 assert_eq "$OUT" "" "a commit whose message comes from a heredoc asks nothing on a feature branch"
 
+# A redirect's target is one shell word, though a quote in it spans several words of the split.
+run_hook "$S" "$(jsonat "$r13" "> 'a b c' git commit -m x")"
+assert_rc 2 "a commit after a quoted target with blanks on the default branch blocked"
+
 finish "guard-default-branch"

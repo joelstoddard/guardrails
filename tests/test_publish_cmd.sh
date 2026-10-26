@@ -704,6 +704,18 @@ unseen 'cat x | . /dev/stdin'                                                   
 seen   'source ./env.sh'                                                        "a sourced file"
 per_line $'eval "$(cat <<EOF\ngh pr comment 1 -b x\nEOF\n)"' $'eval "$(cat <<\n)"'  "a heredoc that eval runs through a substitution"
 
+# A redirect's target is one shell word, though a quote or an escaped blank in it spans several words of the split.
+blocks "> 'a b c' gh pr comment 1 -b x"                   "a quoted target with blanks before a publish"
+blocks ">'a b c' gh pr create --fill"                     "a fused quoted target with blanks before a ready PR"
+blocks "2> 'a b' npm publish"                             "an fd's quoted target with blanks before a publish"
+blocks 'gh pr > "a b" comment 1 -b x'                     "a quoted target with blanks before a verb"
+blocks '> a\ b gh pr comment 1 -b x'                      "an escaped blank in a target"
+blocks "gh>'a b' pr comment 1 -b x"                       "a quoted target with blanks fused to a word"
+blocks "gh api > 'a b' -X POST repos/o/r"                 "a quoted target with blanks before a gh api method"
+blocks "<<< 'a b' gh pr comment 1 -b x"                   "a here-string with blanks before a publish"
+unseen "cat x | bash > 'a b'"                             "a pipe into a shell with a quoted target after it"
+unseen "cat x | sudo -s <<<'a b'"                         "a here-string with blanks fed to sudo -s"
+
 # A quote that closes a URL is not part of its host, for every host form (#135).
 allows 'curl -d x "http://localhost"'              "a quoted localhost URL with no path"
 allows "curl -d x 'http://localhost'"              "a single-quoted localhost URL with no path"

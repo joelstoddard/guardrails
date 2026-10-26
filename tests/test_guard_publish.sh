@@ -395,4 +395,8 @@ run_hook "$S" "$(jsonin $'gh pr create --draft --body "$(cat <<\'EOF\'\ngh pr co
 assert_rc 0 "a draft PR whose body comes from a heredoc allowed"
 assert_eq "$OUT" "" "a draft PR whose body comes from a heredoc asks nothing"
 
+# A redirect's target is one shell word, though a quote in it spans several words of the split.
+run_hook "$S" "$(jsonin "> 'a b c' gh pr comment 1 -b x")"
+assert_rc 2 "a publish after a quoted target with blanks blocked"
+
 finish "guard-publish"
