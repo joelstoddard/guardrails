@@ -189,4 +189,7 @@ Ends with #1 priority bug
 Fixed already in PR #85
 Fixed already in PR o/r#86." "$OUT" "only an end-of-line issue reference or marker tracks: not mid-line #N, not a PR, any case"
 
+OUT="$(_guardrails_handback "$(scratch_dir)/missing")" && r=0 || r=$?
+assert_eq "0:" "$r:$OUT" "a missing transcript is no handback, and not an error"
+
 finish "findings"

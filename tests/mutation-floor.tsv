@@ -14,5 +14,5 @@ plugins/personas/hooks/scripts/persona-report.sh	74.0	7
 plugins/recording/hooks/scripts/findings-capture.sh	75.8	7
 plugins/recording/hooks/scripts/findings-gate.sh	61.9	16
 plugins/recording/hooks/scripts/lessons-nudge.sh	64.0	9
-plugins/recording/lib/findings.sh	83.3	2
+plugins/recording/lib/findings.sh	100.0	0
 TOTAL	78.3	138
