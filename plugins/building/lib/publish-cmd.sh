@@ -65,13 +65,36 @@ _guardrails_http_has_body() {
 
 # True when the command names a host that is not this machine. Loopback and .local
 # are development, not publishing — that distinction is the deliberate hole here.
+# See docs/design/url-hosts.md
 _guardrails_has_remote_target() {
-  local seg="$1" rest url host re n bracketed='^[^]]*' plain='^[^/:]*' lead='^[[:space:]]*(.*)$'
-  local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' closed='^(.*[^"'"'"'])["'"'"']+$' userinfo='^https?://[^/]*@'
-  local first='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
-  local next='https?://\[[^]]+\][^[:space:]]*|https?://localhost[^[:space:]]*|https?://127\.[^[:space:]]*|(https?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
-  case "$seg" in *.* | *://*) ;; *) return 1 ;; esac
-  [[ $seg =~ ^.*$ ]] || local LC_ALL=C   # bytes, as in _guardrails_http_has_body
+  local seg="$1" rest url host re n w j=0 lead='^[[:space:]]*(.*)$' word='^[^[:space:]]*'
+  local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
+  # The host follows the last @ before the first /, ? or #, as no client reaches a host before it (#149).
+  local authority='^([^/?#]*@)?(\[[^]]*\]|[^/?#:@]*)'
+  # curl reads a URL's scheme in any case.
+  local first='[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
+  local next='[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
+  local -a toks
+  # Quotes and backslashes can hide the dot or the :// of a URL.
+  case "$seg" in *.* | *://* | *[\"\'\\]*) ;; *) return 1 ;; esac
+  # Bytes: the shell splits words on ASCII blanks only, and dropping quotes is quadratic in a UTF-8 locale (#134).
+  case "$seg" in *[![:ascii:]]* | *[\"\'\\]*) local LC_ALL=C ;; esac
+  # The shell drops quotes, and the $ of $'' or $"", before curl reads a word (#148). A backslash can stay or make any
+  # character, so a word with one is remote if it holds a URL or a $''.
+  case "$seg" in
+    *[\"\'\\]*)
+      read -r -a toks <<<"$seg"
+      for w in "${toks[@]}"; do
+        case "$w" in
+          *\\*)
+            case "$w" in *\$\'*) return 0 ;; esac
+            w="${w//\$[\"\']/}"; w="${w//[\"\'\\]/}"; [[ $w =~ $first ]] && return 0; toks[j]="$w" ;;
+          *[\"\']*) w="${w//\$[\"\']/}"; toks[j]="${w//[\"\']/}" ;;
+        esac
+        j=$((j + 1))
+      done
+      seg="${toks[*]}" ;;
+  esac
   # The URLs in turn, as grep -o finds them: leftmost, longest, each after the last, with ^ only at the start. Of
   # equal matches glibc takes the first alternative, so those that run to a blank come first, as they are the longest.
   rest="$seg"; re="$first"; n=0
@@ -80,16 +103,11 @@ _guardrails_has_remote_target() {
     n=$((n + 1)); [ "$n" -le 32 ] || return 0
     url="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[${#BASH_REMATCH[@]} - 1]}"; re="$next"
     case "$url" in [[:space:]]*) [[ $url =~ $lead ]] && url="${BASH_REMATCH[1]}" ;; esac
-    # Regexes and a guarded ${url#*://}, as ${host%%/*} and an unmatched ${url#*://} are quadratic. A bare URL's
-    # host ends at its first /, though its path holds a :// (#128).
-    host="$url"
-    case "$url" in http://* | https://*) host="${url#*://}" ;; esac
-    case "$host" in
-      \[*) [[ $host =~ $bracketed ]]; host="${BASH_REMATCH[0]}]" ;;
-      *) [[ $host =~ $plain ]]; host="${BASH_REMATCH[0]}" ;;
-    esac
-    # A quote that closes the URL is not part of its host (#135). An @ after it makes the host what follows the @.
-    case "$host" in *[\"\']) [[ $url =~ $userinfo ]] || { [[ $host =~ $closed ]]; host="${BASH_REMATCH[1]}"; } ;; esac
+    # Regexes and a guarded ${url#*://}, as ${host%%/*} and an unmatched ${url#*://} are quadratic. The host comes from
+    # the URL's whole word, as a match can stop before an @ (#149), and ends at its first /, though a :// follows (#128).
+    [[ $rest =~ $word ]]; host="$url${BASH_REMATCH[0]}"
+    case "$host" in [Hh][Tt][Tt][Pp]://* | [Hh][Tt][Tt][Pp][Ss]://*) host="${host#*://}" ;; esac
+    [[ $host =~ $authority ]]; host="${BASH_REMATCH[2]}"
     # A public name can start with 127., so only a dotted address is loopback (#128).
     case "$host" in
       localhost | localhost:* | 0.0.0.0 | \[::1\] | ::1 | *.local | *.localhost) ;;

