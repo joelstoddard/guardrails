@@ -23,7 +23,8 @@ A variable or a substitution before the URL's path, as in `http://$HOST/x`,
 remote: `http://evil.com:$PORT/x` is refused. A whole URL from a variable,
 `curl -d x "$WEBHOOK_URL"`, asks too. A word that starts with `$` or a backtick is read
 as one if it is not an option's value, so `-d "$BODY"` and `-u "$USER:$PASS"` ask
-nothing.
+nothing. curl's `--resolve` and `--connect-to` send the write for the URL's host to
+another, so a write with either asks unless its URL is remote.
 
 The rest is as it was: a public address is remote, as the ranges above are the only
 private ones, and an address with no scheme is read as a host, as a dotted name is,

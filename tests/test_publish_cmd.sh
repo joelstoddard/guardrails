@@ -931,5 +931,9 @@ allows 'curl -H "Authorization: Bearer $T" -d x http://localhost:3000/api' "a he
 allows 'curl -u "$USER:$PASS" -d x http://localhost:3000/api' "credentials from a variable"
 allows 'curl --user "$CREDS" -d x http://localhost:3000/api' "credentials from a variable after a long option"
 allows 'http POST localhost:3000 "text=$MSG"'               "an httpie item from a variable"
+# curl's --resolve and --connect-to send the write for a URL's host to another, so the URL proves nothing local.
+asks   'curl --resolve localhost:443:203.0.113.5 -d x https://localhost/x' "--resolve sends a local URL elsewhere"
+asks   'curl --connect-to ::203.0.113.5: -d x http://localhost:3000/x'      "--connect-to sends a local URL elsewhere"
+allows 'curl --resolve localhost:443:203.0.113.5 https://localhost/x'       "--resolve on a read"
 
 finish "publish-cmd"

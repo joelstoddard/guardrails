@@ -64,12 +64,12 @@ _GUARDRAILS_HTTPIE_DATA='^[^:=@;]*(=[^=]|=$|:=|@)'
 # _guardrails_http_writes <client> <index> → rc 0 if the client sends a body or a write method, read from the caller's
 # toks from <index> as the shell passes them: past redirects, with quotes dropped, and a quoted word whole. Sets
 # _GUARDRAILS_HTTP_WORDS to the words that can name the host: all but redirects and the values of the options that
-# never do, an output file, a header, a header dump or a cookie jar. Sets _GUARDRAILS_HTTP_VAR when the URL comes from a
-# variable or substitution.
+# never do, an output file, a header, a header dump or a cookie jar. Sets _GUARDRAILS_HTTP_ASK to why a write may go
+# elsewhere than its URL reads: the URL comes from a variable or substitution, or curl sends it to another host.
 _guardrails_http_writes() {
   local base="$1" i="$2" w v j k d re p=0 u=1 opts=1 rc=1
   local -a kept=("${toks[@]:0:i}")
-  _GUARDRAILS_HTTP_VAR=""
+  _GUARDRAILS_HTTP_ASK=""
   case "$base" in curl) re="$_GUARDRAILS_CURL_SHORT" ;; wget) re="$_GUARDRAILS_WGET_SHORT" ;; *) re="$_GUARDRAILS_HTTPIE_SHORT" ;; esac
   # A regex fails on text holding an invalid byte in a UTF-8 locale, on macOS even before the byte.
   case "${toks[*]}" in *[![:ascii:]]*) local LC_ALL=C ;; esac
@@ -96,6 +96,7 @@ _guardrails_http_writes() {
           curl--request=* | wget--method=*) v="${w#--request=}"; _guardrails_is_write_verb "${v#--method=}" && rc=0 ;;
           wget--execute) _guardrails_http_value; _guardrails_wgetrc_writes && rc=0 ;;
           wget--execute=*) v="${w#--execute=}"; _guardrails_wgetrc_writes && rc=0 ;;
+          curl--resolve | curl--connect-to) _guardrails_http_value; _GUARDRAILS_HTTP_ASK="a host that $w sends elsewhere" ;;
           curl--output | curl--dump-header | curl--cookie-jar | curl--header | wget--output-document | wget--header | \
             http*--output | xh*--output)
             _guardrails_http_value; d=1 ;;
@@ -127,7 +128,7 @@ _guardrails_http_writes() {
       *)
         # A URL from a variable or a substitution can name any host.
         case "${toks[$j]}" in \$[!\"\']* | \"\$* | \`* | \"\`*) v=1 ;; *) v="" ;; esac
-        case "$base" in curl | wget) [ -z "$v" ] || _GUARDRAILS_HTTP_VAR=1 ;; *)
+        case "$base" in curl | wget) [ -z "$v" ] || _GUARDRAILS_HTTP_ASK="a URL from a variable" ;; *)
           # httpie and xh read their first argument as the method if it is letters only, then the URL, then the items.
           # A quoted argument of several words is one item.
           case "${toks[$j]}" in [\"\']?*[\"\']) ;; [\"\']*) _guardrails_skip_quoted "${toks[$j]}" ;; esac
@@ -135,7 +136,7 @@ _guardrails_http_writes() {
           if [ "$p" = 1 ] && [ "$i" = "$((j + 1))" ] && [[ $w =~ ^[A-Za-z]+$ ]]; then
             u=2; _guardrails_is_write_verb "$w" && rc=0
           elif [ "$p" = "$u" ]; then
-            [ -z "$v" ] || _GUARDRAILS_HTTP_VAR=1
+            [ -z "$v" ] || _GUARDRAILS_HTTP_ASK="a URL from a variable"
           elif [[ ${toks[$j]} =~ $_GUARDRAILS_HTTPIE_DATA ]]; then
             rc=0
           fi ;;
@@ -309,7 +310,7 @@ _guardrails_publishes_as_user() {
           case $? in
             0) printf 'HTTP write to a remote host'; return 0 ;;
             2) : "${_GUARDRAILS_PUBLISH_ASK:=HTTP write to a host not proven local, as a name with no dot, a private address or a variable}" ;;
-            *) [ -z "$_GUARDRAILS_HTTP_VAR" ] || : "${_GUARDRAILS_PUBLISH_ASK:=HTTP write to a URL from a variable}" ;;
+            *) [ -z "$_GUARDRAILS_HTTP_ASK" ] || : "${_GUARDRAILS_PUBLISH_ASK:=HTTP write to $_GUARDRAILS_HTTP_ASK}" ;;
           esac
         elif _guardrails_is_write_verb "${lead[1]:-}" && _guardrails_has_remote_target "$_GUARDRAILS_HTTP_WORDS"; then
           : "${_GUARDRAILS_PUBLISH_ASK:=HTTP write to a remote host, read from ${piece[1]}, one piece of a quoted argument}"

