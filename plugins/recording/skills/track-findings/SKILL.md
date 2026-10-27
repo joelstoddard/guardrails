@@ -1,6 +1,6 @@
 ---
 name: track-findings
-description: File every finding outside scope as a tracked issue, so nothing you noticed is left only in chat. Follow this skill BEFORE ending a turn that lists findings — yours or a persona's — and whenever the user says "track this", "add a todo", or "file an issue". Uses the tracker the session context names (a work project), otherwise GitHub issues.
+description: Follow this skill whenever the user says "file an issue", "track this" or "add a todo", BEFORE any `gh issue create`, and BEFORE ending a turn that lists findings — yours or a persona's. It files each finding outside scope as a tracked issue whose body ends with the Claude Code footer, so nothing you noticed is left only in chat. Uses the tracker the session context names (a work project), otherwise GitHub issues.
 allowed-tools: Bash(gh issue list:*), Bash(gh issue view:*), Bash(gh repo view:*), Bash(gh label list:*), Bash(git remote get-url:*), Bash(git branch --show-current), Read, Grep, Skill
 ---
 
@@ -20,7 +20,7 @@ Other developers may not want AI-filed issues, so ask BEFORE filing anywhere tha
 
 * Run `gh repo view <owner>/<repo> --json nameWithOwner,isInOrganization,viewerPermission`.
 * **Personal**: `isInOrganization` is `false` AND `viewerPermission` is `ADMIN`. The user owns it. File it (step 2 onward); the permission prompt is the approval.
-* **Shared**: anything else, including every work tracker. Show the user the drafted issue in chat AND ask whether to file it there. End the finding's line with `(asked)` until they answer. File ONLY on an explicit yes for that issue; on a no, mark it `(declined)`.
+* **Shared**: anything else, including every work tracker AND a repo `gh repo view` cannot read (no login OR no network), because you cannot confirm the user owns it. Show the user the drafted issue in chat, in step 4's format with its footer, AND ask whether to file it there. End the finding's line with `(asked)` until they answer. File ONLY on an explicit yes for that issue; on a no, mark it `(declined)`.
 
 ## Protocol (GitHub issues)
 

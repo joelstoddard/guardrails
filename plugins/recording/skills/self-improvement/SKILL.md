@@ -6,10 +6,10 @@ allowed-tools: Bash(jq:*), Read, Edit, Write, Skill
 
 ## Journal
 
-Lessons live in `~/.claude/skill-lessons.jsonl`, overridable via `GUARDRAILS_LESSONS_JOURNAL`. Resolve the path the same way the `lessons-nudge` hook does:
+Lessons live in `skill-lessons.jsonl` in the Claude config directory (`CLAUDE_CONFIG_DIR`, default `~/.claude`), overridable via `GUARDRAILS_LESSONS_JOURNAL`. Resolve the path the same way the `lessons-nudge` hook does:
 
 ```
-journal="${GUARDRAILS_LESSONS_JOURNAL:-$HOME/.claude/skill-lessons.jsonl}"
+journal="${GUARDRAILS_LESSONS_JOURNAL:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skill-lessons.jsonl}"
 ```
 
 The file is JSON Lines: one entry per line, fields in this order:

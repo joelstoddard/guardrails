@@ -3,7 +3,7 @@
 # rewrites the agent's own instructions and opens a PR, which is not something
 # to do unattended. See docs/specs/2026-09-07-guardrails-autonomy-design.md
 command -v jq >/dev/null 2>&1 || exit 0
-journal="${GUARDRAILS_LESSONS_JOURNAL:-$HOME/.claude/skill-lessons.jsonl}"
+journal="${GUARDRAILS_LESSONS_JOURNAL:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skill-lessons.jsonl}"
 [ -f "$journal" ] || exit 0
 
 cutoff="$(date -v-7d +%F 2>/dev/null || date -d '7 days ago' +%F 2>/dev/null)"
