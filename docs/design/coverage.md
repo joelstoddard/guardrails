@@ -38,7 +38,10 @@ The tracer changes no test and no script. It writes `file:line` to a log named b
 `BASH_ENV` names `tests/coverage/bash_env.sh`, which every non-interactive bash reads.
 It opens a file descriptor on the log, points `BASH_XTRACEFD` at it, sets `PS4` to
 print `file:line`, and runs `set -x`. A hook that `run_hook` starts with `bash "$script"`
-is traced this way, and so is a lib that a test sources.
+is traced this way, and so is a lib that a test sources. The commands of a `bash -c`
+string name no file, so a trace line such as `++:1` has an empty path; `hits()` skips
+it, as the empty path would otherwise resolve to the working directory and, run from
+the repo's root, stop the run with `bad array subscript`.
 
 `BASH_XTRACEFD` and the `{fd}` syntax need bash 4.1, so the tool refuses to run on an
 older bash. Stock macOS bash is 3.2, so run it from a Nix or Homebrew bash. The tool's

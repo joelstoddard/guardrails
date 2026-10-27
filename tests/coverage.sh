@@ -55,7 +55,8 @@ hits() { # writes "test<TAB>path<TAB>line" for each traced line of a file under 
       match($0, /^\++[^:]+:[0-9]+/) {
         s = substr($0, 1, RLENGTH); sub(/^\++/, "", s)
         k = s; sub(/:[0-9]+$/, "", k); ln = substr(s, length(k) + 2)
-        print t "\t" k "\t" ln
+        # A bash -c string names no file, so a line such as ++:1 has an empty path, which would resolve to the working directory.
+        if (k != "") print t "\t" k "\t" ln
       }' "$log"
   done | LC_ALL=C sort -u >"$OUT/raw-hits.tsv"
   while IFS= read -r raw; do # resolve each distinct traced path once

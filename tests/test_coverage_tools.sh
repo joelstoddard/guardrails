@@ -298,6 +298,14 @@ setup; printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov
 : >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 1 && $OUTPUT == *"base has no TOTAL floor"* ]] || fail ratchet-empty-base "rc=$RC: $OUTPUT"
 
+echo "--- a bash -c string's trace lines, which name no file, are skipped, even from the repo's root"
+setup
+cat >"$D/tests/test_f.sh" <<'EOF'
+bash -c 'out=$(bash "$1" yes); [[ $out == "took yes" ]]' _ "$(dirname "$0")/../plugins/p/hooks/scripts/f.sh"
+EOF
+OUTPUT="$(cd "$D" && COVERAGE_ROOT="$D" bash "$TOOL" --update 2>&1)"; RC=$?
+[[ $RC == 0 && $(row "$S") == "2/3 66.6 NO" ]] || fail nested-bash-c "rc=$RC: $OUTPUT"
+
 echo "--- a file run through a symlinked path is credited to its real path"
 setup; ln -s "$D/plugins/p/hooks/scripts" "$D/alias"
 cat >"$D/tests/test_f.sh" <<'EOF'
