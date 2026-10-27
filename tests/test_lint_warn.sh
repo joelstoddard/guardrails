@@ -3,6 +3,11 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 S="$DIR/../plugins/building/hooks/scripts/lint-warn.sh"
 json() { printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$1" "$2"; }
+# A hook with no cwd falls back to the directory it runs in, so the suite runs from a scratch repo whose lint
+# fails: the fallback can never run the caller's real lint, and a test that reaches it shows.
+here="$(make_repo main)"
+printf '## Commands\n- **Lint:** `false`\n' > "$here/AGENTS.md"; commit_doc "$here"
+cd "$here" || exit 1
 
 # Failing lint on commit → NEVER blocks (rc 0) but emits a warning on stdout
 rf="$(make_repo main)"; git -C "$rf" switch -q -c nbc-1-x
@@ -54,5 +59,9 @@ run_hook "$S" "$(json "$rf" "cat cmds.txt | bash")"
 assert_out 'reads commands from stdin' "a pipe into a shell warns, saying why, when lint fails"
 run_hook "$S" "$(json "$rp" "cat cmds.txt | bash")"
 assert_eq "$OUT" "" "a pipe into a shell warns nothing when lint passes"
+
+# With no cwd in its input, the hook judges the directory it runs in.
+run_hook "$S" '{"tool_input":{"command":"git commit -m x"}}'
+assert_out "$here" "with no cwd, the hook judges the directory it runs in: a scratch repo, never the caller's"
 
 finish "lint-warn"

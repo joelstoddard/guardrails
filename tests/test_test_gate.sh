@@ -3,6 +3,9 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 S="$DIR/../plugins/building/hooks/scripts/test-gate.sh"
 json() { printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$1" "$2"; }
+# A hook with no cwd falls back to the directory it runs in, so the suite runs from scratch: the fallback can
+# never run the caller's real test command, which here would be this suite again.
+cd "$(scratch_dir)" || exit 1
 
 # Repo with a passing test command → push allowed
 r="$(make_repo main)"
