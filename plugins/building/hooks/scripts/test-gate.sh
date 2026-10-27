@@ -9,17 +9,36 @@ input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 
-_guardrails_invokes_git "$cmd" push || exit 0
+# A command too long or dense to read in time may push, so the session's repo is judged, and as it may
+# push nothing, a failure asks (#103).
+if why="$(_guardrails_unreadable "$cmd")"; then
+  dirs="${cwd:-.}"; unsure="Could not read this command in full to check it does not push: $why"
+else
+  unsure=""
+  # A shell reading commands from a pipe may push where no guard can read it, so a failure asks too (#63).
+  if ! _guardrails_invokes_git "$cmd" push; then
+    why="$(_guardrails_unseen_shell_stdin "$cmd")" || exit 0
+    unsure="Could not check this command does not push: $why"
+  fi
+  # Judge the repo git pushes from, not the one the shell sits in; where the two splits disagree on it,
+  # judge both, each once (#75). See docs/design/git-command-parsing.md.
+  dirs="$(_guardrails_git_effective_cwd "$cmd" push "${cwd:-.}")"
+fi
 [ "${SKIP_TEST_GATE:-}" = "1" ] && exit 0
 
-repo="$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null)" || exit 0
-testcmd="$(repo_cmd "$repo" test)" || {
-  echo "⚠️  test-gate: no test command in $repo/AGENTS.md or CLAUDE.md — skipping (CI is the backstop). Document it to enable the local gate." >&2
-  exit 0
-}
-
-if ( cd "$repo" && eval "$testcmd" ) >/dev/null 2>&1; then
-  exit 0
-fi
-echo "Tests failed: \`$testcmd\` (from the repo agent doc). Fix them before pushing, or set SKIP_TEST_GATE=1 to override." >&2
-exit 2
+while IFS= read -r repo; do
+  testcmd="$(repo_cmd "$repo" test)" || {
+    echo "⚠️  test-gate: no test command in the committed AGENTS.md or CLAUDE.md of $repo — skipping (CI is the backstop). Document it to enable the local gate." >&2
+    continue
+  }
+  ( cd "$repo" && eval "$testcmd" ) </dev/null >/dev/null 2>&1 && continue
+  if [ -n "$unsure" ]; then
+    jq -cn --arg r "$unsure. Tests fail in $repo (\`$testcmd\` from its agent doc), so allow it only if it pushes nothing." \
+      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+    exit 0
+  fi
+  echo "Tests failed in $repo: \`$testcmd\` (from its agent doc). Fix them before pushing, or set SKIP_TEST_GATE=1 to override." >&2
+  exit 2
+done < <(printf '%s\n' "$dirs" |
+  while IFS= read -r dir; do git -C "$dir" rev-parse --show-toplevel 2>/dev/null; done | awk '!seen[$0]++')
+exit 0
