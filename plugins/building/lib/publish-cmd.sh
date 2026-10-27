@@ -163,14 +163,16 @@ _guardrails_wgetrc_writes() {
 _guardrails_has_remote_target() {
   local seg="$1" rest url host re n w j=0 lead='^[[:space:]]*(.*)$' word='^[^[:space:]]*'
   local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
-  # The host follows the last @ before the first /, ? or #, as no client reaches a host before it (#149).
-  local authority='^([^/?#]*@)?(\[[^]]*\]|[^/?#:@]*)'
-  # curl reads a URL's scheme in any case.
-  local first='[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
-  local next='[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
+  # The host follows the slashes after the scheme, and the last @ before the first /, ? or #, as no client reaches a
+  # host before it (#149).
+  local authority='^/*([^/?#]*@)?(\[[^]]*\]|[^/?#:@]*)'
+  # curl reads a URL's scheme in any case, and xh and httpie read a word that starts with one followed by any number of
+  # slashes, none included, as a WHATWG parser does: http:evil.com is http://evil.com.
+  local first='(^|[[:space:]])[Hh][Tt][Tt][Pp][Ss]?:[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
+  local next='[[:space:]][Hh][Tt][Tt][Pp][Ss]?:[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
   local -a toks
   # Quotes and backslashes can hide the dot or the :// of a URL.
-  case "$seg" in *.* | *://* | *[\"\'\\]*) ;; *) return 1 ;; esac
+  case "$seg" in *.* | *[Hh][Tt][Tt][Pp]:* | *[Hh][Tt][Tt][Pp][Ss]:* | *[\"\'\\]*) ;; *) return 1 ;; esac
   # Bytes: the shell splits words on ASCII blanks only, and dropping quotes is quadratic in a UTF-8 locale (#134).
   case "$seg" in *[![:ascii:]]* | *[\"\'\\]*) local LC_ALL=C ;; esac
   # The shell drops quotes, and the $ of $'' or $"", before curl reads a word (#148). A backslash can stay or make any
@@ -200,7 +202,7 @@ _guardrails_has_remote_target() {
     # Regexes and a guarded ${url#*://}, as ${host%%/*} and an unmatched ${url#*://} are quadratic. The host comes from
     # the URL's whole word, as a match can stop before an @ (#149), and ends at its first /, though a :// follows (#128).
     [[ $rest =~ $word ]]; host="$url${BASH_REMATCH[0]}"
-    case "$host" in [Hh][Tt][Tt][Pp]://* | [Hh][Tt][Tt][Pp][Ss]://*) host="${host#*://}" ;; esac
+    case "$host" in [Hh][Tt][Tt][Pp]:* | [Hh][Tt][Tt][Pp][Ss]:*) host="${host#*:}" ;; esac
     [[ $host =~ $authority ]]; host="${BASH_REMATCH[2]}"
     # A public name can start with 127., so only a dotted address is loopback (#128).
     case "$host" in

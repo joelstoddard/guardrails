@@ -88,7 +88,10 @@ patterns do. A host is read from the URL's whole word, as a match for a dotted n
 stops before an `@`: `a.local@evil.com` goes to `evil.com`.
 
 **Scheme.** curl reads `HTTP://` and `Https://` as `http://` and `https://`, so the
-URL patterns match a scheme in any case.
+URL patterns match a scheme in any case. A WHATWG parser, as in xh, reads any number
+of slashes after `http:` or `https:`, none included, so `http:evil.com` and
+`http:/evil.com` go to `evil.com`. So a word that starts with the scheme and its colon
+is a URL, and its host follows the slashes.
 
 The 32-URL bound and the walk that finds URLs as `grep -o` does (#126) are as they
 were. What the new reading costs is in the timing section of
@@ -124,8 +127,6 @@ were. What the new reading costs is in the timing section of
 - **A scheme URL whose host is not a dotted name,** `localhost`, a `127.` address or
   bracketed, is not found: `http://10.0.0.5/x`, `http://intranet/x`,
   `http://$HOST/x`, `http://{localhost,evil.com}/x`.
-- **A WHATWG parser, as in `xh`, reads `http:evil.com` and `http:/evil.com`** as
-  `http://evil.com`.
 
 ## Failure mode if you change this
 
