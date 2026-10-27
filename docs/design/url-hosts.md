@@ -6,6 +6,31 @@ machine. Loopback (`localhost`, a dotted `127.` address, `[::1]`, `0.0.0.0`) and
 `.local` or `.localhost` names are development, not publishing. Every other host it
 finds is remote, and the write is refused.
 
+## Writes
+
+`_guardrails_http_writes` decides whether the command is a write. It reads the words
+as the client does, past redirects and with their quotes dropped, and each client by
+its own options:
+
+- **curl:** a body option (`-d` and the `--data` forms, `--json`, `-F`, `--form`,
+  `--form-string`, `-T`, `--upload-file`), or a write method after `-X` or
+  `--request`. A cluster of short options is read as curl reads it: flags, then one
+  that takes a value, attached or as the next word. So `-sd x` and `-XPOST` write, and
+  `-od` writes the response to the file `d`.
+- **wget:** `--post-data`, `--post-file`, `--body-data`, `--body-file`, a write method
+  after `--method`, or a wgetrc command run with `-e` that does the same. wget reads a
+  command's name in any case and without its `_` and `-`, so `-e Post-Data=x` writes.
+- **httpie and xh:** a write method as the first argument, a raw body (`--raw`), a
+  redirect of stdin, or a data item after the URL. An item sends data when its first
+  separator is `=`, `:=`, `@`, `=@` or `:=@`, not a `==` query or a `:` header. The
+  first argument is the method if it is letters only, as httpie and xh read it, so
+  `http example.com text=hi` is a POST.
+
+One regex over the segment read every client's flags as curl's, so it missed `-sd x`,
+`-dx`, a quoted `"-d"` and a redirect between `-X` and its method. It also read
+httpie's `-d` (`--download`) and `-F` (`--follow`), and wget's `-d` (`--debug`), as
+bodies.
+
 ## Problem
 
 The check read the command as written. The client reads the word that the shell

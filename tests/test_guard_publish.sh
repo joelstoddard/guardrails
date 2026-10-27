@@ -457,4 +457,15 @@ run_hook "$S" "$(jsonin 'gh pr comment --help')"
 assert_rc 0 "help for a publish verb allowed"
 assert_eq "$OUT" "" "help for a publish verb asks nothing"
 
+# Each HTTP client's body options are read as the client reads them, and httpie's data items send a POST.
+run_hook "$S" "$(jsonin 'curl -sd x https://api.example.com/hook')"
+assert_rc 2 "a body flag at the end of a cluster blocked"
+run_hook "$S" "$(jsonin 'curl -T notes.txt https://api.example.com/upload')"
+assert_rc 2 "an upload with curl -T blocked"
+run_hook "$S" "$(jsonin 'http example.com/api text=hi')"
+assert_rc 2 "an httpie data item with no method blocked"
+run_hook "$S" "$(jsonin 'http -d https://example.com/file.tgz')"
+assert_rc 0 "an httpie download allowed"
+assert_eq "$OUT" "" "an httpie download asks nothing"
+
 finish "guard-publish"

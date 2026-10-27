@@ -54,13 +54,90 @@ _guardrails_gh_api_writes() {
   return 1
 }
 
-# A regex fails on text holding an invalid byte in a UTF-8 locale, on macOS even before the byte, so such text is
-# read as bytes.
-_guardrails_http_has_body() {
-  local method='(^|[[:space:]])(-X|--request|--method)[[:space:]]*=?[[:space:]]*["'"'"']?(POST|PUT|PATCH|DELETE)'
-  local data='(^|[[:space:]])(-d|-F|--data|--data-raw|--data-binary|--data-urlencode|--json|--form|--upload-file|--post-data|--post-file)([[:space:]]|=)'
-  [[ $1 =~ ^.*$ ]] || local LC_ALL=C
-  [[ $1 =~ $method || $1 =~ $data ]]
+# How each client reads a cluster of short options: flags, then one that takes a value, attached or as the next word.
+_GUARDRAILS_CURL_SHORT='^-[aqfGgI0k46jlLMnNZ#pJORSis231BvVh:]*([AbCcDdEeFHKmoPQrTtUuwXxYyz])(.*)$'
+_GUARDRAILS_WGET_SHORT='^-[VhbdqvFcNS46xErkKmpHL]*([eoaiBtOTwQPUlARDIXn])(.*)$'
+_GUARDRAILS_HTTPIE_SHORT='^-[jfxhmbvSdcqFI46k]*([aAopPs])(.*)$'
+# An httpie or xh request item whose first separator sends data: =, :=, @, =@ or :=@, where == and : do not.
+_GUARDRAILS_HTTPIE_DATA='^[^:=@;]*(=[^=]|=$|:=|@)'
+
+# _guardrails_http_writes <client> <index> → rc 0 if the client sends a body or a write method, read from the caller's
+# toks from <index> as the shell passes them: past redirects, with quotes dropped, and a quoted word whole.
+_guardrails_http_writes() {
+  local base="$1" i="$2" w v j re p=0 u=1 opts=1 rc=1
+  case "$base" in curl) re="$_GUARDRAILS_CURL_SHORT" ;; wget) re="$_GUARDRAILS_WGET_SHORT" ;; *) re="$_GUARDRAILS_HTTPIE_SHORT" ;; esac
+  # A regex fails on text holding an invalid byte in a UTF-8 locale, on macOS even before the byte.
+  case "${toks[*]}" in *[![:ascii:]]*) local LC_ALL=C ;; esac
+  while [ "$i" -lt "${#toks[@]}" ]; do
+    w="${toks[$i]}"
+    # Only a word that starts with -, a quote, $ or \ can be an option, and curl and wget read nothing else here.
+    case "$base$w" in curl[!-\"\'\$\\]* | wget[!-\"\'\$\\]*) i=$((i + 1)); continue ;; esac
+    # httpie and xh send what they read on stdin as the body.
+    case "$w" in *[\<\>]*) _guardrails_skip_redirect && { case "$base/$w" in curl/* | wget/*) ;; */*\<*) rc=0 ;; esac; continue; } ;; esac
+    j="$i"; i=$((i + 1))
+    case "$w" in *[\"\'\\]*) _guardrails_unquote ;; esac
+    case "$opts$w" in
+      1--) opts="" ;;
+      1--*)
+        case "$base$w" in
+          curl--data | curl--data-ascii | curl--data-binary | curl--data-raw | curl--data-urlencode | curl--json | \
+            curl--form | curl--form-string | curl--upload-file | wget--post-data | wget--post-file | wget--body-data | \
+            wget--body-file | http*--raw | xh*--raw)
+            _guardrails_http_value; rc=0 ;;
+          curl--data=* | curl--data-*=* | curl--json=* | curl--form=* | curl--form-string=* | curl--upload-file=* | \
+            wget--post-*=* | wget--body-*=* | http*--raw=* | xh*--raw=*) rc=0 ;;
+          curl--request | wget--method) _guardrails_http_value; _guardrails_is_write_verb "$v" && rc=0 ;;
+          curl--request=* | wget--method=*) v="${w#--request=}"; _guardrails_is_write_verb "${v#--method=}" && rc=0 ;;
+          wget--execute) _guardrails_http_value; _guardrails_wgetrc_writes && rc=0 ;;
+          wget--execute=*) v="${w#--execute=}"; _guardrails_wgetrc_writes && rc=0 ;;
+          # httpie and xh count their arguments to tell the URL from the items, so an option's value is not one of them.
+          http*--auth | http*--auth-type | http*--output | http*--session | http*--session-read-only | http*--proxy | \
+            http*--print | http*--history-print | http*--style | http*--pretty | http*--timeout | http*--verify | \
+            http*--cert | http*--cert-key | http*--ssl | http*--default-scheme | xh*--auth | xh*--auth-type | \
+            xh*--output | xh*--session | xh*--session-read-only | xh*--proxy | xh*--print | xh*--history-print | \
+            xh*--style | xh*--pretty | xh*--timeout | xh*--verify | xh*--cert | xh*--cert-key | xh*--ssl | \
+            xh*--default-scheme | xh*--bearer | xh*--resolve)
+            _guardrails_http_value ;;
+        esac ;;
+      1-?*)
+        [[ $w =~ $re ]] || continue
+        v="${BASH_REMATCH[2]}"; w="${BASH_REMATCH[1]}"
+        [ -n "$v" ] || _guardrails_http_value
+        case "$base$w" in curl[dFT]) rc=0 ;; curlX) _guardrails_is_write_verb "$v" && rc=0 ;; wgete) _guardrails_wgetrc_writes && rc=0 ;; esac ;;
+      *)
+        # httpie and xh read their first argument as the method if it is letters only, then the URL, then the items.
+        case "$base" in curl | wget) continue ;; esac
+        # A quoted argument of several words is one item.
+        case "${toks[$j]}" in [\"\']?*[\"\']) ;; [\"\']*) _guardrails_skip_quoted "${toks[$j]}" ;; esac
+        p=$((p + 1))
+        if [ "$p" = 1 ] && [ "$i" = "$((j + 1))" ] && [[ $w =~ ^[A-Za-z]+$ ]]; then
+          u=2; _guardrails_is_write_verb "$w" && rc=0
+        elif [ "$p" -gt "$u" ] && [[ ${toks[$j]} =~ $_GUARDRAILS_HTTPIE_DATA ]]; then
+          rc=0
+        fi ;;
+    esac
+  done
+  return "$rc"
+}
+
+# _guardrails_http_value → the caller's v is an option's value: its next word past redirects, whole and unquoted.
+_guardrails_http_value() {
+  local w
+  while w="${toks[$i]:-}"; case "$w" in *[\<\>]*) _guardrails_skip_redirect ;; *) false ;; esac; do :; done
+  v="$w"; i=$((i + 1))
+  case "$w" in *[\"\'\\]*) _guardrails_skip_quoted "$w"; _guardrails_unquote && v="$w" ;; esac
+}
+
+# _guardrails_wgetrc_writes → rc 0 if the caller's v, a wgetrc command, sends a body or sets a write method. wget reads
+# a command's name in any case and without its _ and -, and a name too long to be one is cut.
+_guardrails_wgetrc_writes() {
+  local c="${v:0:64}"
+  c="${c,,}"; c="${c//[_-]/}"
+  case "$c" in
+    postdata* | postfile* | bodydata* | bodyfile*) return 0 ;;
+    method=*) _guardrails_is_write_verb "${c#method=}" ;;
+    *) return 1 ;;
+  esac
 }
 
 # True when the command names a host that is not this machine. Loopback and .local
@@ -172,7 +249,7 @@ _guardrails_publishes_as_user() {
     case "$base" in
       curl | wget | http | https | httpie | xh | xhs)
         # httpie takes the method as its first argument: `http POST url field=v`.
-        if _guardrails_http_has_body "$seg" || { _guardrails_is_write_verb "${lead[1]:-}" && [ -z "${piece[1]:-}" ]; }; then
+        if _guardrails_http_writes "$base" "$((at + 1))" || { _guardrails_is_write_verb "${lead[1]:-}" && [ -z "${piece[1]:-}" ]; }; then
           _guardrails_has_remote_target "$seg" && { printf 'HTTP write to a remote host'; return 0; }
         elif _guardrails_is_write_verb "${lead[1]:-}" && _guardrails_has_remote_target "$seg"; then
           : "${_GUARDRAILS_PUBLISH_ASK:=HTTP write to a remote host, read from ${piece[1]}, one piece of a quoted argument}"

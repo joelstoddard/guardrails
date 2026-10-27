@@ -102,7 +102,7 @@ allows 'gh >out api repos/o/r'                                  "a read behind a
 allows 'http >out GET api.example.com'                          "an httpie GET behind a redirect"
 # A method or api read from one piece of a quoted argument asks, as a verb read from one does (#131).
 asks   'gh "api repos/o/r" -f body=x'                           "api read from a piece of a quoted argument"
-asks   'http "POST api.example.com" text=hi'                    "a method read from a piece of a quoted argument"
+asks   'http "POST api.example.com"'                            "a method read from a piece of a quoted argument"
 
 # The checks run per segment without starting a process (#126). httpie uppercases its method as Python does, so the
 # long s in poſt makes a POST.
@@ -113,8 +113,6 @@ blocks "curl -d x $(printf 'http://localhost/ %.0s' {1..33})"   "past 32 URLs in
 allows "curl -d x $(printf 'http://localhost/ %.0s' {1..32})"   "32 local URLs in a segment are read"
 # In a UTF-8 locale a regex misses what follows an invalid byte, and on macOS what precedes it, so such text is bytes.
 utf8() { LC_ALL=C.UTF-8 bash -c '. "$1"; shift; "$@"' _ "$DIR/../plugins/building/lib/publish-cmd.sh" "$@"; }
-utf8 _guardrails_http_has_body $'curl -d=x\xff https://api.example.com/hook' || {
-  echo "  FAIL [a body flag before an invalid byte]: not found"; FAILS=1; }
 utf8 _guardrails_has_remote_target $'curl \xc3 -d x https://api.example.com/hook' || {
   echo "  FAIL [a remote URL after an invalid byte]: not found"; FAILS=1; }
 
@@ -814,5 +812,48 @@ allows 'gh pr comment 12 --help'                    "help as the first option af
 blocks 'gh pr comment 12 -b -h'                     "-h as the value of an option after a publish verb"
 blocks 'npm publish --tag -h'                       "-h after another option of npm publish"
 blocks 'gh pr comment --help; npm publish'          "help for one command hides no publish after it"
+
+# Each HTTP client's body and method options, read as the client reads them: attached, at the end of a cluster of flags,
+# quoted, or after a redirect. wget also takes a body from a wgetrc command.
+blocks 'curl -T notes.txt https://api.example.com/upload'        "curl -T uploads a file"
+blocks 'curl -d@body.json https://api.example.com/hook'          "a body file attached to -d"
+blocks 'curl -dx https://api.example.com/hook'                   "a body attached to -d"
+blocks 'curl --data-ascii x https://api.example.com/hook'        "--data-ascii"
+blocks 'curl -sd x https://api.example.com/hook'                 "-d at the end of a cluster of flags"
+blocks 'curl -sSXPOST https://api.example.com/hook'              "a method attached to -X in a cluster"
+blocks 'curl -X >out POST https://api.example.com/hook'          "a redirect between -X and its method"
+blocks 'curl -X POST>out https://api.example.com/hook'           "a redirect fused to the method"
+blocks 'curl "-d" x https://api.example.com/hook'                "a quoted body flag"
+blocks 'curl --request post https://api.example.com/hook'        "a method in lower case"
+blocks 'wget --body-data=x https://api.example.com/hook'         "wget --body-data"
+blocks 'wget --body-file x.json https://api.example.com/hook'    "wget --body-file with its file as the next word"
+blocks 'wget -e post_data=x https://api.example.com/hook'        "a wgetrc post_data command"
+blocks "wget --execute 'Post-Data=x' https://api.example.com/x"  "a wgetrc command in another case and spelling"
+blocks 'wget -qe method=PUT https://api.example.com/thing'       "a wgetrc method at the end of a cluster"
+blocks 'wget --execute=postfile=x https://api.example.com/hook'  "a wgetrc command attached to --execute"
+allows 'curl -od https://example.com/x'                          "a flag that takes a value ends a cluster"
+allows 'wget -e robots=off https://example.com/x'                "a wgetrc command that sends nothing"
+allows 'wget -d https://example.com/file.tgz'                    "wget's -d is --debug"
+# httpie and xh send their data items, a raw body or their stdin as a POST, and read the method after their options.
+blocks 'http example.com/api text=hi'                            "an httpie data item sends a POST"
+blocks 'http example.com/api field:=1'                           "an httpie JSON item"
+blocks 'http example.com/api @body.json'                         "an httpie file item"
+blocks 'xh example.com/api "text=hi there"'                      "a quoted xh data item"
+blocks 'http -a u:p example.com/api text=hi'                     "a data item after an option's value"
+blocks 'http example.com/api -- -v=x'                            "a data item that starts with - after the end of the options"
+blocks 'http -v PUT api.example.com/thing'                       "a method after an option"
+blocks 'http --raw hi api.example.com/hook'                      "an httpie raw body"
+blocks 'http api.example.com/hook < body.json'                   "httpie sends its stdin as the body"
+blocks 'http "POST api.example.com" text=hi'                     "a data item whatever a quoted argument holds"
+allows 'http example.com/api q==x'                               "an httpie query item is a read"
+allows 'http example.com/api Accept:application/json'            "an httpie header is a read"
+allows "http example.com/api 'Authorization: Bearer a='"         "a header whose value holds an = is a read"
+allows 'http example.com/?a=b'                                   "a URL that holds an = is not an item"
+allows 'xh example.com/api --auth user=x:pw'                     "a long option's value is not an item"
+allows 'http example.com/api -a user=x:pw'                       "a short option's value is not an item"
+allows 'http -d https://example.com/file.tgz'                    "httpie's -d is --download"
+allows 'xh -F https://example.com/x'                             "xh's -F is --follow"
+utf8 _guardrails_publishes_as_user $'curl -d=x\xff https://api.example.com/hook' >/dev/null || {
+  echo "  FAIL [a body flag before an invalid byte]: not read"; FAILS=1; }
 
 finish "publish-cmd"
