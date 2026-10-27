@@ -87,7 +87,7 @@ justfile targets, CI workflow jobs. Use its answer for this run, and offer to
 record it in the agent doc afterwards, following that doc's existing shape
 rather than inventing a format.
 
-An undocumented command is **NOT DOCUMENTED**, which is a finding in its own
+An undocumented command is `NOT DOCUMENTED`, which is a finding in its own
 right — not a silent skip.
 
 ### 3. Run the gates
@@ -112,7 +112,7 @@ follow that skill's protocol: write the design doc and leave the pointer.
 Report each rewrite as `file:line`, and give each design doc path.
 
 Those rewrites land in the working tree uncommitted, so they need a commit
-before the push — an uncommitted rewrite is **NOT READY**. The sweep is a
+before the push — an uncommitted rewrite is `NOT READY`. The sweep is a
 backstop: the `comment-warn` hook already warns as an edit writes an over-long
 comment, and this catches what was written outside it.
 
@@ -195,16 +195,16 @@ Overall: READY / NOT READY
 Gaps: n · Unknown: n · N/A: n
 ```
 
-**NOT READY** when a gate fails, when a comment rewrite is still uncommitted,
+`NOT READY` when a gate fails, when a comment rewrite is still uncommitted,
 or when a **diff-tier** category is **Missing**.
 
-A concern from the simplicity sweep or step 5 does not make the change NOT
-READY. Do not recommend the
+A concern from the simplicity sweep or step 5 does not make the change
+`NOT READY`. Do not recommend the
 push until the user has seen and acknowledged each one.
 
 Everything else is reported without blocking:
 
-- **NOT DOCUMENTED** is a finding, not a gate failure. A repo with no lint
+- `NOT DOCUMENTED` is a finding, not a gate failure. A repo with no lint
   tooling reports it on every run, and no single PR can fix that.
 - **Partial** is a real gap worth a follow-up, not a reason to hold the PR.
 - **unknown** never blocks. Blocking would punish the user for a token scope.
@@ -224,8 +224,8 @@ call: this skill does not create issues.
 
 | Condition | Behavior |
 |---|---|
-| No agent doc at repo root | Run the sub-agent discovery, report both commands as NOT DOCUMENTED, offer to write the section. |
-| Lint or Test undocumented | NOT DOCUMENTED is a finding. Do not silently skip it. |
+| No agent doc at repo root | Run the sub-agent discovery, report both commands as `NOT DOCUMENTED`, offer to write the section. |
+| Lint or Test undocumented | `NOT DOCUMENTED` is a finding. Do not silently skip it. |
 | Base cannot be resolved | Stop. Every diff-scoped check depends on it. |
 | A tool the checklist names is absent | unknown for that category, naming the tool. Never Missing. |
 | `gh` call refused for token scope | unknown. The one exception is a 404 from the branch-protection endpoint, which confirms no rule exists. |

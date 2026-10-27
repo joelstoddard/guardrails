@@ -31,8 +31,6 @@ TERMS=" EDIT CHANGE RELEASE STANDING PERSONAL WORK DONE PARTIAL BLOCKED MAJOR MI
 ACRONYMS=" ADR AI API ASD BCP CD CI CLI CPU CRAP DAST DRY GDPR ID ISP JSON KISS LSP MCP OK OS PR QA README RFC RPO RTO SAST SBOM SCA SPDX SRP TDD UAT UI URL UTC WCAG "
 for f in "$ROOT"/plugins/*/rules/*.md "$ROOT"/plugins/*/agents/*.md "$ROOT"/plugins/*/skills/*/SKILL.md; do
   [ -e "$f" ] || { echo "  FAIL: ${f#"$ROOT"/} matched no file"; FAILS=1; continue; }
-  # The open PR #144 edits these two. Lower-case them once it lands, and scan them again.
-  case "$f" in */personas/agents/sre.md | */building/skills/pre-pr-check/SKILL.md) continue ;; esac
   # Capitals in code are literal text (`HEAD`, `BREAKING CHANGE`), so code is blanked first, keeping line numbers.
   while IFS=: read -r line word; do
     case "$KEYWORDS$TERMS$ACRONYMS" in *" $word "*) continue ;; esac
