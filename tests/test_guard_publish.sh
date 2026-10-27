@@ -224,6 +224,10 @@ assert_eq "$OUT" "" "prose naming sudo and ssh asks nothing"
 # well past its timeout (#126). It must refuse it within half that budget.
 run_hook_within 5 "$S" "$(jsonin "$(printf 'curl -d x localhost\n%.0s' {1..1000})"$'\n''gh pr comment 1 -b x')"
 assert_rc 2 "a publish after 1,000 curl lines is refused in half the hook budget"
+# The HTTP reader keeps each word by its index, as a slice of a bash array walks the array from its start, so 30,000
+# quoted words in one write took the guard past its timeout.
+run_hook_within 5 "$S" "$(jsonin "curl -d x $(printf '"a" %.0s' {1..30000})http://localhost/; gh pr comment 1 -b x")"
+assert_rc 2 "a publish after a write of 30,000 quoted words is refused in half the hook budget"
 
 # A redirect before the command word is not the command (#109).
 run_hook "$S" "$(jsonin '> out gh pr create --fill')"

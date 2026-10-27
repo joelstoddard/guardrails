@@ -67,7 +67,7 @@ _GUARDRAILS_HTTPIE_DATA='^[^:=@;]*(=[^=]|=$|:=|@)'
 # never do, an output file, a header, a header dump or a cookie jar. Sets _GUARDRAILS_HTTP_VAR when the URL comes from a
 # variable or substitution.
 _guardrails_http_writes() {
-  local base="$1" i="$2" w v j d re p=0 u=1 opts=1 rc=1
+  local base="$1" i="$2" w v j k d re p=0 u=1 opts=1 rc=1
   local -a kept=("${toks[@]:0:i}")
   _GUARDRAILS_HTTP_VAR=""
   case "$base" in curl) re="$_GUARDRAILS_CURL_SHORT" ;; wget) re="$_GUARDRAILS_WGET_SHORT" ;; *) re="$_GUARDRAILS_HTTPIE_SHORT" ;; esac
@@ -141,7 +141,8 @@ _guardrails_http_writes() {
           fi ;;
         esac ;;
     esac
-    [ -n "$d" ] || kept+=("${toks[@]:j:i-j}")
+    # By index, as a slice of a bash array walks it from its start.
+    [ -n "$d" ] || for ((k = j; k < i; k++)); do kept+=("${toks[$k]}"); done
   done
   _GUARDRAILS_HTTP_WORDS="${kept[*]}"
   return "$rc"
