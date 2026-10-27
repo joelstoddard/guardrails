@@ -28,9 +28,10 @@ fi
 
 reason="$(_guardrails_publishes_as_user "$cmd")"; rc=$?
 [ "$rc" = 0 ] || {
-  # A verb read from one piece of a quoted argument may not be the command's (#131).
+  # A verb read from one piece of a quoted argument may not be the command's (#131), and a host may not be local.
   if [ "$rc" = 2 ]; then
-    ask="Could not be sure this does not publish as you: $reason. The shell passes that argument whole, so allow it only if nothing here posts under your name."
+    why="Allow it"; case "$reason" in *'quoted argument') why="The shell passes that argument whole, so allow it" ;; esac
+    ask="Could not be sure this does not publish as you: $reason. $why only if nothing here posts under your name."
   # Read line by line, as before quotes carried, it may still publish: a quote spanning lines
   # looks the same as shell syntax the carried split misreads, so only the human can tell.
   # That split cuts every quoted line into pieces, so a verb read from one asks nothing there.

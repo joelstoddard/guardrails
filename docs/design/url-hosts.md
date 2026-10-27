@@ -3,8 +3,33 @@
 `_guardrails_has_remote_target` in `plugins/building/lib/publish-cmd.sh` decides
 whether an HTTP write from `curl`, `wget`, httpie or `xh` goes to a host off this
 machine. Loopback (`localhost`, a dotted `127.` address, `[::1]`, `0.0.0.0`) and
-`.local` or `.localhost` names are development, not publishing. Every other host it
-finds is remote, and the write is refused.
+`.local` or `.localhost` names are development, not publishing. A host that may be
+either asks, and every other host it finds is remote, and the write is refused.
+
+## Hosts not proven local
+
+The user decided that a write to a host not proven local asks, and that a public name
+is refused, as before. `_guardrails_host_class` sorts each host into one of three:
+
+| Class | Hosts | Write |
+|---|---|---|
+| Proven local | `localhost`, a dotted `127.` address, `[::1]`, `0.0.0.0`, a `.local` or `.localhost` name | allowed |
+| Not proven local | a name with no dot (`api`, `intranet`), an address in 10/8, 172.16/12, 192.168/16, 169.254/16 or fc00::/7, a host from a variable | asks |
+| Remote | a name with a dot and a top-level name of letters, and every other host: a public address, another IPv6 address, `127.1`, a host with a character no name has | refused |
+
+A variable or a substitution before the URL's path, as in `http://$HOST/x`,
+`http://localhost:$PORT/x` or `http://$U@localhost/x`, can hold any host, an `@` or a
+`/`, so it makes even a local host not proven local. A public name before one stays
+remote: `http://evil.com:$PORT/x` is refused. A whole URL from a variable,
+`curl -d x "$WEBHOOK_URL"`, asks too. A word that starts with `$` or a backtick is read
+as one if it is not an option's value, so `-d "$BODY"` and `-u "$USER:$PASS"` ask
+nothing.
+
+The rest is as it was: a public address is remote, as the ranges above are the only
+private ones, and an address with no scheme is read as a host, as a dotted name is,
+asking only if it is private. Of a word with no scheme, only such an address asks: a
+name with no dot or a variable after userinfo there, as in `a.local@api`, was refused
+before and still is.
 
 ## Writes
 
@@ -124,9 +149,13 @@ were. What the new reading costs is in the timing section of
   `-d email=me@example.com` and a JSON body with an e-mail address have the same
   shape, and the guard does not parse curl's options, so it cannot tell a URL from
   data there.
-- **A scheme URL whose host is not a dotted name,** `localhost`, a `127.` address or
-  bracketed, is not found: `http://10.0.0.5/x`, `http://intranet/x`,
-  `http://$HOST/x`, `http://{localhost,evil.com}/x`.
+- **A URL with no scheme whose host has no dot,** as in `curl -d x api:8080/x`, is
+  not found, for the same reason: it looks like `-d x`.
+- **A scheme URL inside a word,** not at its start, is found only as before: after
+  userinfo, bracketed, at `localhost` or `127.`, or at a dotted name. The client takes
+  its URL from a whole word, so such a URL is data, as in `-d cb=http://intranet/x`.
+- **An address in 100.64/10,** which Tailscale and carrier-grade NAT use, is outside
+  the ranges the user named, so a write to one is refused as public.
 
 ## Failure mode if you change this
 
