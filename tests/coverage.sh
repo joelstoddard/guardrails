@@ -39,7 +39,9 @@ run_suites() { # every shell test under tracing, one log per test file; returns 
 
 run_one() { # <test file> <name>; reports the result, and a failing suite's output, which CI shows in place of a test run
   # stdin is /dev/null, so the awk shim, which reads stdin for both its runs, never waits on a terminal.
-  if COV_LOG="$OUT/logs/$2.log" COV_AWK="$awk_runs" BASH_ENV="$HERE/coverage/bash_env.sh" bash "$1" </dev/null >"$OUT/logs/$2.out" 2>&1; then
+  # GUARDRAILS_TIME_SCALE is mutate.sh's to set: here, as in CI, the wall-clock budgets hold at full strength.
+  if COV_LOG="$OUT/logs/$2.log" COV_AWK="$awk_runs" BASH_ENV="$HERE/coverage/bash_env.sh" GUARDRAILS_TIME_SCALE='' \
+    bash "$1" </dev/null >"$OUT/logs/$2.out" 2>&1; then
     echo "coverage: $2 passed"; return 0
   fi
   { echo "coverage: $2 failed, see $OUT/logs/$2.out"; cat "$OUT/logs/$2.out"; } >&2

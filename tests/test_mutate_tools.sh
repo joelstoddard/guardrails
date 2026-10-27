@@ -106,6 +106,12 @@ start_hung_run
 kill -TERM -- "-$RUN"; wait "$RUN" 2>/dev/null
 gone "$H.sh" term-orphan # the wrapper can kill the group after the run has exited
 
+echo "--- tests that run mutants get GUARDRAILS_TIME_SCALE=10 for their wall-clock budgets, and the traced run gets none"
+setup; fixture w 'echo w' "echo \"\${GUARDRAILS_TIME_SCALE:-unset}\" >>\"$D/seen\"; [[ \$(bash \"$RUNS/w.sh\") == w ]]"
+mut plugins/p/hooks/scripts/w.sh
+[[ $RC == 0 && $(status_of 1 delete) == killed ]] || fail time-scale-run "rc=$RC: $OUTPUT"
+assert_eq $'10\nunset' "$(sort -u "$D/seen")" "time-scale"
+
 echo "--- interrupting the run takes its workers and their hung test with it"
 setup; hang_fixture
 start_hung_run

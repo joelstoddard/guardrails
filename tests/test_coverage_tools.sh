@@ -194,6 +194,11 @@ echo "--- a measured file with no executable lines counts as fully covered"
 setup; echo '# only a comment' >"$D/plugins/p/lib/empty.sh"; cov --update
 assert_eq "0/0 100.0 NO" "$(row plugins/p/lib/empty.sh)" "empty"
 
+echo "--- the suites run with their wall-clock budgets unstretched, whatever GUARDRAILS_TIME_SCALE the caller has"
+setup; echo "echo \"\${GUARDRAILS_TIME_SCALE:-unset}\" >\"$D/seen\"" >>"$D/tests/test_f.sh"
+OUTPUT="$(GUARDRAILS_TIME_SCALE=10 COVERAGE_ROOT="$D" bash "$TOOL" --update 2>&1)"; RC=$?
+[[ $RC == 0 && $(cat "$D/seen") == unset ]] || fail time-scale-unset "rc=$RC, seen '$(cat "$D/seen")': $OUTPUT"
+
 echo "--- a failing test stops the run"
 setup; echo 'exit 1' >"$D/tests/test_broken.sh"; cov
 [[ $RC == 1 && $OUTPUT == *"test_broken.sh failed"* ]] || fail red-suite "rc=$RC: $OUTPUT"

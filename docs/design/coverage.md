@@ -342,10 +342,19 @@ Each restriction keeps a mutant a real fault and not noise:
   When it exits, for any reason, it sends TERM to each worker and to the wrapper of its
   test, then removes the scratch copies. It does not signal its process group, because
   the caller may share that group.
-- **Timeout.** Ten times the clean run of that test, with a floor of 2s. A timeout
-  exits 124 and counts as killed: a mutant that makes a test hang is detected. Exit 127
-  or 255 means the wrapper failed to start the test or to fork. That is not a kill: it
-  stops the run with exit 1.
+- **Wall-clock budgets.** One worker per CPU loads the machine, so a test with a time
+  budget, such as the 5 s ceilings in `test_guard_publish.sh`, could fail whatever the
+  mutant, and read as a kill. Each test that runs a mutant, and its clean run, gets
+  `GUARDRAILS_TIME_SCALE=10`, and a budget multiplies its ceiling by
+  `${GUARDRAILS_TIME_SCALE:-1}`, so budgets stretch as far as the hang limit below.
+  Mutation judges what a test asserts, not speed: a mutant that only makes a guard
+  slower is killed only past the hang limit. `coverage.sh` clears the variable, so the
+  suites, CI's only run of them, keep their budgets at full strength whatever the
+  caller's environment holds. A new test with a wall-clock check reads it the same way.
+- **Timeout.** Ten times the clean run of that test, the same `TIME_SCALE`, with a floor
+  of 2s. A timeout exits 124 and counts as killed: a mutant that makes a test hang is
+  detected. Exit 127 or 255 means the wrapper failed to start the test or to fork. That
+  is not a kill: it stops the run with exit 1.
 - **Red baseline.** `bash tests/coverage.sh --trace` runs first, and each selected test
   runs once unmutated. If one fails, the run stops with exit 1.
 
@@ -474,10 +483,10 @@ PR, whose base has the file.
 - **CI and macOS differ line by line.** A platform conditional is covered, and so
   mutated, on one branch only.
 - **Flaky tests.** A test that fails at random reads as a kill. The run does not retry.
-  The tests with a time budget, such as the 5 s checks in `test_guard_publish.sh`, can
-  fail under the load of one worker per CPU, whatever the mutant. A spurious kill only
-  raises a score, never lowers it, so floors set from the lowest run do not fail at
-  random; a floor set from a run with a spurious kill would.
+  A spurious kill only raises a score, never lowers it, so floors set from the lowest
+  run do not fail at random; a floor set from a run with a spurious kill would. The
+  wall-clock budgets were one cause, and are stretched for mutants (see
+  [Running the mutants](#running-the-mutants)).
 - **Code in another language.** The awk and jq programs in shell strings get no mutants.
 - **The scanner reads one line at a time.** It treats a `-n` or `-z` as a test operator
   when `[[`, `[ ` or `test ` comes earlier on the line, even outside the brackets. It

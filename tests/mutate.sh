@@ -10,6 +10,9 @@ OUT="$ROOT/.coverage"
 IGNORE="$ROOT/tests/mutants-ignore.tsv"
 FLOORS="$ROOT/tests/mutation-floor.tsv"
 SEP=$'\034'
+# Workers load every CPU, so a test's wall-clock budget is stretched as far as the hang limit below: a mutant is judged
+# on what the tests assert, not on speed. See docs/design/coverage.md
+TIME_SCALE=10
 
 die() { echo "mutate: $*" >&2; exit 2; }
 fail() { echo "mutate: $*" >&2; exit 1; }
@@ -102,7 +105,7 @@ run_test() { # <copy> <test name from hits.tsv> <seconds>: runs that test in the
     $SIG{$_} = sub { kill "KILL", -$p; exit 1 } for qw(HUP INT TERM);
     alarm $t; waitpid $p, 0; my $s = $?; alarm 0; kill "KILL", -$p;
     exit($s & 127 ? 128 + ($s & 127) : $s >> 8);
-  ' "$3" env COV_LOG= bash "$1/tests/$2" </dev/null >/dev/null 2>&1
+  ' "$3" env COV_LOG= GUARDRAILS_TIME_SCALE="$TIME_SCALE" bash "$1/tests/$2" </dev/null >/dev/null 2>&1
 }
 
 baseline() { # <copy>: times each test the plan needs, unmutated; a red test stops the run
@@ -110,8 +113,8 @@ baseline() { # <copy>: times each test the plan needs, unmutated; a red test sto
   while IFS= read -r t; do
     start=$EPOCHREALTIME
     run_test "$1" "$t" 600 || fail "baseline red: $t fails without any mutant"
-    # Ten times the clean run, and at least 2s, before a mutant counts as hanging.
-    limit[$t]=$(LC_ALL=C awk -v a="$start" -v b="$EPOCHREALTIME" 'BEGIN { s = int((b - a) * 10) + 1; print (s < 2 ? 2 : s) }')
+    # TIME_SCALE times the clean run, and at least 2s, before a mutant counts as hanging.
+    limit[$t]=$(LC_ALL=C awk -v a="$start" -v b="$EPOCHREALTIME" -v k="$TIME_SCALE" 'BEGIN { s = int((b - a) * k) + 1; print (s < 2 ? 2 : s) }')
   done < <(awk -v sep="$SEP" 'NR == FNR { split($0, p, sep); want[p[1] "\t" p[2]] = 1; next }
     { split($0, h, "\t"); if ((h[2] "\t" h[3]) in want) print h[1] }' "$OUT/plan" "$OUT/hits.tsv" | sort -u)
 }
