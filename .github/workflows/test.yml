@@ -43,7 +43,7 @@ jobs:
         run: |
           git fetch --depth=1 origin "$GITHUB_BASE_REF"
           git show FETCH_HEAD:tests/coverage-floor.tsv > "$RUNNER_TEMP/base-floor.tsv"
-          bash tests/coverage.sh --ratchet "$RUNNER_TEMP/base-floor.tsv"
+          bash tests/coverage.sh --base FETCH_HEAD --ratchet "$RUNNER_TEMP/base-floor.tsv"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: '3.12'
@@ -51,7 +51,27 @@ jobs:
         run: |
           pip install -r tests/requirements.txt
           npm install -g @anthropic-ai/claude-code@2.1.289
-      - name: Run tests
-        run: bash tests/run.sh
-      - name: Check coverage floors
+      # coverage.sh counts the awk programs' statements under gawk. Installing gawk makes it the default awk, so the
+      # default goes back, and the suites still test the awk the runner had. See docs/design/coverage.md
+      - name: Install gawk
+        run: |
+          if ! command -v gawk >/dev/null; then
+            awk=$(readlink -f "$(command -v awk)")
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq gawk
+            sudo update-alternatives --set awk "$awk"
+          fi
+          readlink -f "$(command -v awk)"
+      # The shell suites run once, under line tracing, in place of tests/run.sh: the step reports each suite, shows
+      # the output of one that fails, and fails with it. See docs/design/coverage.md
+      - name: Run the shell suites and check coverage floors
         run: bash tests/coverage.sh
+      - name: Run the Python tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      # Mutates only the hook scripts and libs the PR changes: every file takes about 20 minutes on 14 cores, so the
+      # weekly mutation workflow runs them all. See docs/design/coverage.md
+      - name: Check mutation floors of the files this PR changes
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "$GITHUB_BASE_REF"
+          bash tests/mutate.sh --changed FETCH_HEAD

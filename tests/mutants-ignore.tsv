@@ -1,0 +1,6 @@
+# Mutants that cannot change behaviour, so no test can kill them. See docs/design/coverage.md
+# file<TAB>operator<TAB>original line, trimmed<TAB>reason (required)
+plugins/building/hooks/scripts/comment-warn.sh	delete	exit 0	The last line of the script, after jq -n with a fixed filter, which exits 0, so the script exits 0 with or without it.
+plugins/building/hooks/scripts/suppression-warn.sh	delete	exit 0	The last line of the script, after jq -n with a fixed filter, which exits 0, so the script exits 0 with or without it.
+plugins/personas/hooks/scripts/persona-report.sh	delete	exit 0	The last line of the script, after jq -n with a fixed filter, which exits 0, so the script exits 0 with or without it.
+plugins/recording/hooks/scripts/lessons-nudge.sh	delete	exit 0	The last line of the script, after an echo, which exits 0, so the script exits 0 with or without it.

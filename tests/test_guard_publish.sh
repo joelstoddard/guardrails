@@ -154,7 +154,7 @@ run_hook_within() {  # <seconds> <script> <json> → as run_hook, with RC 124 if
   out="$(scratch_file)"; err="$(scratch_file)"
   # Its own process group, so a kill also stops the subshells it runs in.
   set -m; bash "$2" <<<"$3" >"$out" 2>"$err" & pid=$!; set +m
-  while kill -0 "$pid" 2>/dev/null && [ "$t" -lt "$(($1 * 10))" ]; do sleep 0.1; t=$((t + 1)); done
+  while kill -0 "$pid" 2>/dev/null && [ "$t" -lt "$(($1 * 10 * ${GUARDRAILS_TIME_SCALE:-1}))" ]; do sleep 0.1; t=$((t + 1)); done
   if kill -0 "$pid" 2>/dev/null; then kill -- "-$pid"; wait "$pid" 2>/dev/null; RC=124; else wait "$pid"; RC=$?; fi
   OUT="$(cat "$out")"; ERR="$(cat "$err")"
 }

@@ -23,11 +23,13 @@ EOF
 EOF
 }
 cov() { OUTPUT="$(COVERAGE_ROOT="$D" bash "$TOOL" "$@" 2>&1)"; RC=$?; }
-row() { printf '%s\n' "$OUTPUT" | awk -v f="$1" '$NF == f { print $(NF-3), $(NF-2), $1 }'; } # → "hit/exec pct status"
+row() { printf '%s\n' "$OUTPUT" | awk -v f="$1" '$NF == f { print $(NF-4), $(NF-3), $1 }'; } # → "hit/exec pct status"
 floors() { cat "$D/tests/coverage-floor.tsv"; }
 
 # On a bash older than 4.1 every case below would fail with an empty row, so stop with the tool's reason.
 why="$(bash "$TOOL" --lines /dev/null 2>&1)" || { fail "the bash on PATH runs the tool" "$why"; finish "coverage-tools"; }
+# A report run counts awk statements with gawk, and stops without it.
+command -v gawk >/dev/null || { fail "gawk is on PATH" "coverage.sh needs it for a report run"; finish "coverage-tools"; }
 
 echo "--- a branch the test never takes counts against coverage"
 setup; cov --update
@@ -139,6 +141,41 @@ EOF
 cov --update
 assert_eq "2/3 66.6 NO" "$(row "$S")" "span-uncovered"
 
+echo "--- a hit inside a multi-line \$( ), <( ) or >( ) is credited to the command's counted line"
+setup
+cat >"$D/$S" <<'EOF'
+x=$(
+  echo a
+)
+y=$(cat <<BODY
+hi
+BODY
+)
+cat <(
+  echo p
+) >/dev/null
+echo "$x$y"
+EOF
+echo 'bash "$(dirname "$0")/../plugins/p/hooks/scripts/f.sh" >/dev/null' >"$D/tests/test_f.sh"
+cov --update
+assert_eq "4/4 100.0 NO" "$(row "$S")" "substitution-credit"
+assert_eq "1 4 8 11 " "$(awk -F'\t' -v p="$S" '$2 == p { print $3 }' "$D/.coverage/hits.tsv" | sort -n | tr '\n' ' ')" "substitution-hits"
+
+echo "--- a multi-line \$( ) the test never reaches stays uncovered, and a ( inside it does not end it"
+setup
+cat >"$D/$S" <<'EOF'
+if [[ ${1:-} == yes ]]; then
+  echo "took yes"
+else
+  x=$(
+    (echo no)
+    echo "$(echo nested)"
+  )
+fi
+EOF
+cov --update
+assert_eq "2/3 66.6 NO" "$(row "$S")" "substitution-uncovered"
+
 echo "--- a hit on the continuation of a line that does not count credits no earlier command"
 setup
 cat >"$D/$S" <<'EOF'
@@ -157,9 +194,24 @@ echo "--- a measured file with no executable lines counts as fully covered"
 setup; echo '# only a comment' >"$D/plugins/p/lib/empty.sh"; cov --update
 assert_eq "0/0 100.0 NO" "$(row plugins/p/lib/empty.sh)" "empty"
 
+echo "--- the suites run with their wall-clock budgets unstretched, whatever GUARDRAILS_TIME_SCALE the caller has"
+setup; echo "echo \"\${GUARDRAILS_TIME_SCALE:-unset}\" >\"$D/seen\"" >>"$D/tests/test_f.sh"
+OUTPUT="$(GUARDRAILS_TIME_SCALE=10 COVERAGE_ROOT="$D" bash "$TOOL" --update 2>&1)"; RC=$?
+[[ $RC == 0 && $(cat "$D/seen") == unset ]] || fail time-scale-unset "rc=$RC, seen '$(cat "$D/seen")': $OUTPUT"
+
+echo "--- each suite runs from the repo's root, whatever the caller's directory"
+setup; echo '[[ $(pwd -P) == "$(cd "$(dirname "$0")/.." && pwd -P)" ]]' >>"$D/tests/test_f.sh"
+OUTPUT="$(cd "$(scratch_dir)" && COVERAGE_ROOT="$D" bash "$TOOL" --update 2>&1)"; RC=$?
+[[ $RC == 0 && $(row "$S") == "2/3 66.6 NO" ]] || fail suites-from-root "rc=$RC: $OUTPUT"
+
 echo "--- a failing test stops the run"
 setup; echo 'exit 1' >"$D/tests/test_broken.sh"; cov
 [[ $RC == 1 && $OUTPUT == *"test_broken.sh failed"* ]] || fail red-suite "rc=$RC: $OUTPUT"
+
+echo "--- the run reports each suite, with the output of one that fails, so CI needs no separate test run"
+setup; printf 'echo "  FAIL [why]: broken"\nexit 1\n' >"$D/tests/test_broken.sh"; cov
+[[ $OUTPUT == *"FAIL [why]: broken"* ]] || fail red-suite-output "rc=$RC: $OUTPUT"
+[[ $OUTPUT == *"coverage: test_f.sh passed"* ]] || fail green-suite-reported "rc=$RC: $OUTPUT"
 
 echo "--- a measured file without a floor fails"
 setup; cov
@@ -169,7 +221,7 @@ echo "--- --update records floors for the hook scripts and libs only, after whic
 setup; mkdir -p "$D/plugins/p/bin"; echo 'echo unmeasured' >"$D/plugins/p/bin/other.sh"
 cov --update; cov
 [[ $RC == 0 ]] || fail update "rc=$RC: $OUTPUT"
-assert_eq "$S"$'\t66.6\nTOTAL\t66.6' "$(floors)" "update writes exactly the measured floors"
+assert_eq "$S"$'\t66.6\t1\nTOTAL\t66.6\t1' "$(floors)" "update writes exactly the measured floors"
 
 echo "--- coverage below its floor fails, and --update never lowers the floor"
 setup; printf '%s\t90.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov
@@ -211,6 +263,39 @@ printf '%s\t66.6\nplugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/cover
 [[ $RC == 1 && $OUTPUT == *"floor lowered: plugins/p/lib/m.sh -> plugins/q/lib/m.sh 50.0 -> 40.0"* ]] ||
   fail ratchet-moved-lowered "rc=$RC: $OUTPUT"
 
+commit_all() { git -C "$D" add -A && git -C "$D" -c user.email=t@t -c user.name=t commit -qm "$1"; }
+
+echo "--- with --base, the ratchet follows a floor whose file git saw renamed, and fails if it fell"
+setup; git -C "$D" init -q; echo 'echo old' >"$D/plugins/p/lib/old.sh"; commit_all seed
+git -C "$D" mv plugins/p/lib/old.sh plugins/p/lib/new.sh
+printf '%s\t66.6\nplugins/p/lib/old.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\nplugins/p/lib/new.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+cov --base HEAD --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor lowered: plugins/p/lib/old.sh -> plugins/p/lib/new.sh 50.0 -> 40.0"* ]] ||
+  fail ratchet-renamed-lowered "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nplugins/p/lib/new.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+cov --base HEAD --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-renamed "rc=$RC: $OUTPUT"
+
+echo "--- with --base, a floor whose file git saw deleted may go, though another file has its name"
+setup; git -C "$D" init -q; mkdir -p "$D/plugins/q/lib"
+echo 'echo p' >"$D/plugins/p/lib/m.sh"; echo 'echo q' >"$D/plugins/q/lib/m.sh"; commit_all seed
+git -C "$D" rm -q plugins/p/lib/m.sh
+printf '%s\t66.6\nplugins/p/lib/m.sh\t50.0\nplugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\nplugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
+cov --base HEAD --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-deleted-namesake "rc=$RC: $OUTPUT"
+
+echo "--- with --base, the ratchet fails when git cannot diff against the revision"
+setup; git -C "$D" init -q; commit_all seed
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" | tee "$D/base.tsv" >"$D/tests/coverage-floor.tsv"
+cov --base no-such-revision --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"cannot diff against no-such-revision"* ]] || fail ratchet-bad-base "rc=$RC: $OUTPUT"
+
+echo "--- --base goes only with --ratchet"
+setup; cov --base HEAD --update
+[[ $RC == 2 ]] || fail base-without-ratchet "rc=$RC: $OUTPUT"
+
 echo "--- the ratchet fails on a vanished floor when it cannot list the repo's files to look for it"
 setup
 printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
@@ -222,6 +307,14 @@ setup; printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov
 [[ $RC == 1 ]] || fail ratchet-no-base "rc=$RC: $OUTPUT"
 : >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 1 && $OUTPUT == *"base has no TOTAL floor"* ]] || fail ratchet-empty-base "rc=$RC: $OUTPUT"
+
+echo "--- a bash -c string's trace lines, which name no file, are skipped, even from the repo's root"
+setup
+cat >"$D/tests/test_f.sh" <<'EOF'
+bash -c 'out=$(bash "$1" yes); [[ $out == "took yes" ]]' _ "$(dirname "$0")/../plugins/p/hooks/scripts/f.sh"
+EOF
+OUTPUT="$(cd "$D" && COVERAGE_ROOT="$D" bash "$TOOL" --update 2>&1)"; RC=$?
+[[ $RC == 0 && $(row "$S") == "2/3 66.6 NO" ]] || fail nested-bash-c "rc=$RC: $OUTPUT"
 
 echo "--- a file run through a symlinked path is credited to its real path"
 setup; ln -s "$D/plugins/p/hooks/scripts" "$D/alias"
@@ -261,12 +354,139 @@ cov --update
 
 echo "--- --update raises an existing floor to the current value"
 setup; printf '%s\t50.0\nTOTAL\t50.0\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --update
-assert_eq "$S"$'\t66.6\nTOTAL\t66.6' "$(floors)" "raise"
+assert_eq "$S"$'\t66.6\t1\nTOTAL\t66.6\t1' "$(floors)" "raise"
 
 echo "--- the ratchet fails on a last base row with no trailing newline"
 setup
 printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"
 printf '%s\t66.6\nTOTAL\t99.9' "$S" >"$D/base.tsv"; cov --ratchet "$D/base.tsv"
 [[ $RC == 1 && $OUTPUT == *"floor lowered: TOTAL"* ]] || fail ratchet-no-newline "rc=$RC: $OUTPUT"
+
+G=plugins/p/lib/g.sh
+total_setup() { # → the fixture plus a fully covered lib: 6 of 7 lines covered, so TOTAL 85.7 with 1 uncovered line
+  setup
+  printf 'echo 1\necho 2\necho 3\necho 4\n' >"$D/$G"
+  echo 'bash "$(dirname "$0")/../plugins/p/lib/g.sh" >/dev/null' >"$D/tests/test_g.sh"
+  printf '%s\t66.6\t1\n%s\t100.0\t0\nTOTAL\t85.7\t1\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"
+}
+
+echo "--- deleting covered lines from a fully covered file passes, though TOTAL falls, while no uncovered line is added"
+total_setup; printf 'echo 1\necho 2\n' >"$D/$G"; cov
+[[ $RC == 0 && $(row TOTAL) == "4/5 80.0 ok" ]] || fail total-deleted-covered "rc=$RC: $OUTPUT"
+
+echo "--- deleting a covered line from a partly covered file passes, though its percentage falls"
+setup
+cat >"$D/$S" <<'EOF'
+if [[ ${1:-} == yes ]]; then
+  echo "took yes"
+  echo "also yes"
+else
+  echo "took no"
+fi
+EOF
+printf '%s\t75.0\t1\nTOTAL\t75.0\t1\n' "$S" >"$D/tests/coverage-floor.tsv"
+grep -v 'also yes' "$D/$S" >"$D/kept" && mv "$D/kept" "$D/$S"; cov
+[[ $RC == 0 && $(row "$S") == "2/3 66.6 ok" ]] || fail file-deleted-covered "rc=$RC: $OUTPUT"
+
+echo "--- an added uncovered line fails a percentage that fell"
+total_setup; printf 'echo 1\necho 2\nexit 0\necho never # an uncovered line\n' >"$D/$G"; cov
+[[ $RC == 1 && $(row TOTAL) == "5/7 71.4 LOW" && $(row "$G") == "3/4 75.0 LOW" ]] || fail added-uncovered "rc=$RC: $OUTPUT"
+
+echo "--- a row at its floor passes whatever its ceiling, and one with no ceiling needs its floor"
+total_setup; printf '%s\t66.6\t0\n%s\t100.0\t0\nTOTAL\t85.7\t0\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov
+[[ $RC == 0 && $(row TOTAL) == "6/7 85.7 ok" ]] || fail at-floor "rc=$RC: $OUTPUT"
+printf '%s\t70.0\n%s\t100.0\t0\nTOTAL\t85.7\t1\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov
+[[ $RC == 1 && $(row "$S") == "2/3 66.6 LOW" ]] || fail no-ceiling-low "rc=$RC: $OUTPUT"
+
+echo "--- --update lowers each ceiling to the uncovered lines there are, and never raises one"
+total_setup; printf '%s\t66.6\t5\n%s\t100.0\nTOTAL\t85.7\t5\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov --update
+assert_eq "$S"$'\t66.6\t1\n'"$G"$'\t100.0\t0\nTOTAL\t85.7\t1' "$(floors)" "ceilings lowered"
+printf 'echo 1\nexit 0\necho never\necho never\n' >"$D/$G"; cov --update
+[[ $RC == 1 ]] || fail ceiling-not-raised-rc "rc=$RC: $OUTPUT"
+assert_eq "$S"$'\t66.6\t1\n'"$G"$'\t100.0\t0\nTOTAL\t85.7\t1' "$(floors)" "ceilings not raised"
+
+echo "--- a ceiling that is not a whole number fails the check and leaves --update writing nothing"
+total_setup; printf '%s\t66.6\t1.0\n%s\t100.0\t0\nTOTAL\t85.7\t1\n' "$S" "$G" >"$D/tests/coverage-floor.tsv"; cov
+[[ $RC == 1 && $(row "$S") == "2/3 66.6 BAD" ]] || fail ceiling-malformed "rc=$RC: $OUTPUT"
+cov --update
+[[ $RC == 1 && $(floors) == "$S"$'\t66.6\t1.0\n'* ]] || fail ceiling-malformed-update "rc=$RC, floors '$(floors)'"
+
+echo "--- the ratchet fails when a ceiling rises, goes or is malformed, and compares none a base lacks"
+setup
+printf '%s\t66.6\t2\nTOTAL\t66.6\t2\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\t3\nTOTAL\t66.6\t2\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"ceiling raised: $S 2 -> 3"* ]] || fail ratchet-ceiling-raised "rc=$RC: $OUTPUT"
+printf '%s\t66.6\t1\nTOTAL\t66.6\t2\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-ceiling-lowered "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nTOTAL\t66.6\t2\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"ceiling removed: $S (was 2)"* ]] || fail ratchet-ceiling-removed "rc=$RC: $OUTPUT"
+printf '%s\t66.6\tn/a\nTOTAL\t66.6\t2\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor invalid: $S"* ]] || fail ratchet-ceiling-invalid "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\t9\nTOTAL\t66.6\t9\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-ceiling-new "rc=$RC: $OUTPUT"
+
+echo "--- the ratchet compares the floor file it is given, such as the mutation floors"
+setup
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" | tee "$D/base.tsv" >"$D/tests/coverage-floor.tsv"
+printf '%s\t40.0\nTOTAL\t66.6\n' "$S" >"$D/other.tsv"; cov --ratchet "$D/base.tsv" "$D/other.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor lowered: $S 66.6 -> 40.0"* ]] || fail ratchet-other-file "rc=$RC: $OUTPUT"
+
+echo "--- --files lists the measured files, and --trace writes hits.tsv without a report"
+setup; mkdir -p "$D/plugins/p/bin"; echo 'echo unmeasured' >"$D/plugins/p/bin/other.sh"; cov --files
+assert_eq "$S" "$OUTPUT" "files"
+cov --trace
+[[ $RC == 0 && $OUTPUT != *TOTAL* && $(grep -F "$S" "$D/.coverage/hits.tsv" | cut -f2-) == "$S"$'\t2\n'"$S"$'\t3' ]] ||
+  fail trace "rc=$RC: $OUTPUT"
+
+echo "--- an awk program in a measured file is measured by statement under gawk, and keeps its output and status"
+setup
+cat >"$D/plugins/p/lib/a.sh" <<'EOF'
+pick() { printf '%s\n' "$1" | awk '{ if ($0 == "a") print "A"; else print "B" }'; }
+three() { awk 'END { exit 3 }' </dev/null; }
+EOF
+cat >"$D/tests/test_a.sh" <<'EOF'
+. "$(dirname "$0")/../plugins/p/lib/a.sh"
+[[ $(pick a) == A ]] || exit 1
+three; [[ $? == 3 ]]
+EOF
+cov --update
+[[ $RC == 0 && $(row awk:plugins/p/lib/a.sh) == "3/4 75.0 NO" ]] || fail awk-statements "rc=$RC: $OUTPUT"
+[[ $(cat "$D/.coverage/awk-missed.tsv") == $'plugins/p/lib/a.sh\tprint "B"' ]] || fail awk-missed "$(cat "$D/.coverage/awk-missed.tsv")"
+[[ $(row awk:tests/test_a.sh) == "" ]] || fail awk-tests-unmeasured "$OUTPUT"
+
+echo "--- both runs of an awk call read a <( ) operand and stdin in full, and stdin it does not read stays the caller's"
+setup
+cat >"$D/plugins/p/lib/a.sh" <<'EOF'
+count() { awk 'END { print NR }' <(printf 'x\ny\n') -; }
+first() { awk '{ print; exit }' "$1"; cat; }
+EOF
+cat >"$D/tests/test_a.sh" <<'EOF'
+. "$(dirname "$0")/../plugins/p/lib/a.sh"
+[[ $(printf 'z\n' | count) == 3 ]] || exit 1
+printf 'one\ntwo\n' >"$(dirname "$0")/lines"
+[[ $(printf 'kept\n' | first "$(dirname "$0")/lines") == $'one\nkept' ]]
+EOF
+cov --update
+[[ $RC == 0 && $(row awk:plugins/p/lib/a.sh) == "3/3 100.0 NO" ]] || fail awk-operands "rc=$RC: $OUTPUT"
+
+echo "--- an awk run gawk leaves no profile of stops the run, so it can never read as nothing to measure"
+setup; mkdir "$D/bin"; printf '#!/bin/sh\nexit 0\n' >"$D/bin/gawk"; chmod +x "$D/bin/gawk"
+echo 'printf "a\n" | awk "{ print }"' >"$D/plugins/p/lib/a.sh"
+echo 'bash "$(dirname "$0")/../plugins/p/lib/a.sh" >/dev/null' >"$D/tests/test_a.sh"
+OUTPUT="$(PATH="$D/bin:$PATH" COVERAGE_ROOT="$D" bash "$TOOL" --update 2>&1)"; RC=$?
+[[ $RC == 1 && $OUTPUT == *"gawk left no profile of an awk run from plugins/p/lib/a.sh"* ]] || fail awk-no-profile "rc=$RC: $OUTPUT"
+
+echo "--- the ratchet follows an awk floor to its file's new path, and lets it go once the file runs no awk"
+setup; git -C "$D" init -q; mkdir -p "$D/plugins/q/lib"; echo 'printf x | awk 1' >"$D/plugins/q/lib/m.sh"
+printf '%s\t66.6\nawk:plugins/p/lib/m.sh\t50.0\nTOTAL\t66.6\n' "$S" >"$D/base.tsv"
+printf '%s\t66.6\nawk:plugins/q/lib/m.sh\t40.0\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor lowered: awk:plugins/p/lib/m.sh -> awk:plugins/q/lib/m.sh 50.0 -> 40.0"* ]] ||
+  fail ratchet-awk-moved "rc=$RC: $OUTPUT"
+printf '%s\t66.6\nawk:%s\t50.0\nTOTAL\t66.6\n' "$S" "$S" >"$D/base.tsv"
+printf '%s\t66.6\nTOTAL\t66.6\n' "$S" >"$D/tests/coverage-floor.tsv"; cov --ratchet "$D/base.tsv"
+[[ $RC == 0 ]] || fail ratchet-awk-gone "rc=$RC: $OUTPUT"
+echo 'printf x | awk 1' >>"$D/$S"; cov --ratchet "$D/base.tsv"
+[[ $RC == 1 && $OUTPUT == *"floor removed: awk:$S (was 50.0)"* ]] || fail ratchet-awk-removed "rc=$RC: $OUTPUT"
 
 finish "coverage-tools"
