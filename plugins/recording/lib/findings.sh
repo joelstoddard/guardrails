@@ -40,25 +40,33 @@ _guardrails_findings() {
       return s ~ /^((none|nothing)( found| to report)?|no findings( outside scope)?|n\/a)[.!]?$/ ||
         s ~ /^(none|nothing|n\/a)[[:space:]]+(-|–|—)[[:space:]]/
     }
-    { after_blank = blank; blank = ($0 ~ /^[[:space:]]*$/) }
+    { after_blank = blank; blank = ($0 ~ /^[[:space:]]*$/); after_row = row; row = ($0 ~ /^[[:space:]]*\|/) }
+    # Inside the section a bold-only line (**Also:**) labels the items below it, so it starts a new
+    # list rather than ending the section.
     $0 ~ ENVIRON["H"] {
-      flush(); insec = (tolower($0) ~ /findings outside scope/); base = -1; next
+      flush(); base = -1
+      if (!insec || $0 ~ /^[[:space:]]*#/) insec = (tolower($0) ~ /findings outside scope/)
+      next
     }
     !insec { next }
     # The first item sets the top level; a deeper bullet continues the item above it.
-    /^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+/ {
+    # A table row (one with a leading pipe) is an item too, its cells joined; the row above a
+    # delimiter row is the header.
+    /^[[:space:]]*(([-*+]|[0-9]+[.)])[[:space:]]+|\|)/ {
       match($0, /^[[:space:]]*/)
       if (base < 0) base = RLENGTH
       if (RLENGTH <= base) {
-        flush(); line = $0; sub(/^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+/, "", line)
+        if ($0 ~ /^[[:space:]]*\|[-:| ]*-[-:| ]*$/) { if (after_row) item = ""; next }
+        flush(); line = $0
+        if (!sub(/^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+/, "", line)) { gsub(/[[:space:]]*\|[[:space:]]*/, " ", line); gsub(/^ +| +$/, "", line) }
         if (!empty(line)) item = line
         next
       }
     }
     /^[[:space:]]+[^[:space:]]/ { if (item != "") { l = $0; sub(/^[[:space:]]+/, "", l); item = item " " l }; next }
     blank { next }
-    # An unclosed fence, a quote, a table, a comment OR a rule stays in the section, so it cannot hide what follows.
-    /^[[:space:]]*(```|~~~|>|\||<!--|---)/ { flush(); next }
+    # An unclosed fence, a quote, a comment OR a rule stays in the section, so it cannot hide what follows.
+    /^[[:space:]]*(```|~~~|>|<!--|---)/ { flush(); next }
     # A plain line straight after an item continues it. After a blank line it ends the section,
     # so a later list (Next steps) is not read as findings.
     !after_blank && item != "" { item = item " " $0; next }

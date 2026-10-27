@@ -44,7 +44,46 @@ OUT="$(_guardrails_findings '### Findings outside scope
 ---
 2. Retries are unbounded')"
 assert_eq "Cache never expires
+a table
 Retries are unbounded" "$OUT" "quotes, tables, comments and rules between items keep the section open"
+
+# #154: a findings table is read row by row, and the row above the delimiter row is its header.
+OUT="$(_guardrails_findings '### Findings outside scope
+| Finding | Issue |
+|---|:---:|
+| Cache never expires | #12 |
+| Retries are unbounded | |
+| | |
+| None | |
+
+Next: run these.
+1. `make clean`')"
+assert_eq "Cache never expires #12
+Retries are unbounded" "$OUT" "a findings table: each body row is a finding, and a paragraph break still ends it"
+OUT="$(_guardrails_untracked '**Findings outside scope:**
+| Finding | Issue |
+| --- | --- |
+| Cache never expires | https://github.com/o/r/issues/12 |
+| Retries are unbounded | |')"
+assert_eq "Retries are unbounded" "$OUT" "a row tracks by the reference in its last cell"
+
+# #154: a bold-only line inside the section labels the items below it; it does not end the section.
+OUT="$(_guardrails_findings '### Findings outside scope
+- Cache never expires #12
+
+**Also:**
+- Retries are unbounded')"
+assert_eq "Cache never expires #12
+Retries are unbounded" "$OUT" "a bold sub-label keeps the section open"
+OUT="$(_guardrails_findings '### Findings outside scope
+- Cache never expires #12
+**Found late:**
+These came up while testing:
+  - Retries are unbounded
+### Questions for the user
+- none yet')"
+assert_eq "Cache never expires #12
+Retries are unbounded" "$OUT" "a sub-label starts its own list: an intro line and a new indent, then a heading ends it"
 
 OUT="$(_guardrails_findings '### Findings outside scope
 None.')"

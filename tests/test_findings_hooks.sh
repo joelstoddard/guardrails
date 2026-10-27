@@ -29,6 +29,18 @@ run_hook "$GATE" "$(stop '### Findings outside scope
 - Shared repo lint gap (asked)')"
 assert_eq "" "$OUT" "tracked and asked findings pass"
 
+run_hook "$GATE" "$(stop '### Findings outside scope
+| Finding | Issue |
+|---|---|
+| The cache never expires | |')"
+assert_out "The cache never expires" "an untracked finding in a table blocks (#154)"
+run_hook "$GATE" "$(stop '### Findings outside scope
+- Tracked one #3
+
+**Also:**
+- Retries are unbounded')"
+assert_out "Retries are unbounded" "an untracked finding after a bold sub-label blocks (#154)"
+
 run_hook "$CAPTURE" "$(sub "$(report 'Retries are unbounded' 'TTL unset')")"
 assert_rc 0 "capture never blocks"
 assert_eq "" "$OUT" "capture is silent"
