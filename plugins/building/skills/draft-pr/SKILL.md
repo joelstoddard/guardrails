@@ -25,7 +25,7 @@ No `--force`, no `--force-with-lease`, no `--no-verify`. If a push is rejected o
 If an open PR already exists for the current branch, surface its URL and stop. Do not create a duplicate. Updating an existing PR is out of scope for this skill.
 
 ### Main-agent only
-Sub-agents do not create PRs. PR creation IS the human review checkpoint — if a sub-agent is creating a PR, the checkpoint is being skipped. Sub-agents return their work to the calling agent, which creates the PR.
+Sub-agents do not create PRs. PR creation is the human review checkpoint — if a sub-agent is creating a PR, the checkpoint is being skipped. Sub-agents return their work to the calling agent, which creates the PR.
 
 ### Title format
 

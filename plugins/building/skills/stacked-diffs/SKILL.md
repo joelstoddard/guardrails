@@ -122,7 +122,12 @@ Use when the current branch has grown too large and needs to be split.
    gh pr create --draft --base feat/thing-02-api        --head feat/thing-03-ui     --title "..." --body "..."
    ```
    Use the `draft-pr` body format (Intent / What / Why / How), with the Intent placeholder left blank on every layer for the author. In the **Why**, note this PR's position in the stack and link the PRs above and below it.
-6. **Report the stack** to the user with all three PR URLs.
+6. **Group the PRs as a GitHub stack**, so GitHub's stack view and `gh stack` can see them. Pass the PR URLs from step 5, bottom to top:
+   ```
+   gh stack link <pr-1-url> <pr-2-url> <pr-3-url>
+   ```
+   Pass URLs, never branch names: for a branch, `gh stack link` pushes it and opens a PR itself. Never pass `--open`, which marks every PR in the stack ready for review. If `gh stack` is not installed or the link fails, skip this step and say so: the PRs still chain by base.
+7. **Report the stack** to the user with all three PR URLs.
 
 ### B. Preemptive stacking — start the next slice on top
 
@@ -135,6 +140,10 @@ Use when the current branch already has its PR open and you are starting the nex
    git config branch.feat/thing-02-api.stackBase feat/thing-01-schema
    ```
 3. **Do the work, commit, push, and open the PR** with `--base feat/thing-01-schema`. Use `commit` then `draft-pr` as normal; `draft-pr` should pick up the stackBase as the base automatically.
+4. **Add the new PR to the GitHub stack.** Link the whole chain again, bottom to top, ending with the new PR; PRs already in the stack stay in it. The same rules as workflow A, step 6 apply:
+   ```
+   gh stack link <pr-1-url> <pr-2-url>
+   ```
 
 ### C. Rebase the stack after a lower PR changes
 
@@ -198,6 +207,7 @@ this skill runs in a worktree.
 | Rebase onto parent's new tip | `git rebase <parent>` |
 | Push after rebase | `git push --force-with-lease origin <branch>` |
 | Open stacked PR | `gh pr create --draft --base <parent> --title ... --body ...` |
+| Group the PRs as a GitHub stack | `gh stack link <pr-1-url> <pr-2-url> ...`, bottom to top |
 | Retarget PR base after parent merged | `gh pr edit <pr> --base main && git config branch.<name>.stackBase main` |
 
 ## Failure modes
@@ -211,11 +221,13 @@ this skill runs in a worktree.
 | User asks to merge PR-2 before PR-1 | Refuse. Explain bottom-up merge order. |
 | Parent PR was squash-merged | The new base is the squash commit on `main`; rebase the child onto `origin/main` (not the old parent ref, which no longer has the same commits). |
 | No default branch detectable | Refuse. Ask the user for the default branch. |
+| `gh stack` not installed, or `gh stack link` fails | Skip the link and tell the user. The PRs still chain by base; the stack only groups them. |
 
 ## Red flags — stop and re-check
 
 - About to `git push --force` without `--with-lease`.
 - About to open a PR that is not `--draft`.
+- About to run `gh stack link` with `--open`, or with branch names in place of PR URLs.
 - About to merge a PR whose children have not been retargeted.
 - About to split a branch without getting the user's approval of the slicing.
 - About to `git branch -D` an old stacked branch before its PR has merged or been closed.

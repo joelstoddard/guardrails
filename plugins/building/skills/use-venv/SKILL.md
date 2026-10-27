@@ -21,7 +21,7 @@ Prevent pollution of the user's system Python and global Node installs. Verify v
    | `Pipfile` | `pipenv install` |
    | `requirements.txt` only | `uv venv && uv pip install -r requirements.txt` |
    | `pyproject.toml` with no lock | `uv venv && uv pip install -e .` |
-   | `.nvmrc` or `package.json#engines.node` | `nvm use` (fall back to `fnm use` if `fnm` is on PATH and `nvm` is not) |
+   | `.nvmrc` or `package.json#engines.node` | `nvm use` (fall back to `fnm use` if `fnm` is on `PATH` and `nvm` is not) |
    | `package.json` with no engine pin | prompt for Node version |
 
 4. **Ask once per decision.** When the user confirms "create `.venv` with uv", don't re-prompt for subsequent installs in the same Claude conversation. Same for declines — remember them for the rest of the conversation. (No cross-conversation memory; each new conversation starts fresh.)
@@ -50,7 +50,7 @@ If none of these exist in the current directory (walking up to the git root), Tr
 1. If the install type is isolated by design (`pipx install`, `npm install` without `-g`, `cargo install`, `brew install`), proceed. Skill is a no-op.
 2. For Python install into an env: check `$VIRTUAL_ENV`. If set, proceed.
 3. If `$VIRTUAL_ENV` is unset, look for `.venv/` (or `.env/`, `venv/`) in the current directory, walking up to the git root:
-   - **Found:** `source .venv/bin/activate` does not persist across separate Bash subprocess calls, so do not "activate then install" in two steps. Default to `uv pip install …` (which targets `.venv/` without activation). If `uv` is not on PATH, chain activation and install in one bash call: `source .venv/bin/activate && pip install …`. Tell the user which path was taken.
+   - **Found:** `source .venv/bin/activate` does not persist across separate Bash subprocess calls, so do not "activate then install" in two steps. Default to `uv pip install …` (which targets `.venv/` without activation). If `uv` is not on `PATH`, chain activation and install in one bash call: `source .venv/bin/activate && pip install …`. Tell the user which path was taken.
    - **Not found:** continue with Trigger B flow from step 2.
 4. For `npm install -g X`: always refuse. Offer alternatives — `npx <pkg>` for one-shot use, project-local `npm install <pkg>`, or a user-managed global via `volta` / `pnpm` / `nvm`-scoped global.
 
@@ -67,4 +67,4 @@ If none of these exist in the current directory (walking up to the git root), Tr
 
 - Single confirmation per decision, conversation-scoped.
 - Commands shown exactly as they will run.
-- On tool-missing failure (e.g. `uv` not on PATH), fall back to `python -m venv .venv` for Python or prompt the user for the Node version manager. Always tell the user what fallback was taken.
+- On tool-missing failure (e.g. `uv` not on `PATH`), fall back to `python -m venv .venv` for Python or prompt the user for the Node version manager. Always tell the user what fallback was taken.

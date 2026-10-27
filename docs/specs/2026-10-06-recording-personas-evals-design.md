@@ -35,6 +35,7 @@ show whether a skill body or only the rules did the work.
 | --- | --- | --- |
 | `migration-routes-to-data-engineer` | Substantial domain work reaches the matching persona | The trace dispatches `"subagent_type":"personas:data-engineer"` |
 | `small-edit-stays-local` | A small edit stays with the main session | No dispatch of any `personas:` agent |
+| `review-not-forked` | A review of the main session's change goes to a fresh agent, not one that shares its context | An agent is dispatched; none with `"subagent_type":"fork"`; the main session runs no code-review skill itself |
 
 - **Routing is graded on the dispatch's `subagent_type`, not on a tool name.** Traces name
   the dispatch tool `Task`, while the docs call it `Agent`.

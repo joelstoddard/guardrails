@@ -55,5 +55,5 @@ Other developers may not want AI-filed issues, so ask BEFORE filing anywhere tha
 ## Rules
 
 * You MUST end the issue body with the `🤖 Generated with [Claude Code]` footer. An issue without it reads as written by the user.
-* You MUST NOT comment on, edit, OR close an issue. Filing is the ONE exception to never publishing as the user: in a personal repo it needs the user's approval at the prompt, AND anywhere else an explicit yes in chat first.
+* You MUST NOT comment on, edit, OR close an issue. Filing is the one exception to never publishing as the user: in a personal repo it needs the user's approval at the prompt, AND anywhere else an explicit yes in chat first.
 * You MUST list findings under a heading containing "Findings outside scope", one list item each, each line ending with the issue URL, `(asked)`, OR `(declined)`.

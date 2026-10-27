@@ -6,9 +6,11 @@ allowed-tools: Bash(git branch --show-current), Bash(git status:*), Bash(git dif
 
 ## Current state
 
+These lines show the current branch's PR. If you were given a PR, it may be a different one: ignore them, and use the given PR.
+
 - Branch: !`git branch --show-current`
-- PR: !`gh pr view --json number,url,isDraft,headRefName 2>/dev/null || echo "(no PR for this branch)"`
-- Checks: !`gh pr checks 2>&1 | head -20`
+- This branch's PR: !`gh pr view --json number,url,isDraft,headRefName 2>/dev/null || echo "(no PR for this branch)"`
+- This branch's checks: !`gh pr checks 2>&1 | head -20`
 
 ## Rules
 
@@ -31,19 +33,19 @@ Fix files this PR already touches. If the failure proves the root cause is elsew
 After the third failed repair, stop and report. Repeated failure means the diagnosis is wrong, and more attempts bury the evidence.
 
 ### Infrastructure failures are re-run, not "fixed"
-Runner timeout, network error, rate limit, cancelled job: re-run the job once with `gh run rerun --failed`. If it fails the same way twice, report it as infrastructure and stop.
+Runner timeout, network error, rate limit, cancelled job: re-run the job once with `gh run rerun <run-id> --failed`. If it fails the same way twice, report it as infrastructure and stop.
 
 ### One commit per fix round
 Via the `commit` skill, so each repair is separately revertible.
 
 ## Workflow
 
-1. Resolve the PR — the argument if given, else the current branch's PR. If neither resolves, stop.
+1. Resolve the PR — the argument if given, else the current branch's PR. If neither resolves, stop. Pass its number to every `gh pr` command: without one, `gh` uses the current branch's PR.
 2. `gh pr checks <pr-number> --watch --fail-fast` — blocks until conclusion.
 3. Green: report the PR URL and that checks passed. Stop.
 4. Red: `gh run view <run-id> --log-failed` for the failing job.
 5. Diagnose. If the log does not identify a specific fixable cause, stop and report the log excerpt rather than guessing.
-6. Fix, commit via the `commit` skill, `git push`.
+6. If the PR's `headRefName` is not the current branch, stop and report: a fix here would land on another branch. Otherwise fix, commit via the `commit` skill, `git push`.
 7. Return to step 2. Increment the round counter; stop at three.
 
 ## Report format
@@ -60,6 +62,7 @@ This skill runs as a background agent — its return value is the only thing the
 | Condition | Behavior |
 |---|---|
 | No PR for the branch | Stop. Nothing to watch. |
+| Red, and the PR's head is not the current branch | Stop. Report the failure. Never fix it from another branch. |
 | Checks green on entry | Report and stop. No commits. |
 | Failure not diagnosable from the log | Stop. Report the excerpt. Do not guess. |
 | Only route to green is changing a test's expectations | Stop. Report. Human decision. |

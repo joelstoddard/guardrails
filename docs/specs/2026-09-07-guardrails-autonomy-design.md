@@ -4,6 +4,12 @@ Date: 2026-09-07
 Status: approved, not yet implemented
 Plugin: `.claude/marketplace/plugins/guardrails`, version 0.6.0 → 0.7.0
 
+> Layout superseded: what this spec adds now ships in this repo's plugins, not in the
+> dotfiles' `.claude/marketplace/plugins/guardrails`. `ci-watch`, `biases`, `commit`,
+> `draft-pr` and `post-merge-cleanup.sh` are in `building`; `self-improvement`,
+> `project-memory` and `lessons-nudge.sh` are in `recording`. The dotfiles spec
+> `docs/specs/2026-10-04-guardrails-repo-split-design.md` records the move.
+
 ## Problem
 
 Five gaps in the current guardrails workflow:

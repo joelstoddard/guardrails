@@ -35,6 +35,10 @@ Lower-case "always" and "never" keep their plain English meaning: they are not B
 
 "Without warrant" and "where practical" are vague escapes too, so those rules are SHOULD.
 
+Later, #122 added ONLY, EVERY, UNLESS, OTHERWISE and WHILE to the extension, since the rules
+rely on their logic, and lower-cased the capitals that were only emphasis, such as STOP and
+IN FULL.
+
 ## Scope
 
 - The five rules files: `building/rules/{conduct,engineering}.md`,
@@ -56,6 +60,10 @@ new definition lands, and a stray ALWAYS / NEVER still reads as plain English.
   `plugins/`, hook scripts included, so the old vocabulary cannot drift back. It also fails
   on a MUST sentence that carries its own escape, which the mapping makes a SHOULD. The dotfiles
   `test/unit/test_rules.py` gets the same check over `.claude/rules/`.
+- Since #122, `tests/test_keywords.sh` also fails on an all-capitals word outside code in a
+  plugin rule, agent or skill that is not a keyword `conduct.md` defines, a defined term, or a
+  listed acronym. It skips `sre.md` and `pre-pr-check` until the open PR #144, which edits
+  them, lands.
 - `bash tests/run.sh` (it holds the 10,000-character cap) and `bash tests/lint.sh` pass, and
   so do the dotfiles `bash test/unit/run.sh` and `bash test/lint.sh`.
 - The evals are the behavioural check, run by hand: `bash tests/evals.sh <plugin> --runs 1`
