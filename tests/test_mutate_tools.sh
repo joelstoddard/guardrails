@@ -112,6 +112,12 @@ mut plugins/p/hooks/scripts/w.sh
 [[ $RC == 0 && $(status_of 1 delete) == killed ]] || fail time-scale-run "rc=$RC: $OUTPUT"
 assert_eq $'10\nunset' "$(sort -u "$D/seen")" "time-scale"
 
+echo "--- the suites and the mutants run from the root of their tree, so the caller's directory changes no result"
+setup; fixture c '[[ -e marker ]] && echo marked; echo end' "[[ \$(bash \"$RUNS/c.sh\") == end ]]"
+elsewhere="$(scratch_dir)"; touch "$elsewhere/marker"
+OUTPUT="$(cd "$elsewhere" && COV_LOG='' COVERAGE_ROOT="$D" bash "$TOOL" plugins/p/hooks/scripts/c.sh 2>&1)"; RC=$?
+[[ $RC == 0 && $(status_of 1 '&&') == killed ]] || fail caller-directory "rc=$RC: $OUTPUT"
+
 echo "--- interrupting the run takes its workers and their hung test with it"
 setup; hang_fixture
 start_hung_run

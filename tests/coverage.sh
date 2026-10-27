@@ -29,6 +29,8 @@ measured() { # measured files, relative to ROOT
 
 run_suites() { # every shell test under tracing, one log per test file; returns 1 if any test fails
   local t rc=0
+  # From the root, as CI runs them, so the caller's directory changes no result; hits() then resolves traced paths here.
+  cd "$ROOT" || return 1
   rm -rf "$OUT"; mkdir -p "$OUT/logs"
   [[ -z $awk_runs ]] || mkdir -p "$awk_runs"
   for t in "$ROOT"/tests/test_*.sh; do

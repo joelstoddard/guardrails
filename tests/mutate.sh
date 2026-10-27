@@ -94,18 +94,20 @@ copy_tree() { # <dir>: a scratch copy of the working tree, so a mutant never tou
   fi
 }
 
-run_test() { # <copy> <test name from hits.tsv> <seconds>: runs that test in the copy with a time limit
+run_test() { # <copy> <test name from hits.tsv> <seconds>: runs that test in the copy, from its root, with a time limit
   [[ $2 == test_*.sh && $2 != */* ]] || die "unknown test name: $2"
   # A hung mutant must leave nothing running, so the wrapper kills the test's process group on exit,
   # timeout, HUP, INT and TERM. A timeout exits 124, which counts as killed.
+  # The test starts in the copy's root, which is no git repo: a mutant that loses a path falls back to it, never to the
+  # caller's directory, where it could run that repo's commands, and the result does not depend on where the run began.
   perl -e '
-    my $t = shift; my $p = fork // die "fork: $!";
-    if (!$p) { setpgrp(0, 0); exec @ARGV or exit 127 }
+    my $t = shift; my $d = shift; my $p = fork // die "fork: $!";
+    if (!$p) { setpgrp(0, 0); chdir $d or exit 127; exec @ARGV or exit 127 }
     $SIG{ALRM} = sub { kill "KILL", -$p; waitpid $p, 0; exit 124 };
     $SIG{$_} = sub { kill "KILL", -$p; exit 1 } for qw(HUP INT TERM);
     alarm $t; waitpid $p, 0; my $s = $?; alarm 0; kill "KILL", -$p;
     exit($s & 127 ? 128 + ($s & 127) : $s >> 8);
-  ' "$3" env COV_LOG= GUARDRAILS_TIME_SCALE="$TIME_SCALE" bash "$1/tests/$2" </dev/null >/dev/null 2>&1
+  ' "$3" "$1" env COV_LOG= GUARDRAILS_TIME_SCALE="$TIME_SCALE" bash "$1/tests/$2" </dev/null >/dev/null 2>&1
 }
 
 baseline() { # <copy>: times each test the plan needs, unmutated; a red test stops the run

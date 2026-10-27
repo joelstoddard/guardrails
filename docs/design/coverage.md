@@ -26,7 +26,8 @@ Each glob is one level deep. Trace lines from any other file, including the test
 ignored. The awk programs inside these files are measured too, by statement, in rows of
 their own; see [awk programs](#awk-programs).
 
-The suites that run are `tests/test_*.sh`, each with bash as `tests/run.sh` does. Each
+The suites that run are `tests/test_*.sh`, each with bash as `tests/run.sh` does, from
+the repo's root, as CI runs them, whatever directory the tool was started in. Each
 test file runs on its own with its own trace log. The Python tests check documents and
 manifests, not shell, so they are not run.
 
@@ -255,9 +256,9 @@ tracer or a damaged floor file cannot hide a gap.
   output.
 - **A bash older than 4.1:** the tool refuses to run. A test that starts such a bash
   inside the suite runs it untraced, and its lines show as uncovered.
-- **A relative path after `cd`:** traced paths resolve from the tool's working
-  directory. A suite that changes directory and then runs a script by a relative path
-  loses those hits. Run such scripts by an absolute path.
+- **A relative path after `cd`:** each suite starts in the repo's root, as in CI, and
+  traced paths resolve from there. A suite that changes directory and then runs a
+  script by a relative path loses those hits. Run such scripts by an absolute path.
 
 ## Branches
 
@@ -333,7 +334,11 @@ Each restriction keeps a mutant a real fault and not noise:
   a mutant never touches the checkout. Each worker puts the original file back after
   each mutant. Workers take plan lines by index modulo `-j`, so one worker and many
   workers give the same results. A test runs as `bash tests/test_*.sh` in the copy,
-  untraced.
+  untraced, starting in the copy's root, which is no git repo. So a mutant that loses
+  a path, such as deleting `repo=$(git -C "$cwd" rev-parse --show-toplevel)` in
+  `lint-warn.sh`, falls back to the copy, not to the directory the run began in: from
+  a repo's checkout, that mutant ran the repo's own lint command, and was killed or
+  survived by whatever that command did.
 - **Process groups.** A test runs in its own process group, and the wrapper (perl) kills
   the group after the test exits, after a timeout, and when the run itself gets HUP, INT
   or TERM. A mutant that hangs, or a test that leaves a background process, leaves
@@ -439,12 +444,15 @@ The floors started at the scores measured on the code of `main` at b0d58e5, not 
 100: the tests leave many mutants alive, and the floors record that rather than hide
 it, 499 of 637 mutants killed (78.3%). Only mutants that cannot change behaviour are in
 `tests/mutants-ignore.tsv`. Every other survivor is a test to write, and the weekly run
-lists them. Three full runs differed in four mutants, each killed in one run only: the
-depth caps at `git-cmd.sh:94` and `publish-cmd.sh:102`, `lint-warn.sh:13` and
-`shell-split.sh:231`. Run alone, with no load, every test of each passed, so all four
-kills were spurious, and the floors take the counts with those mutants alive (see
-Flaky tests below). The third run, on more load, scored 501 of 637 against them and
-passed.
+lists them. Three full runs differed in four mutants, each killed in one run only, so
+the floors take the counts with those mutants alive. `publish-cmd.sh:102` and
+`shell-split.sh:231` are run by the budget tests of `test_guard_publish.sh`, whose 5 s
+ceilings are now stretched for mutants. `lint-warn.sh:13` depended on the directory the
+run began in, which no longer counts: from the copy's root it is killed every time, so
+its floor can rise. The depth cap at `git-cmd.sh:94` survived each run but the first,
+and when run alone; its tests have no budget, and the cause of that kill is not known.
+A later run of the six heaviest files at `-j 14`, which logged every kill, found nine
+timeouts, each a mutant that hangs a loop, and no spurious kill.
 
 ### In CI
 

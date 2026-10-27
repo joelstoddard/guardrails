@@ -199,6 +199,11 @@ setup; echo "echo \"\${GUARDRAILS_TIME_SCALE:-unset}\" >\"$D/seen\"" >>"$D/tests
 OUTPUT="$(GUARDRAILS_TIME_SCALE=10 COVERAGE_ROOT="$D" bash "$TOOL" --update 2>&1)"; RC=$?
 [[ $RC == 0 && $(cat "$D/seen") == unset ]] || fail time-scale-unset "rc=$RC, seen '$(cat "$D/seen")': $OUTPUT"
 
+echo "--- each suite runs from the repo's root, whatever the caller's directory"
+setup; echo '[[ $(pwd -P) == "$(cd "$(dirname "$0")/.." && pwd -P)" ]]' >>"$D/tests/test_f.sh"
+OUTPUT="$(cd "$(scratch_dir)" && COVERAGE_ROOT="$D" bash "$TOOL" --update 2>&1)"; RC=$?
+[[ $RC == 0 && $(row "$S") == "2/3 66.6 NO" ]] || fail suites-from-root "rc=$RC: $OUTPUT"
+
 echo "--- a failing test stops the run"
 setup; echo 'exit 1' >"$D/tests/test_broken.sh"; cov
 [[ $RC == 1 && $OUTPUT == *"test_broken.sh failed"* ]] || fail red-suite "rc=$RC: $OUTPUT"
