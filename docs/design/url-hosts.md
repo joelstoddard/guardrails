@@ -26,6 +26,16 @@ its own options:
   first argument is the method if it is letters only, as httpie and xh read it, so
   `http example.com text=hi` is a POST.
 
+**Words that never name the host.** The host check reads every word after the client
+but a redirect and its target, and the value of an option that never names the host:
+curl's `-o`, `-D`, `-c` and `-H` (`--output`, `--dump-header`, `--cookie-jar`,
+`--header`), wget's `-O` (`--output-document`) and `--header`, and httpie's and xh's
+`-o` (`--output`). So `curl -d x localhost:3000 -o out.json` no longer reads
+`out.json` as a remote host. A quoted value is one word, so `-H 'Authorization:
+Bearer ab.cd.ef'` is skipped whole. The user chose this narrow list: every other
+option's value is still read, so a dotted name in a body, as in `-d evil.com`, still
+reads as a host.
+
 One regex over the segment read every client's flags as curl's, so it missed `-sd x`,
 `-dx`, a quoted `"-d"` and a redirect between `-X` and its method. It also read
 httpie's `-d` (`--download`) and `-F` (`--follow`), and wget's `-d` (`--debug`), as
@@ -86,6 +96,9 @@ were. What the new reading costs is in the timing section of
 
 ## What was rejected
 
+- **Skipping the value of every option.** It would need each client's full table of
+  options that take a value, over 150 for curl, and a value the table misses would
+  hide a host. The user chose to skip only the values that never name one.
 - **Any URL with an `@` is remote.** It is simpler, but it refuses
   `http://admin:pass@127.0.0.1:5984/db`, a usual local form for CouchDB and
   Elasticsearch.

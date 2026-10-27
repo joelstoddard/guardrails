@@ -856,4 +856,22 @@ allows 'xh -F https://example.com/x'                             "xh's -F is --f
 utf8 _guardrails_publishes_as_user $'curl -d=x\xff https://api.example.com/hook' >/dev/null || {
   echo "  FAIL [a body flag before an invalid byte]: not read"; FAILS=1; }
 
+# An output file, a header, a header dump or a cookie jar never names the host, nor does a redirect's target, so none
+# is read as one. The URL beside them still is.
+allows 'curl -d x localhost:3000 -o out.json'                               "an output file is not a host"
+allows 'curl -d x localhost:3000 --output out.json'                         "an output file after --output"
+allows 'curl -d x localhost:3000 -oout.json'                                "an output file attached to -o"
+allows 'curl -sSo out.json -d x localhost:3000'                             "-o at the end of a cluster"
+allows 'curl -d x localhost:3000 -D headers.txt -c cookies.txt'             "a header dump and a cookie jar"
+allows "curl -d x -H 'Authorization: Bearer ab.cd.ef' http://localhost:3000" "a header whose value looks like a name"
+allows "curl -d x --header 'Host: api.example.com' http://localhost:3000"   "a Host header goes to the URL's host"
+allows 'wget --post-data=x localhost:3000 -O out.json'                      "wget's output document"
+allows 'wget --post-data=x localhost:3000 -qO out.json'                     "wget's -O at the end of a cluster"
+allows 'wget --post-data=x localhost:3000 --header=Referer:https://a.example' "a header attached by = that holds a URL"
+allows 'http POST localhost:3000 a=b -o out.json'                           "httpie's output file"
+allows 'curl -d x localhost:3000 > out.json'                                "a redirect's target is not a host"
+blocks 'curl -d x -o out.json https://api.example.com/hook'                 "the URL beside an output file is still read"
+blocks 'curl -O -d x https://api.example.com/hook'                          "curl's -O takes no value"
+blocks 'wget -c --post-data=x https://api.example.com/hook'                 "wget's -c takes no value"
+
 finish "publish-cmd"

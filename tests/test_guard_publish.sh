@@ -468,4 +468,9 @@ run_hook "$S" "$(jsonin 'http -d https://example.com/file.tgz')"
 assert_rc 0 "an httpie download allowed"
 assert_eq "$OUT" "" "an httpie download asks nothing"
 
+# An output file or a header never names the host, so it is not read as one.
+run_hook "$S" "$(jsonin "curl -d x -H 'Authorization: Bearer ab.cd.ef' localhost:3000 -o out.json")"
+assert_rc 0 "a local write with a header and an output file allowed"
+assert_eq "$OUT" "" "a local write with a header and an output file asks nothing"
+
 finish "guard-publish"
