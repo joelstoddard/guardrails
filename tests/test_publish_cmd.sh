@@ -805,4 +805,14 @@ per_line_asks() {
 }
 per_line_asks $'git commit -m "Fix it\nsee the review"' "the per-line split cuts a quoted line into pieces too"
 
+# Help as the first option after any publish verb publishes nothing, as for pr create (#78). A later -h could be another
+# option's value, as in --title -h.
+allows 'gh pr comment --help'                       "help for a publish verb"
+allows 'npm publish --help'                         "help for npm publish"
+allows 'npm publish -h'                             "short help for npm publish"
+allows 'gh pr comment 12 --help'                    "help as the first option after the verb's arguments"
+blocks 'gh pr comment 12 -b -h'                     "-h as the value of an option after a publish verb"
+blocks 'npm publish --tag -h'                       "-h after another option of npm publish"
+blocks 'gh pr comment --help; npm publish'          "help for one command hides no publish after it"
+
 finish "publish-cmd"

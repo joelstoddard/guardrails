@@ -452,4 +452,9 @@ run_hook "$(broken_hook shell-split.sh missing)" "$(jsonin 'gh pr view 1')"
 assert_eq "$OUT" "" "environment hatch asks nothing about a library that did not load"
 unset ALLOW_PUBLISH_AS_ME
 
+# Help as the first option after any publish verb publishes nothing (#78).
+run_hook "$S" "$(jsonin 'gh pr comment --help')"
+assert_rc 0 "help for a publish verb allowed"
+assert_eq "$OUT" "" "help for a publish verb asks nothing"
+
 finish "guard-publish"
