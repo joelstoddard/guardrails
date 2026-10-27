@@ -29,6 +29,9 @@ make_repo() {
   printf '%s\n' "$d"
 }
 
+# commit_doc <repo> → commits everything in it; the hooks read only the committed agent doc (#83).
+commit_doc() { git -C "$1" add -A && git -C "$1" -c user.email=t@t -c user.name=t commit -qm doc; }
+
 assert_rc()  { [ "$RC" = "$1" ] || { echo "  FAIL [$2]: rc=$RC expected $1 (err: $ERR)"; FAILS=1; }; }
 assert_err() { case "$ERR" in *"$1"*) ;; *) echo "  FAIL [$2]: stderr missing '$1' (got: $ERR)"; FAILS=1;; esac; }
 assert_out() { case "$OUT" in *"$1"*) ;; *) echo "  FAIL [$2]: stdout missing '$1' (got: $OUT)"; FAILS=1;; esac; }

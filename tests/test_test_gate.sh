@@ -3,8 +3,6 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 S="$DIR/../plugins/building/hooks/scripts/test-gate.sh"
 json() { printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$1" "$2"; }
-# The gate reads the committed agent doc (#83), so each fixture commits its own.
-commit_doc() { git -C "$1" add -A && git -C "$1" -c user.email=t@t -c user.name=t commit -qm doc; }
 
 # Repo with a passing test command → push allowed
 r="$(make_repo main)"

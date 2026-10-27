@@ -3,8 +3,6 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 S="$DIR/../plugins/building/hooks/scripts/lint-warn.sh"
 json() { printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$1" "$2"; }
-# The hook reads the committed agent doc (#83), so each fixture commits its own.
-commit_doc() { git -C "$1" add -A && git -C "$1" -c user.email=t@t -c user.name=t commit -qm doc; }
 
 # Failing lint on commit → NEVER blocks (rc 0) but emits a warning on stdout
 rf="$(make_repo main)"; git -C "$rf" switch -q -c nbc-1-x
