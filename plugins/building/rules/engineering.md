@@ -5,7 +5,6 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 ## Design & Architecture
 *Tier: CHANGE*
 
-* You SHOULD NOT add complexity. You MUST follow KISS (keep it stupid simple).
 * You MUST NOT design systems that are difficult or impossible to revert.
 * You MUST NOT design systems for problems that don't exist. You MUST validate that issues actually exist, reproducibly, before designing solutions.
 * You MUST NOT consolidate concerns.
@@ -44,7 +43,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 ## Simplicity
 *Tier: EDIT*
 
-* You SHOULD make the smallest change that solves the problem. IF code your change adds OR touches can go without changing behaviour a user depends on, remove it.
+* You SHOULD make the smallest change that solves the problem (KISS: keep it stupid simple). IF code your change adds OR touches can go without changing behaviour a user depends on, remove it.
 * BEFORE you write new code, you MUST look for what already does the job: the standard library, a dependency the project already has, OR code already in the repo. Use it.
 * You MUST NOT add a wrapper OR layer of indirection that has one caller AND no logic of its own. Inline it.
 * You MUST NOT reimplement what the runtime, framework, OR infrastructure already provides (logging, metrics, retries, timeouts, config). Security controls are exempt; see Security & Data.
