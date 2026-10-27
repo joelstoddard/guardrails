@@ -26,11 +26,11 @@ as one if it is not an option's value, so `-d "$BODY"` and `-u "$USER:$PASS"` as
 nothing. curl's `--resolve` and `--connect-to` send the write for the URL's host to
 another, so a write with either asks unless its URL is remote.
 
-The rest is as it was: a public address is remote, as the ranges above are the only
-private ones, and an address with no scheme is read as a host, as a dotted name is,
-asking only if it is private. Of a word with no scheme, only such an address asks: a
-name with no dot or a variable after userinfo there, as in `a.local@api`, was refused
-before and still is.
+A public address is remote, as the ranges above are the only private ones the user
+named. An address with no scheme is read as a host, as a dotted name is, and asks only
+if it is private. Of a word with no scheme, only such an address asks: a name with no
+dot or a variable after userinfo there, as in `a.local@api`, was refused before and
+still is.
 
 ## Writes
 
@@ -155,6 +155,9 @@ were. What the new reading costs is in the timing section of
 - **A scheme URL inside a word,** not at its start, is found only as before: after
   userinfo, bracketed, at `localhost` or `127.`, or at a dotted name. The client takes
   its URL from a whole word, so such a URL is data, as in `-d cb=http://intranet/x`.
+- **A pipe into httpie or xh** sends what it reads as the body, as a redirect of stdin
+  does, but the guard reads each command of a pipeline alone, so `echo hi | http
+  example.com` is not read as a write.
 - **An address in 100.64/10,** which Tailscale and carrier-grade NAT use, is outside
   the ranges the user named, so a write to one is refused as public.
 
@@ -166,3 +169,7 @@ were. What the new reading costs is in the timing section of
   `evil.com` through httpie or `xh`.
 - Read in the user's locale, and a Unicode blank ends a word that the shell does not
   end.
+- Read a host a variable can change as proven local, and `http://localhost:$PORT`
+  reaches whatever host `$PORT` holds after an `@`.
+- Keep the reader's words with a slice of the toks array, which bash walks from its
+  start, and a long write takes the guard past its timeout, which lets it through.
