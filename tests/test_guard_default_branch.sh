@@ -118,6 +118,8 @@ assert_out '"permissionDecision":"ask"' "a pipe into a shell on a default branch
 assert_out 'reads commands from stdin' "the question says why"
 run_hook "$S" "$(json "$r14b" "cat cmds.txt | bash")"
 assert_eq "$OUT" "" "a pipe into a shell off the default branch asks nothing"
+run_hook "$S" "$(json "$r13" "echo | bash --version")"
+assert_eq "$OUT" "" "a shell asked for its version reads no stdin and asks nothing"
 export ALLOW_DEFAULT_COMMIT=1
 run_hook "$S" "$(json "$r13" "cat cmds.txt | bash")"
 assert_eq "$OUT" "" "the override asks nothing about a pipe into a shell"

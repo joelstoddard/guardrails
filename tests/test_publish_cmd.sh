@@ -326,6 +326,12 @@ seen "bash <<<'echo hi'"                                  "a here-string is in t
 seen 'bash < script.sh'                                   "a script fed from a file"
 seen 'echo hi | grep bash'                                "bash as an argument"
 seen 'grep -c bash notes.txt'                             "a -c that belongs to another command"
+# --version and --help make a shell exit, or dash refuse them, before it reads a script; -h sets hashall in bash, zsh and
+# ksh, which then read stdin.
+seen 'cat x | bash --version'                             "bash's version reads no stdin"
+seen 'cat x | sh --help'                                  "sh's help reads no stdin"
+seen 'cat x | bash -x --version'                          "--version after an option reads no stdin"
+unseen 'cat x | bash -h'                                  "bash -h reads stdin"
 
 # A command substitution runs, wherever it sits: an argument, a double-quoted string, an
 # assignment, a process substitution or backticks (#87).

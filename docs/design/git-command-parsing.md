@@ -54,7 +54,9 @@ command that opened it ends, as the shell reads it: after a quote, backtick or s
 that the command carries across lines, whose commands run first.
 A `cd` inside `sh -c` ends with that child shell, while one inside `eval` lasts. A pipe
 into a shell runs commands no guard can see, so `guard-default-branch` asks when the
-directory it would run in is on its default branch, as `guard-publish` asks.
+directory it would run in is on its default branch, as `guard-publish` asks. A shell given
+`--version` or `--help` exits, or refuses it, before it reads a script, so a pipe into one asks
+nothing; `-h` is not one of these, as it sets `hashall` in bash, zsh and ksh, which then read stdin.
 
 So does a pipe into another interpreter that reads its script from stdin: python, node,
 perl, ruby, php or lua given no script file, no code (`-c`, `-e`, `-r` and the like), no

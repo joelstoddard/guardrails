@@ -653,6 +653,8 @@ _guardrails_shell_reads_stdin() {
         case "$w" in *[\<\>]*) _guardrails_skip_redirect && { i=$((i - 1)); continue; } ;; esac
         case "$w" in
           -o | +o | -O | +O | --rcfile | --init-file) i=$((i + 1)) ;;
+          # These exit, or dash refuses them, before a script runs; -h sets hashall, and the shell reads stdin.
+          --version | --help) return 1 ;;
           --*) ;;
           - | -*s*) break ;;
           -* | +*) ;;
