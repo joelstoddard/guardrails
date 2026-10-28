@@ -38,7 +38,8 @@ _guardrails_invokes_git "$cmd" commit; found=$?
 n=0; away=""
 while IFS= read -r dir; do
   case "$dir" in remote:*) away=1; continue ;; esac
-  dir="${dir#local: }"
+  # A switch in the commit's && chain names the branch it lands on (#81).
+  branch="${dir%% *}"; branch="${branch#local:}"; dir="${dir#* }"
   # Each directory costs some 33 ms of git calls, so past 64 the guard could time out, which lets the command through.
   n=$((n + 1))
   if [ "$n" -gt 64 ]; then
@@ -47,7 +48,7 @@ while IFS= read -r dir; do
     exit 0
   fi
   repo="$(git -C "${dir:-.}" rev-parse --show-toplevel 2>/dev/null)" || continue
-  cur="$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null)" || continue
+  cur="$branch"; [ -n "$cur" ] || cur="$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null)" || continue
 
   # Resolve default branch: prefer origin/HEAD, else first of main/master/develop that exists.
   def="$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')"

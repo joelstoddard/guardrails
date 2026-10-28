@@ -231,6 +231,27 @@ the last command of a pipeline in a subshell too, but zsh runs it in the current
 `cd` there is followed, as before. Only the walk reads tags; the guards' other passes read the
 split as before, byte for byte.
 
+## A branch switched to before the commit
+
+A commit after a switch to a branch, in one `&&` chain, lands on that branch, as in
+`git switch -c fix/x && git commit -am x`, the natural recovery after a refusal (#81). So the
+walk names that branch in the commit's record, `local:fix/x <dir>`, and `guard-default-branch`
+judges it rather than HEAD as it stands before the command runs. Only a switch whose target
+it knows counts: `git switch <branch>`, `-c`, `-C`, `--create`, `--orphan`, and `git checkout
+-b`, `-B` or `--orphan`. It counts only where the switch must succeed for the commit to run:
+in the walk's top chain, run here, unwrapped, in the commit's directory, not after `||` nor
+piped into the next command, and every link from it to the commit an `&&`. Anything that may
+leave HEAD elsewhere drops the branch from every record, so the commit is judged at HEAD as
+before: a `checkout` without `-b`, which may restore a file, `switch -` or `--detach`, a switch
+in a substitution, a payload, or any git subcommand but those that cannot move HEAD to another
+branch, such as `add`, `status` or `push`. So `git switch main && git commit` is judged on
+`main`, which is stronger than main, where HEAD was judged.
+
+The per-line split sees no `&&`, so it names no branch. Its records count only where it reads
+more commands in a directory than the carried split, as where that split misreads a quote and
+hides a commit; there they are judged at HEAD. So a quote misread never lets a commit through
+that main refused.
+
 ## Two splits, never weaker than one
 
 The splitter carries quote state across lines, so a quoted argument spanning lines

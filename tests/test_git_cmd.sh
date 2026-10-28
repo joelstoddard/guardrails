@@ -123,6 +123,41 @@ cwd $'x=a; echo "${x#"\'"}"\ncd /evil\n# \'\ngit commit -m x' commit /start $'/s
 # Backticks end where the shell ends them, so quotes inside them no longer split the two apart (#87).
 cwd $'echo "`echo \'"\'`"\ncd /evil\n# \'\ngit commit -m x' commit /start /evil "backticks read as the shell reads them"
 
+# A commit after a switch to a branch, in one && chain, lands on that branch, so a guard judges it there (#81). Anything
+# that may leave HEAD elsewhere first, or a link other than &&, leaves HEAD's branch to judge, as before.
+targets() { OUT="$(_guardrails_git_targets "$1" commit /s)"; assert_eq "$OUT" "$2" "$3"; }
+targets 'git switch -c fix/x && git commit -am x'                 'local:fix/x /s' "a commit after the branch it creates"
+targets 'git checkout -b fix/x && git commit -am x'               'local:fix/x /s' "the checkout -b form"
+targets 'git checkout -B fix/x origin/main && git commit -am x'   'local:fix/x /s' "checkout -B from a start point"
+targets 'git switch -c fix/x && git add -A && git commit -m x'    'local:fix/x /s' "a git add between"
+targets 'git switch -c x && make && git commit -m y'              'local:x /s'     "another command between"
+targets 'git switch main && git commit -m x'                      'local:main /s'  "a switch to an existing branch"
+targets 'git switch -c fix/x; git commit -m x'                    'local: /s'      "a ; does not carry the switch"
+targets 'git switch -c fix/x || git commit -m x'                  'local: /s'      "a || does not carry the switch"
+targets 'git switch -c x && true; git commit -m y'                'local: /s'      "a ; later in the chain ends it"
+targets 'true || git switch -c fix/x && git commit -m x'          'local: /s'      "a switch after || may not run"
+targets 'git switch -c fix/x | cat && git commit -m x'            'local: /s'      "a piped switch's status is not the chain's"
+targets 'git checkout fix/x && git commit -m x'                   'local: /s'      "checkout without -b may restore a file"
+targets 'git switch - && git commit -m x'                         'local: /s'      "the previous branch is not known"
+targets 'git switch --detach v1 && git commit -m x'               'local: /s'      "a detached HEAD"
+targets 'git switch -c a && git switch main && git commit -m x'   'local:main /s'  "the last switch counts"
+targets 'git switch -c a && git checkout x && git commit -m y'    'local: /s'      "an unknown switch after a known one"
+targets 'git switch -c x && git rebase main y && git commit -m z' 'local: /s'      "a rebase may switch"
+targets 'git -C /a switch -c x && git commit -m y'                'local: /s'      "a switch in another repo"
+targets 'git -C /a switch -c x && git -C /a commit -m y'          'local:x /a'     "a switch and a commit in the same other repo"
+targets 'git switch -c x && cd sub && git commit -m y'            'local: /s/sub'  "a commit in another directory after a cd"
+targets 'git switch -c x && bash -c "git switch main" && git commit -m y' 'local: /s' "a payload between may switch"
+targets 'git switch -c x && git commit -m "$(git switch main)"'   'local: /s'      "a switch in a substitution"
+targets 'sudo git switch -c x && git commit -m y'                 'local: /s'      "a wrapped switch"
+targets 'ssh h git switch -c x && git commit -m y'                'local: /s'      "a switch on another host"
+targets 'git switch -c "fix/x" && git commit -m y'                'local:fix/x /s' "a quoted branch name"
+targets 'git switch --create=fix/x && git commit -m y'            'local:fix/x /s' "--create= with its name"
+targets 'git switch -cfix/x && git commit -m y'                   'local:fix/x /s' "-c with its name fused"
+targets 'git switch -c x && git commit -m a && git commit -m b'   'local:x /s'     "each commit in the chain"
+targets $'git checkout -b x && git commit -m "$(cat <<\'EOF\'\nmsg\nEOF\n)"' 'local:x /s' "a message from a heredoc"
+# The per-line split cannot see the && the switch needs; where it reads a commit the carried split does not, it is judged.
+targets $'git switch -c x && git commit -m "a\ngit commit b"'     $'local:x /s\nlocal: /s' "a commit read only line by line"
+
 # A heredoc fed to a shell is the script it runs (#63).
 yes $'bash <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to bash"
 no  $'cat <<EOF\ngit commit -m x\nEOF'            commit "a heredoc fed to cat is data"

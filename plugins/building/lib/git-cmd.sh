@@ -28,7 +28,8 @@ _guardrails_git_opt_takes_value() {
 }
 
 # _guardrails_git_skip_globals <index> <words> → sets _GUARDRAILS_GIT_SUB to the subcommand after git's global options,
-# and _GUARDRAILS_GIT_DIRS to the -C directories in order. Variables, as a subshell per git command is slow.
+# _GUARDRAILS_GIT_AT to the index after it, and _GUARDRAILS_GIT_DIRS to the -C directories in order. Variables, as a
+# subshell per git command is slow.
 _guardrails_git_skip_globals() {
   local i="$1" w opt="" k; shift
   local -a toks=("$@")
@@ -50,7 +51,7 @@ _guardrails_git_skip_globals() {
       -*) _guardrails_git_opt_takes_value "$w" && opt="$w" ;;    # -C /x, --no-pager
       *)
         # git gets a quoted argument whole, so a subcommand read from one piece of it is left as written, as before.
-        _GUARDRAILS_GIT_SUB="$w"; w="${toks[$((i - 1))]}"
+        _GUARDRAILS_GIT_SUB="$w"; _GUARDRAILS_GIT_AT="$i"; w="${toks[$((i - 1))]}"
         case "$w" in *[\"\'\\]*) _guardrails_whole_word || _GUARDRAILS_GIT_SUB="$w" ;; esac
         break ;;
     esac
@@ -110,31 +111,69 @@ _guardrails_git_effective_cwd() {
   local -a ends=()
   while IFS= read -r line; do
     case "$line" in local:*) any=1 ;; end:*) ends+=("${line#* }"); continue ;; *) continue ;; esac
-    [ -n "${seen[$line]+x}" ] || { seen[$line]=1; printf '%s\n' "${line#* }"; }
+    line="${line#* }"; [ -n "${seen[$line]+x}" ] || { seen[$line]=1; printf '%s\n' "$line"; }
   done < <(_guardrails_git_walks "$@")
   [ -z "$any" ] || return 0
   for line in "${ends[@]}"; do [ -n "${seen[$line]+x}" ] || { seen[$line]=1; printf '%s\n' "$line"; }; done
 }
 
 # _guardrails_git_targets "<command line>" <subcommand> "<starting cwd>" → a line "local: <dir>" for each directory a
-# matching command runs in here, and "remote: <dir>" for one run on another host or in a container, where a guard
-# cannot judge its repo, from either split, each once; with none, "local: <dir>" for the directory each split ends in.
+# matching command runs in here, "local:<branch> <dir>" where a switch in its && chain puts it on that branch (#81), and
+# "remote: <dir>" for one run on another host or in a container, where a guard cannot judge its repo, each once; with
+# none, "local: <dir>" for the directory each split ends in. The per-line split sees no &&, so its records count only
+# where it reads more commands in a directory than the carried split does, as where that split misreads a quote.
 _guardrails_git_targets() {
-  local line any=""
-  local -A seen
-  local -a ends=()
+  local carried per_line line n more=""
+  local -A seen count
+  local -a recs=() ends=()
+  carried="$(_guardrails_git_walk_cwd "$@")"
+  per_line="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_git_walk_cwd "$@")"
   while IFS= read -r line; do
-    case "$line" in end:*) ends+=("local:${line#end:}"); continue ;; esac
-    any=1; [ -n "${seen[$line]+x}" ] || { seen[$line]=1; printf '%s\n' "$line"; }
-  done < <(_guardrails_git_walks "$@")
-  [ -z "$any" ] || return 0
-  for line in "${ends[@]}"; do [ -n "${seen[$line]+x}" ] || { seen[$line]=1; printf '%s\n' "$line"; }; done
+    case "$line" in
+      end:*) ends+=("local:${line#end:}") ;;
+      ?*) recs+=("$line"); line="${line%%:*}: ${line#* }"; count[$line]=$((${count[$line]:-0} + 1)) ;;
+    esac
+  done <<<"$carried"
+  n="${#recs[@]}"
+  while IFS= read -r line; do
+    case "$line" in
+      end:*) ends+=("local:${line#end:}") ;;
+      ?*) recs+=("$line"); count[$line]=$((${count[$line]:-0} - 1)); [ "${count[$line]}" -ge 0 ] || more=1 ;;
+    esac
+  done <<<"$per_line"
+  [ -n "$more" ] || recs=("${recs[@]:0:n}")
+  [ "${#recs[@]}" -gt 0 ] || recs=("${ends[@]}")
+  for line in "${recs[@]}"; do [ -n "${seen[$line]+x}" ] || { seen[$line]=1; printf '%s\n' "$line"; }; done
 }
 
 # _guardrails_git_walks → the walk of each split, the carried and the per-line.
 _guardrails_git_walks() {
   _guardrails_git_walk_cwd "$@"
   _GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_git_walk_cwd "$@"
+}
+
+# _guardrails_git_switch_target <index> → sets _GUARDRAILS_GIT_BRANCH to the branch the caller's git switch, or
+# checkout -b, at its toks from <index>, leaves HEAD on, or to nothing where it cannot tell: checkout without -b may
+# restore a file, and - or --detach leave the branch unknown or none.
+_guardrails_git_switch_target() {
+  local i="$1" w take=""
+  _GUARDRAILS_GIT_BRANCH=""
+  while [ "$i" -lt "${#toks[@]}" ]; do
+    w="${toks[$i]}"
+    case "$w" in *[\<\>]*) _guardrails_skip_redirect && continue ;; esac
+    case "$w" in *[\"\'\\]*) _guardrails_unquote ;; esac
+    i=$((i + 1))
+    [ -z "$take" ] || { _GUARDRAILS_GIT_BRANCH="$w"; return; }
+    case "$_GUARDRAILS_GIT_SUB/$w" in
+      switch/-c | switch/-C | switch/--create | switch/--force-create | */--orphan | checkout/-b | checkout/-B) take=1 ;;
+      switch/--create=* | switch/--force-create=* | */--orphan=*) _GUARDRAILS_GIT_BRANCH="${w#*=}"; return ;;
+      switch/-c?* | switch/-C?* | checkout/-b?* | checkout/-B?*) _GUARDRAILS_GIT_BRANCH="${w#-?}"; return ;;
+      */- | */-d | */--detach | */--) return ;;
+      */-*) ;;
+      switch/*) _GUARDRAILS_GIT_BRANCH="$w"; return ;;
+      *) return ;;
+    esac
+  done
 }
 
 # _guardrails_git_resolve <dir>... → moves the caller's d to each directory in turn, each relative to the last. Joined at
@@ -148,14 +187,16 @@ _guardrails_git_resolve() {
   [ "${#rel[@]}" = 0 ] || { local IFS=/; d="$d/${rel[*]}"; }
 }
 
-# Prints a line "local: <dir>" for each matching git command, or "remote: <dir>" where [remote] or a wrapper sends it
-# elsewhere, then "end: <dir>", the directory in effect at the end.
+# Prints a line "local: <dir>" for each matching git command, "local:<branch> <dir>" after a switch to that branch in
+# its && chain, or "remote: <dir>" where [remote] or a wrapper sends it elsewhere, then "end: <dir>", the directory in
+# effect at the end.
 # The carried split tags where each segment runs, so a substitution's commands are judged where it runs, before the
 # command that holds it, in a child shell of its own (#114). See docs/design/git-command-parsing.md
 _guardrails_git_walk_cwd() {
-  local cmdline="$1" want="$2" top="$3" depth="${4:-0}" remote="${5:-0}" segs j k n=0 tg key cur id par host nop rem away
-  local -a lines=() plain=() after=() at=()
-  local -A scur curat later srem remat awayat
+  local cmdline="$1" want="$2" top="$3" depth="${4:-0}" remote="${5:-0}" segs j k n=0 tg key cur id par host op nop rem away
+  local moved="" r
+  local -a lines=() plain=() after=() at=() recs=()
+  local -A scur curat later srem remat awayat swb swd
   [ "$depth" -gt 4 ] && { printf 'end: %s\n' "$top"; return; }
   if [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ]; then
     segs="$(_guardrails_split_awk 0 "$cmdline")"; [ -z "$segs" ] || mapfile -t plain <<<"$segs"
@@ -175,7 +216,7 @@ _guardrails_git_walk_cwd() {
   done
   j=0
   while [ "$j" -lt "${#lines[@]}" ]; do
-    tg="${lines[$j]}"; nop="${after[$j]:-;}"; j=$((j + 1)); key=t; cur="$top"; rem="$remote"
+    tg="${lines[$j]}"; op="${tg:1:1}"; nop="${after[$j]:-;}"; j=$((j + 1)); key=t; cur="$top"; rem="$remote"
     case "$tg" in
       T*) ;;
       # A shell's heredoc is a script of its own, run where the line that opened it stands, and elsewhere if that line's
@@ -199,19 +240,24 @@ _guardrails_git_walk_cwd() {
       [TB]?1*) curat[$n]="$cur"; remat[$n]="$rem"; n=$((n + 1)); j=$((j + 1)); continue ;;
       [TB]*) curat[$n]="$cur"; remat[$n]="$rem" ;;
     esac
+    # A switch carries to the commands after it only through &&.
+    [ "$op" = a ] || unset "swb[$key]"
     away="$rem"; _guardrails_git_walk_seg "${lines[$j]:-}"; j=$((j + 1))
     case "$tg" in [TB]*) awayat[$n]="$away"; n=$((n + 1)) ;; esac
     if [ "$key" = t ]; then top="$cur"; else scur[$key]="$cur"; fi
   done
   # An untagged line shows no operator, so it is read as after a ;, as before.
-  cur="$top"; nop=";"; rem="$remote"
+  cur="$top"; op=";"; nop=";"; rem="$remote"; key=u
   for j in "${!plain[@]}"; do away="$rem"; _guardrails_git_walk_seg "${plain[$j]}"; done
+  # Where HEAD may have moved some other way, as in a payload or a rebase, no branch a record names is sure.
+  for r in "${recs[@]}"; do [ -z "$moved" ] || r="${r%%:*}: ${r#* }"; printf '%s\n' "$r"; done
   printf 'end: %s\n' "$cur"
 }
 
-# _guardrails_git_walk_seg <segment> → prints a record for a matching git command in it, and moves the caller's cur
-# where a cd or eval moves it. Reads the caller's want and depth, nop, the operator after the segment, and rem, 1 where
-# the segment runs elsewhere, and sets the caller's away to 1 where its command does.
+# _guardrails_git_walk_seg <segment> → adds a record to the caller's recs for a matching git command in it, and moves
+# the caller's cur where a cd or eval moves it, and its swb and swd, the branch and directory of a switch in the chain.
+# Reads the caller's want, depth, key, op, nop, the operators either side, and rem, 1 where the segment runs elsewhere,
+# and sets the caller's away to 1 where its command does, and moved where HEAD may move but not to a known branch.
 _guardrails_git_walk_seg() {
   local seg="$1" i k d w wrapped line
   local -a toks
@@ -238,16 +284,32 @@ _guardrails_git_walk_seg() {
       ;;
     git)
       _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"
-      if [ "$_GUARDRAILS_GIT_SUB" = "$want" ]; then
-        _guardrails_git_resolve "${_GUARDRAILS_GIT_DIRS[@]}"
-        if [ "$away" = 1 ]; then printf 'remote: %s\n' "$d"; else printf 'local: %s\n' "$d"; fi
-      fi
+      _guardrails_git_resolve "${_GUARDRAILS_GIT_DIRS[@]}"
+      case "$_GUARDRAILS_GIT_SUB" in
+        "$want")
+          if [ "$away" = 1 ]; then recs+=("remote: $d")
+          elif [ -n "${swb[$key]-}" ] && [ "${swd[$key]}" = "$d" ]; then recs+=("local:${swb[$key]} $d")
+          else recs+=("local: $d"); fi ;;
+        # A switch in the top chain of this walk that runs here, not after || nor into a pipe, puts HEAD on a branch.
+        switch | checkout)
+          _guardrails_git_switch_target "$_GUARDRAILS_GIT_AT"
+          if [ "$key" = t ] && [ "$wrapped" = 0 ] && [ "$away" = 0 ] && [ "$op" != o ] && [ "$nop" != "|" ] &&
+            [ -n "$_GUARDRAILS_GIT_BRANCH" ]; then
+            swb[$key]="$_GUARDRAILS_GIT_BRANCH"; swd[$key]="$d"
+          else
+            moved=1
+          fi ;;
+        add | stage | rm | mv | restore | status | diff | log | show | commit | push | fetch | pull | tag | config | rev-parse | \
+          merge | reset) ;;
+        *) moved=1 ;;
+      esac
       ;;
     *sh | eval | su | script)
       # A payload's commands are judged where they run; only eval's cd outlives it, as sh -c runs in a child shell.
       _guardrails_shell_payload "$seg" || return
+      moved=1
       while IFS= read -r line; do
-        case "$line" in end:*) d="${line#end: }" ;; *) printf '%s\n' "$line" ;; esac
+        case "$line" in end:*) d="${line#end: }" ;; *) recs+=("$line") ;; esac
       done < <(_guardrails_git_walk_cwd "$_GUARDRAILS_PAYLOAD" "$want" "$d" "$((depth + 1))" "$away")
       [ "$_GUARDRAILS_CMD" = eval ] && [ "$wrapped" = 0 ] && [ "$nop" != "|" ] && cur="$d"
       ;;

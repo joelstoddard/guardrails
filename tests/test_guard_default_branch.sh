@@ -332,6 +332,17 @@ run_hook "$S" "$(jsonat "$r13" 'ssh host git commit -m x')"
 assert_eq "$OUT" "" "the override asks nothing about a commit on another host"
 unset ALLOW_DEFAULT_COMMIT
 
+# Switching to a branch and committing in one && chain judges the branch the commit lands on (#81).
+for c in 'git switch -c fix/x && git commit -am x' 'git checkout -b fix/y && git add -A && git commit -m x'; do
+  run_hook "$S" "$(jsonat "$r13" "$c")"
+  assert_rc 0 "branch then commit on a default branch allowed: $c"
+  assert_eq "$OUT" "" "branch then commit asks nothing: $c"
+done
+run_hook "$S" "$(jsonat "$r13" 'git switch -c fix/z; git commit -m x')"
+assert_rc 2 "a switch then a commit after a ; on a default branch blocked"
+run_hook "$S" "$(jsonat "$r2" 'git switch main && git commit -m x')"
+assert_rc 2 "a switch to the default branch then a commit blocked"
+
 # Every commit is judged, not only the first.
 run_hook "$S" "$(jsonat "$r2" "git commit -m x && git -C $r13 commit -m y")"
 assert_rc 2 "a second commit, on a default branch, blocked"
