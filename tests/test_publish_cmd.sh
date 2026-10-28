@@ -506,6 +506,11 @@ allows 'f() { echo gh pr comment 1 -b x; }'                             "a funct
 allows 'case x in *) echo gh pr comment 1 -b x;; esac'                  "a case arm that only echoes"
 allows 'docker exec c ls'                                               "docker exec running something other than a shell"
 allows 'kubectl exec pod -- gh pr list'                                 "kubectl exec running something other than a shell"
+# docker exec, kubectl exec and nsenter run their words as the command, as you, so a publish there is read.
+blocks 'docker exec c gh pr comment 1 -b x'                             "a publish docker exec runs"
+blocks 'docker exec -u root -w /srv c npm publish'                      "a publish behind docker exec's options"
+blocks 'kubectl exec -it pod -c app -- gh pr comment 1 -b x'            "a publish kubectl exec runs"
+blocks 'nsenter -t 1 -m -u gh pr comment 1 -b x'                        "a publish nsenter runs"
 allows $'cat > notes.md <<EOF\nRun timeout 5 bash, or a case arm, or f() { gh; }.\nEOF' "prose naming these words"
 unseen 'echo x | timeout 5 bash'                                        "a pipe into a shell behind timeout"
 unseen 'cat cmds.txt | docker exec -i c sh'                             "a pipe into a shell in a container"

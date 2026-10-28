@@ -8,7 +8,7 @@ cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 
 # Fail closed: a library that does not load, or loads in part, checks nothing, so the command gets a question.
 if ! . "$SELF_DIR/../../lib/git-cmd.sh" ||
-  ! declare -F _guardrails_unreadable _guardrails_invokes_git _guardrails_unseen_shell_stdin _guardrails_git_effective_cwd \
+  ! declare -F _guardrails_unreadable _guardrails_invokes_git _guardrails_unseen_shell_stdin _guardrails_git_targets \
     >/dev/null; then
   [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
   jq -cn --arg r "Could not load the default-branch guard's library, so it cannot check this command does not commit on a default branch." \
@@ -24,17 +24,21 @@ if why="$(_guardrails_unreadable "$cmd")"; then
   exit 0
 fi
 
-# A shell reading commands from a pipe might commit where no guard can read it, so it asks (#63).
+# A shell reading commands from a pipe might commit where no guard can read it, so it asks (#63). So does a commit on
+# another host or in a container, whose branch the guard cannot see.
 unseen=""
-_guardrails_invokes_git "$cmd" commit || unseen="$(_guardrails_unseen_shell_stdin "$cmd")" || exit 0
+_guardrails_invokes_git "$cmd" commit; found=$?
+[ "$found" = 0 ] || unseen="$(_guardrails_unseen_shell_stdin "$cmd")" || [ "$found" = 2 ] || exit 0
 [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
 
 # Judge the repo git will actually act on, not the one the shell happens to sit in —
 # under worktree-per-ticket they differ, and resolving from .cwd refuses commits that
 # were never going to land there; judge every directory a commit runs in, by either split.
 # See docs/design/git-command-parsing.md.
-n=0
+n=0; away=""
 while IFS= read -r dir; do
+  case "$dir" in remote:*) away=1; continue ;; esac
+  dir="${dir#local: }"
   # Each directory costs some 33 ms of git calls, so past 64 the guard could time out, which lets the command through.
   n=$((n + 1))
   if [ "$n" -gt 64 ]; then
@@ -62,5 +66,9 @@ while IFS= read -r dir; do
     echo "Refusing to commit on the default branch '$def'. Create a branch first, or set ALLOW_DEFAULT_COMMIT=1 to override." >&2
     exit 2
   fi
-done < <(_guardrails_git_effective_cwd "$cmd" commit "${cwd:-.}")
+done < <(_guardrails_git_targets "$cmd" commit "${cwd:-.}")
+if [ -n "$away" ]; then
+  jq -cn --arg r "Could not check this does not commit on a default branch: it commits on another host or in a container, through ssh, docker exec, kubectl exec or nsenter, where the guard cannot see the branch." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+fi
 exit 0

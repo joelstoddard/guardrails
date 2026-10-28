@@ -350,7 +350,7 @@ _guardrails_command_at() {
     *[=/\(\)\<\>\"\'\\]* | '' | '!' | '{' | if | then | elif | else | while | until | do | in) _guardrails_command_skip ;;
     function | coproc | case) _guardrails_command_skip ;;
     sudo | env | exec | time | xargs | ssh | nohup | command) _guardrails_command_skip ;;
-    timeout | nice | stdbuf | doas | setsid | chroot | docker | kubectl) _guardrails_command_skip ;;
+    timeout | nice | stdbuf | doas | setsid | chroot | docker | kubectl | nsenter) _guardrails_command_skip ;;
     *) [ "${toks[1]:-}" != '()' ] || _guardrails_command_skip ;;   # f () { ...; }
   esac
 }
@@ -473,17 +473,18 @@ _guardrails_chdir() {
 # The guards' passes read a segment up to five times, and the loop is linear in the words before the command, so a long
 # segment's lookup is kept, keyed by the split and its words; a subshell inherits it. Callers read toks only past the
 # command, which the loop's splitting of fused redirects leaves as they were. See docs/design/git-command-parsing.md
-# _GUARDRAILS_CMD_DIRS are the directories that wrappers such as env -C run the command in, set only when
+# _GUARDRAILS_CMD_DIRS are the directories that wrappers such as env -C run the command in, and _GUARDRAILS_CMD_REMOTE
+# is 1 when a wrapper runs it on another host, in a container or in another namespace; both are set only when
 # _GUARDRAILS_CMD_WRAPPED is 1.
 declare -A _GUARDRAILS_CMD_CACHE _GUARDRAILS_CMD_CACHE_DIRS
 _guardrails_command_skip() {
-  local i=0 w b="" vals longs o start ops sub remote=-1 rb ra so no ws="" key="" cdo
+  local i=0 w b="" vals longs o start ops sub remote=-1 rb ra so no ws="" key="" cdo nrem=0 rr=0
   _GUARDRAILS_CMD_DIRS=()
   if [ "${#toks[@]}" -ge 64 ]; then
     key="${_GUARDRAILS_SPLIT_PER_LINE:-} ${toks[*]}"
     if [ -n "${_GUARDRAILS_CMD_CACHE[$key]+x}" ]; then
-      IFS=/ read -r _GUARDRAILS_CMD_AT _GUARDRAILS_CMD_WRAPPED _GUARDRAILS_CMD_SHELL _GUARDRAILS_CMD_ARGS _GUARDRAILS_CMD \
-        <<<"${_GUARDRAILS_CMD_CACHE[$key]}"
+      IFS=/ read -r _GUARDRAILS_CMD_AT _GUARDRAILS_CMD_WRAPPED _GUARDRAILS_CMD_REMOTE _GUARDRAILS_CMD_SHELL _GUARDRAILS_CMD_ARGS \
+        _GUARDRAILS_CMD <<<"${_GUARDRAILS_CMD_CACHE[$key]}"
       [ -z "${_GUARDRAILS_CMD_CACHE_DIRS[$key]+x}" ] || mapfile -t _GUARDRAILS_CMD_DIRS <<<"${_GUARDRAILS_CMD_CACHE_DIRS[$key]}"
       return
     fi
@@ -536,16 +537,17 @@ _guardrails_command_skip() {
       doas) vals=Cu; so='^-[^Cu]*s' ;;
       chroot) vals=ugG; ops=1; longs='--userspec --groups'; ws="$b" ;;
       nohup | command | setsid) vals="" ;;
-      # These run their command elsewhere, as you, so only a shell there is the command word, read like a shell here.
-      # ssh takes options after its host as well, and its command is read as a payload (#113).
-      # With -N, -W, -O, -G, -Q or -V it starts no shell.
-      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; no='^-[^BbcDEeFIiJLlmOoPpQRSWw]*[NWOGQV]'; ops=1; remote="$i"; rb="$b"; ws="$b" ;;
+      # These run their command elsewhere, as you: ssh's is a command line, read as its payload unless a shell runs it, and
+      # the others' words are the command, as sudo's are (#113). ssh takes options after its host, and -N, -W, -O, -G, -Q
+      # or -V start no shell.
+      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; no='^-[^BbcDEeFIiJLlmOoPpQRSWw]*[NWOGQV]'; ops=1; remote="$i"; rb="$b"; ws="$b"; rr="$nrem"; nrem=$((nrem + 1)) ;;
       docker)
         [ "${toks[$((i + 1))]:-}" = exec ] || break
-        vals=euw; ops=1; sub=1; remote="$i"; rb="$b"; longs='--env --env-file --user --workdir --detach-keys' ;;
+        vals=euw; ops=1; sub=1; nrem=$((nrem + 1)); longs='--env --env-file --user --workdir --detach-keys' ;;
       kubectl)
         [ "${toks[$((i + 1))]:-}" = exec ] || break
-        vals=cfn; ops=1; sub=1; remote="$i"; rb="$b"; longs='--container --filename --namespace --pod-running-timeout' ;;
+        vals=cfn; ops=1; sub=1; nrem=$((nrem + 1)); longs='--container --filename --namespace --pod-running-timeout' ;;
+      nsenter) vals=tNGS; longs='--target --net-socket --setgid --setuid'; ws="$b"; nrem=$((nrem + 1)) ;;
       # f () { ...; } names a function before its body.
       *) [ "${toks[$((i + 1))]:-}" != '()' ] || { _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 2)); continue; }; break ;;
     esac
@@ -586,12 +588,14 @@ _guardrails_command_skip() {
   done
   _GUARDRAILS_CMD_SHELL=""; [ "$i" -lt "${#toks[@]}" ] || { b=""; _GUARDRAILS_CMD_SHELL="$ws"; }
   # _GUARDRAILS_CMD_ARGS is where the command that ssh runs starts.
+  _GUARDRAILS_CMD_REMOTE="$nrem"
   if [ "$remote" -ge 0 ]; then
-    case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$remote"; b="$rb"; _GUARDRAILS_CMD_ARGS="$ra" ;; esac
+    case "$b" in sh | bash | zsh | dash | ksh) ;; *) i="$remote"; b="$rb"; _GUARDRAILS_CMD_ARGS="$ra"; _GUARDRAILS_CMD_REMOTE="$rr" ;; esac
   fi
+  [ "$_GUARDRAILS_CMD_REMOTE" = 0 ] || _GUARDRAILS_CMD_REMOTE=1
   _GUARDRAILS_CMD_AT="$i"; _GUARDRAILS_CMD="$b"
   # A name holds no /, as the loop reads it from the last one.
-  [ -z "$key" ] || _GUARDRAILS_CMD_CACHE[$key]="$i/$_GUARDRAILS_CMD_WRAPPED/$_GUARDRAILS_CMD_SHELL/${_GUARDRAILS_CMD_ARGS:-}/$b"
+  [ -z "$key" ] || _GUARDRAILS_CMD_CACHE[$key]="$i/$_GUARDRAILS_CMD_WRAPPED/$_GUARDRAILS_CMD_REMOTE/$_GUARDRAILS_CMD_SHELL/${_GUARDRAILS_CMD_ARGS:-}/$b"
   [ -z "$key" ] || [ "${#_GUARDRAILS_CMD_DIRS[@]}" = 0 ] || {
     printf -v o '%s\n' "${_GUARDRAILS_CMD_DIRS[@]}"; _GUARDRAILS_CMD_CACHE_DIRS[$key]="${o%$'\n'}"
   }

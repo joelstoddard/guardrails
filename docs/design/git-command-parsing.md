@@ -86,7 +86,8 @@ the git guards and the shell readers, finds the command word through one lookup,
 - a function's header (`f()`, `f ()`, `function f`), a case arm's pattern (a word ending in
   `)`, after `case … in`) and `coproc` with its name, so the body or arm is read (#110);
 - the wrappers `sudo`, `env`, `nohup`, `exec`, `command`, `time`, `xargs`, `timeout`,
-  `nice`, `stdbuf`, `doas`, `setsid` and `chroot`, with their options, and the duration
+  `nice`, `stdbuf`, `doas`, `setsid`, `chroot`, `docker exec`, `kubectl exec` and `nsenter`,
+  with their options, and the duration
   of `timeout` and the root of `chroot`. In a cluster such as `-Eu`, the first option
   that takes a value takes the rest of the word, or the next word if none is left, as
   getopt does. A long option that takes a value, such as `sudo --user`, takes the next
@@ -121,13 +122,17 @@ The lookup notes such a wrapper in `_GUARDRAILS_CMD_SHELL` when no command follo
 with `-N`, `-W`, `-O`, `-G`, `-Q` or `-V` starts none.
 
 `command -v` and `-V` name a command without running it, so there `command` is the
-command word. `ssh host`, `docker exec container` and `kubectl exec pod --` run their
-command elsewhere, as you. The lookup sees through them only to a shell, which is then
-read like a shell here. `ssh host gh …` and `docker exec c ls` keep `ssh` and `docker` as
-their command word, as before. ssh joins the words after its host into a command line that
-the shell there reads, so that is a payload, read like `eval`'s, with `_GUARDRAILS_CMD_ARGS`
-marking where it starts, and the publish guard still reads the words after `ssh` too, as
-before (#113). ssh reads options after its host as well, as kubectl does after its pod.
+command word. `ssh host`, `docker exec container`, `kubectl exec pod --` and `nsenter` run
+their command elsewhere, as you: on another host, in a container or in another namespace.
+`docker exec`, `kubectl exec` and `nsenter` run their words as the command, as `sudo` does,
+so the lookup sees through them to it, and `docker exec c gh pr comment …` is read as a
+publish. ssh joins the words after its host into a command line that the shell there reads,
+so it keeps `ssh` as its command word, unless a shell is that command, and its command line
+is a payload, read like `eval`'s, with `_GUARDRAILS_CMD_ARGS` marking where it starts; the
+publish guard still reads the words after `ssh` too, as before (#113). ssh reads options
+after its host as well, as kubectl does after its pod. `_GUARDRAILS_CMD_REMOTE` notes a
+command that one of these runs, as git's repo there is not the local one; see "Commits
+elsewhere".
 
 The lookup is on the guards' slowest path: a command at the caps can make them read some
 65,000 segments. Two measured costs shape it:
@@ -146,7 +151,7 @@ Two readers use the lookup with care:
   it asks whether a shell's name is a word anywhere in the segment, before the `<<` or
   after it, as in `<<EOF bash`, which feeds the body to bash (#132). That is a superset of
   the lookup, so no wrapper or redirect hides a shell. It also catches wrappers the
-  lookup does not know, such as `docker exec -i c bash <<EOF`. The cost is a false
+  lookup does not know, such as `docker run -i image bash <<EOF`. The cost is a false
   positive when a shell's name is a plain argument, as in `grep -w bash <<EOF`. A word
   counts with its quotes and backslashes dropped, as `ba\sh` does. Inside quotes, only
   the first word counts, and only when the quote ends with it or an option follows it,
@@ -385,10 +390,19 @@ per-line split cuts every quoted line into pieces, so a piece read there asks no
 before. Git's skip leaves a piece as written, as before, so `git "commit -m x"` is not a
 commit.
 
-A shell that runs on another host, as in `ssh host bash <<EOF`, has its script read like
-a local one, as does the command `ssh host git commit` runs (#113). So `guard-default-branch`
-judges a `git commit` in either against the local checkout, and refuses it when that
-checkout is on its default branch.
+## Commits elsewhere
+
+A git command that ssh, `docker exec`, `kubectl exec` or `nsenter` runs is read like a local
+one, as is the script of a shell they run, its heredoc included, but its repo is on another
+host or in a container, whose branch no guard here can see. So `_guardrails_invokes_git`
+returns 2 for a command run only there, which `test-gate` and `lint-warn` count as no command,
+as main did. The walk reports such a command as `remote`, and `guard-default-branch` asks
+about it, on any branch, rather than judge the local checkout, which it used to refuse a
+commit on when that checkout was on its default branch. Main let these through, so asking is
+still stronger. The local shell expands a substitution in ssh's double-quoted command line,
+or in an unquoted heredoc fed to ssh, before ssh runs, so that runs here and is judged here;
+the payload reader reads a double-quoted one again as ssh's, which adds a question rather than
+an allowance.
 
 ## Failure mode if you change this
 

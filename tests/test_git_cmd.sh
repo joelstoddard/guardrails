@@ -5,6 +5,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 yes() { _guardrails_invokes_git "$1" "$2"; RC=$?; assert_rc 0 "$3"; }
 no()  { _guardrails_invokes_git "$1" "$2"; RC=$?; assert_rc 1 "$3"; }
+# there: git runs the subcommand only on another host or in a container, where a guard cannot judge its repo.
+there() { _guardrails_invokes_git "$1" "$2"; RC=$?; assert_rc 2 "$3"; }
 
 # --- real git invocations are detected ---
 yes "git commit -m x"          commit "plain commit"
@@ -210,9 +212,13 @@ yes "{ git commit -m x; }"                 commit "in a group"
 yes "(git commit -m x)"                    commit "in a subshell"
 yes "sudo bash -c 'git commit -m x'"       commit "a shell behind sudo"
 for w in '!' '{' '(' 'if' 'then' 'elif' 'else' 'while' 'until' 'do' 'nohup' 'command' 'time' 'sudo -n' 'env -i' 'exec -c' 'xargs -0' \
-  'ssh -T h bash -c' '2>/dev/null' '> log' 'f()' 'f ()' 'function f' 'case x in *)' 'in a)' 'coproc' 'timeout 5' 'nice -n 5' \
-  'stdbuf -oL' 'doas -u r' 'setsid' 'chroot /j' 'docker exec -i c bash -c' 'kubectl exec p -- bash -c' '"env"' '\nohup'; do
+  '2>/dev/null' '> log' 'f()' 'f ()' 'function f' 'case x in *)' 'in a)' 'coproc' 'timeout 5' 'nice -n 5' \
+  'stdbuf -oL' 'doas -u r' 'setsid' 'chroot /j' '"env"' '\nohup'; do
   yes "$w git commit -m x"                 commit "seen through $w as a segment's first word"
+done
+# A shell run elsewhere is seen through too, and its commit is there.
+for w in 'ssh -T h bash -c' 'docker exec -i c bash -c' 'kubectl exec p -- bash -c'; do
+  there "$w git commit -m x"               commit "seen through $w as a segment's first word"
 done
 yes "/usr/bin/time -p git commit -m x"     commit "seen through a wrapper by path"
 no  "env FOO=1 git status"                 commit "env before another subcommand"
@@ -241,7 +247,7 @@ yes 'case x in *) git push;; esac'         push   "in a case arm"
 yes 'coproc git commit -m x'               commit "in a coproc"
 yes 'timeout 30 git push'                  push   "behind timeout"
 yes 'nice -n 5 git commit -m x'            commit "behind nice"
-no  'docker exec c git commit -m x'        commit "a commit in a container is not here"
+there 'docker exec c git commit -m x'      commit "a commit in a container is there, not here"
 cwd 'timeout 5 cd /x; git commit -m y'     commit /start /start "a cd behind a new wrapper is not followed"
 cwd 'f() { cd /x; }; git commit -m y'      commit /start /start "a cd in a function body is not followed"
 
@@ -335,9 +341,30 @@ yes $'chroot /srv/jail <<EOF\ngit commit -m x\nEOF'  commit "a heredoc fed to ch
 no  $'sudo tee f <<EOF\ngit commit -m x\nEOF'        commit "a heredoc fed to sudo tee is data"
 
 # ssh's command is read like a local one, as a shell's script on another host is (#113).
-yes 'ssh host git commit -m x'                        commit "a commit ssh runs on another host"
+there 'ssh host git commit -m x'                      commit "a commit ssh runs on another host"
 yes $'ssh host <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to ssh with no command"
 no  'ssh host git status'                             commit "ssh running another subcommand"
+
+# A command ssh, docker exec, kubectl exec or nsenter runs is read, but it runs elsewhere, so its repo is not here.
+there 'kubectl exec pod -- git commit -m x'           commit "a commit kubectl exec runs"
+there 'nsenter -t 1 -m git commit -m x'               commit "a commit nsenter runs in another namespace"
+there 'ssh host bash -c "git commit -m x"'            commit "a commit in a shell on another host"
+there "ssh host 'bash -c \"git commit -m x\"'"         commit "a commit in a shell in ssh's command"
+there 'docker exec c bash -c "git commit -m x"'       commit "a commit in a shell in a container"
+there 'sudo docker exec c git commit -m x'            commit "a commit in a container behind sudo"
+there 'docker exec c ssh h git commit -m x'           commit "ssh from a container"
+yes 'git commit -m x; ssh host git commit -m y'       commit "a commit here and one on another host"
+yes 'docker exec c git commit -m x; git commit -m y'  commit "a commit in a container and one here"
+no  'docker exec c git status'                        commit "a container running another subcommand"
+walk 'ssh h git commit -m x'                          commit /s 'remote: /s'  "a commit on another host is remote"
+walk 'docker exec c git -C /x commit -m x'            commit /s 'remote: /x'  "a commit in a container is remote"
+walk $'ssh host <<EOF\ngit commit -m x\nEOF'          commit /s 'remote: /s'  "a heredoc's commit on another host is remote"
+walk $'ssh host bash <<\'EOF\'\necho $(git commit -m x)\nEOF' commit /s 'remote: /s' "a quoted heredoc's substitution on another host"
+walk $'ssh host bash <<EOF\necho $(git commit -m x)\nEOF'   commit /s 'local: /s'  "an unquoted heredoc's substitution is expanded here"
+walk 'ssh h "echo $(git commit -m x)"'                commit /s $'remote: /s\nlocal: /s' \
+  "ssh's substitution is expanded here, and read again in its command, which asks rather than allows"
+walk 'git commit -m x; ssh h git commit -m y'         commit /s $'local: /s\nremote: /s' "a commit here and one on another host"
+cwd 'ssh h git commit -m x'                           commit /s /s            "a commit only on another host leaves the end directory"
 
 # A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
 yes "bash<<<'git commit -m x'"      commit "a here-string with no blank after the shell"

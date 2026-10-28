@@ -310,6 +310,26 @@ assert_rc 2 "a commit on the default branch in a shell's heredoc before a cd blo
 run_hook "$S" "$(jsonat "$r13" "cd $r2 | git commit -m x")"
 assert_rc 2 "a commit on the default branch after a piped cd blocked"
 
+# A commit ssh, docker exec, kubectl exec or nsenter runs lands in a repo this guard cannot see, so it asks, wherever the
+# shell sits, rather than judging the local checkout's branch.
+for c in 'ssh host git commit -m x' 'docker exec c git commit -m x' 'kubectl exec pod -- git commit -m x' \
+  $'ssh host <<EOF\ngit commit -m x\nEOF' "ssh host 'cd /srv && git commit -m x'"; do
+  for r in "$r13" "$r2"; do
+    run_hook "$S" "$(jsonat "$r" "$c")"
+    assert_rc 0 "a commit run elsewhere is not refused outright: $c"
+    assert_out '"permissionDecision":"ask"' "a commit run elsewhere asks: $c"
+    assert_out 'another host or in a container' "the question says where: $c"
+  done
+done
+run_hook "$S" "$(jsonat "$r13" 'git commit -m x; ssh host git commit -m y')"
+assert_rc 2 "a commit here on the default branch, beside one on another host, blocked"
+run_hook "$S" "$(jsonat "$r13" 'ssh host git status')"
+assert_eq "$OUT" "" "another subcommand on another host asks nothing"
+export ALLOW_DEFAULT_COMMIT=1
+run_hook "$S" "$(jsonat "$r13" 'ssh host git commit -m x')"
+assert_eq "$OUT" "" "the override asks nothing about a commit on another host"
+unset ALLOW_DEFAULT_COMMIT
+
 # Every commit is judged, not only the first.
 run_hook "$S" "$(jsonat "$r2" "git commit -m x && git -C $r13 commit -m y")"
 assert_rc 2 "a second commit, on a default branch, blocked"
