@@ -33,15 +33,16 @@ _guardrails_split_awk() {
     # line, after pieces lp[k, 1..ln[k]] from earlier lines; a nested level leaves its opener and closer.
     # Levels at or below hb enclose an unquoted heredoc body being read, whose text is data, not theirs.
     # In tag mode a line in place is tagged T and 1 if it starts inside a substitution, as a piece of one cut at an
-    # operator does. The segments of a substitution are tagged S and their instance, after a line O for each instance as
-    # it opens, with its parent instance, or 0 and the line in place that holds it: ol counts those lines, and hs[e] is
-    # the line that opened heredoc e, whose body runs with it.
+    # operator does, or B for one in a shell heredoc body, with the line that opened it, after it. The segments of a
+    # substitution are tagged S and their instance, after a line O for each instance as it opens, with its parent
+    # instance, or 0 and the line in place that holds it: ol counts those lines, and hs[e] is the line that opened heredoc
+    # e, whose body runs with it. lk, lb and lh2 are the kind, base depth and opener of the line in place being read.
     function subopen(k, start) {
       if (k > hb + 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
       cs[k] = start; ln[k] = 0; seal(sf[k] == 1 || ev[k - 1])
       if (tag) { sid[k] = ++nsid; xp[++nxp] = "O" nsid " " (k > hb + 1 ? sid[k - 1] " 0" : "0 " (inb ? hs[lh[lv]] : ol)) "\n" }
     }
-    function nl() { if (!tag || inb) return "\n"; ol++; return "\nT" (d > 0) "\n" }
+    function nl() { if (!tag || inb) return "\n"; ol++; return "\n" lk (d > lb) lh2 "\n" }
     function subemit(k, e,   j, t) {
       t = substr($0, cs[k], e - cs[k])
       if (t == "" && !ln[k]) return
@@ -123,7 +124,10 @@ _guardrails_split_awk() {
       if (!cont) wb = 1
       # cw is the end of the word being read, and fsh notes a shell word before it in the segment.
       if (carry && q == "" && !cont) { cw = ""; fsh = 0; qd = 0; fev = 0; ps = 0 }
-      if (fresh) ltag = "T" (d > 0)
+      if (fresh) {
+        if (lv && es[lh[lv]] == 1) { lk = "B"; lb = ld[lv]; lh2 = " " hs[lh[lv]] } else { lk = "T"; lb = 0; lh2 = "" }
+        ltag = lk (d > lb) lh2
+      }
       # Indexing the line split into characters keeps the scan linear: substr rescans the line on each call.
       cont = 0; ar = 0; n = split($0, chars, "")
       for (i = 1; i <= n; i++) {

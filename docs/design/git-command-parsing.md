@@ -209,8 +209,12 @@ that `cd` to `/x)`, a path that does not exist, and skip the check. Each instanc
 substitution opens with a line `O` naming its parent instance, or the line in place that holds
 it, and its segments are tagged `S`. So the walk starts each one where the line that holds it,
 or its parent at the point it opens, stands, and a `cd` in one reaches neither another nor the
-commands after it. A heredoc body's substitutions are held by the line that opened it. Only the
-walk reads tags; the guards' other passes read the split as before, byte for byte.
+commands after it. A heredoc body's substitutions are held by the line that opened it. A shell's
+heredoc is the script that shell runs, so its lines are tagged `B` with the line that opened it,
+and the walk reads them as a script of their own, started where that line stands: a `cd` in it
+reaches nothing past its delimiter, nor does one after its opener, as in `bash <<EOF; cd /y`,
+reach it. Only the walk reads tags; the guards' other passes read the split as before, byte for
+byte.
 
 ## Two splits, never weaker than one
 

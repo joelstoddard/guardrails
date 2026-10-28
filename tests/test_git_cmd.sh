@@ -128,6 +128,14 @@ yes $'cat <<EOF `true\ngit commit -m x\n`\nbody\nEOF' commit "a backtick spannin
 yes $'bash -c \'source /dev/stdin\' <<EOF\ngit commit -m x\nEOF' commit "a heredoc fed to a shell that also has -c (#93)"
 yes $'bash script.sh <<EOF\ngit commit -m x\nEOF'  commit "a heredoc fed to a shell that also has a script file (#93)"
 
+# A shell's heredoc is the script that shell runs, so a cd in it ends with that shell, and it runs where its opener does.
+cwd $'bash <<EOF\ncd /x\nEOF\ngit commit -m y'                commit /s /s    "a shell's heredoc's cd does not outlive it"
+cwd $'bash <<EOF; cd /y\ngit commit -m x\nEOF'                commit /s /s    "a shell's heredoc runs before the command after its opener"
+cwd $'cd /a && bash <<EOF\ncd b\ngit commit -m x\nEOF'         commit /s /a/b  "a cd in a shell's heredoc before its commit"
+cwd $'bash <<A\nbash <<B\ncd /x\nB\ngit commit -m y\nA'       commit /s /s    "a nested heredoc's cd stays in it"
+cwd $'x=$(bash <<EOF\ncd /y\ngit commit -m z\nEOF\n)'          commit /s /y    "a shell's heredoc inside a substitution"
+cwd $'bash <<EOF\necho $(true && cd /x); git commit -m y\nEOF' commit /s /s    "a cd cut from a substitution in a heredoc"
+
 # A shell or eval payload is a script of its own (#65).
 yes "bash -c 'git commit -m x'"                   commit "inside bash -c"
 yes 'sh -c "cd /x && git push origin HEAD"'       push   "inside sh -c after a cd"

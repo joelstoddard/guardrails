@@ -137,14 +137,19 @@ _guardrails_git_walk_cwd() {
   while [ "$j" -lt "${#lines[@]}" ]; do
     tg="${lines[$j]}"; j=$((j + 1)); key=t; cur="$top"
     case "$tg" in
-      T0) curat[$n]="$top"; n=$((n + 1)) ;;
-      # A piece of a substitution cut at an operator is read whole in the substitution's own segments.
-      T1) curat[$n]="$top"; n=$((n + 1)); j=$((j + 1)); continue ;;
+      T*) ;;
+      # A shell's heredoc is a script of its own, run where the line that opened it stands.
+      B*) host="${tg#B? }"; key="b$host"; [ -n "${scur[$key]+x}" ] || scur[$key]="${curat[$host]-$top}"; cur="${scur[$key]}" ;;
       O*)
         id="${tg#O}"; par="${id#* }"; host="${par#* }"; id="${id%% *}"; par="${par%% *}"
         if [ "$par" = 0 ]; then scur[s$id]="${curat[$host]-$top}"; else scur[s$id]="${scur[s$par]-$top}"; fi
         continue ;;
       *) key="s${tg#S}"; cur="${scur[$key]-$top}" ;;
+    esac
+    case "$tg" in
+      # A piece of a substitution cut at an operator is read whole in the substitution's own segments.
+      [TB]1*) curat[$n]="$cur"; n=$((n + 1)); j=$((j + 1)); continue ;;
+      [TB]*) curat[$n]="$cur"; n=$((n + 1)) ;;
     esac
     _guardrails_git_walk_seg "${lines[$j]:-}"; j=$((j + 1))
     if [ "$key" = t ]; then top="$cur"; else scur[$key]="$cur"; fi
