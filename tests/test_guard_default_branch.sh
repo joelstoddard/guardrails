@@ -282,6 +282,17 @@ assert_eq "$OUT" "" "a commit whose message comes from a heredoc asks nothing on
 run_hook "$S" "$(jsonat "$r13" "> 'a b c' git commit -m x")"
 assert_rc 2 "a commit after a quoted target with blanks on the default branch blocked"
 
+# Every commit is judged, not only the first.
+run_hook "$S" "$(jsonat "$r2" "git commit -m x && git -C $r13 commit -m y")"
+assert_rc 2 "a second commit, on a default branch, blocked"
+# Each directory costs git calls, so past 64 the guard cannot judge them all in time and asks.
+many="$(for i in $(seq 65); do printf 'git -C /nonexistent/%s commit -m x; ' "$i"; done)"
+run_hook "$S" "$(jsonat "$r2" "$many")"
+assert_out '"permissionDecision":"ask"' "commits in 65 directories ask"
+assert_out 'more than 64 directories' "the question names the directories"
+run_hook "$S" "$(jsonat "$r2" "${many%git -C /nonexistent/65 *}")"
+assert_eq "$OUT" "" "commits in 64 directories ask nothing"
+
 # A library that does not load checks nothing, so the guard asks rather than allows.
 # broken_hook <library> <how> → the path of a copy of the hook whose library is broken that way: a syntax error at its
 # end or in its middle, or the file missing.

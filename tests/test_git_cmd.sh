@@ -75,6 +75,13 @@ cwd "cd /a && git -C sub commit" commit /start /a/sub      "cd then relative -C"
 # a cd for a different subcommand must not be attributed to ours
 cwd "cd /a && git push"          commit /a     /a          "cd applies, but no matching commit"
 
+# Every matching command is judged, each directory once, not only the first.
+cwd "git -C a push && git -C b push"            push   /s $'/s/a\n/s/b' "both pushes' directories"
+cwd "git commit -m x; cd /b; git commit -m y"   commit /s $'/s\n/b'     "a commit before and after a cd"
+cwd "git -C /a commit; git -C /a commit"        commit /s /a            "one directory judged once"
+cwd "bash -c 'git -C /a commit'; git -C /b commit" commit /s $'/a\n/b'  "a commit in a payload and one after it"
+cwd "git -C /a commit; cd /c"                   commit /s /a            "the directory after the last command is not judged"
+
 # A `cd` fabricated out of a quoted pattern must not redirect the guard. This is the
 # sharp end of blind splitting: guard-default-branch would resolve a path that does not
 # exist, fail to read a branch from it, and let a commit on the default branch through.

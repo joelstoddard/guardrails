@@ -82,25 +82,33 @@ _guardrails_git_in_segments() {
   return 1
 }
 
-# Print the working directory in effect when `git <subcommand>` runs, starting from <cwd>.
+# Print the working directory in effect when each `git <subcommand>` runs, starting from <cwd>.
 # Honours both `cd <path> &&` and cumulative `git -C <path>`, walked in order so they
 # compose. Why this matters: docs/design/git-command-parsing.md.
 #
 # Usage: _guardrails_git_effective_cwd "<command line>" <subcommand> "<starting cwd>"
-#        → one line, or two when the two splits disagree, so a guard can judge both.
+#        → one line for each directory a matching command runs in, in either split, so a guard can judge them all; with
+#          none, the directory each split ends in.
 _guardrails_git_effective_cwd() {
-  local carried per_line
+  local carried per_line line any=""
+  local -A seen
   carried="$(_guardrails_git_walk_cwd "$@")"
   per_line="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_git_walk_cwd "$@")"
-  printf '%s\n' "$carried"
-  [ "$per_line" = "$carried" ] || printf '%s\n' "$per_line"
+  while IFS= read -r line; do
+    case "$line" in local:*) any=1 ;; *) continue ;; esac
+    [ -n "${seen[$line]+x}" ] || { seen[$line]=1; printf '%s\n' "${line#* }"; }
+  done <<<"$carried"$'\n'"$per_line"
+  [ -z "$any" ] || return 0
+  while IFS= read -r line; do
+    [ -n "${seen[$line]+x}" ] || { seen[$line]=1; printf '%s\n' "${line#* }"; }
+  done <<<"$carried"$'\n'"$per_line"
 }
 
-# Prints the cwd, with rc 0 once the matching git command is reached and rc 1 if it never is.
+# Prints a line "local: <dir>" for each matching git command, then "end: <dir>", the directory in effect at the end.
 _guardrails_git_walk_cwd() {
-  local cmdline="$1" want="$2" cur="$3" depth="${4:-0}" seg i d v wrapped
+  local cmdline="$1" want="$2" cur="$3" depth="${4:-0}" seg i d v wrapped line
   local -a toks
-  [ "$depth" -gt 4 ] && { printf '%s' "$cur"; return 1; }
+  [ "$depth" -gt 4 ] && { printf 'end: %s\n' "$cur"; return; }
   while IFS= read -r seg; do
     read -r -a toks <<<"$seg" || continue
     _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; wrapped="$_GUARDRAILS_CMD_WRAPPED"
@@ -119,28 +127,25 @@ _guardrails_git_walk_cwd() {
       git)
         _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"
         if [ "$_GUARDRAILS_GIT_SUB" = "$want" ]; then
+          d="$cur"
           for v in "${_GUARDRAILS_GIT_DIRS[@]}"; do
             case "$v" in
-              /*) cur="$v" ;;
-              ?*) cur="$cur/$v" ;;
+              /*) d="$v" ;;
+              ?*) d="$d/$v" ;;
             esac
           done
-          printf '%s' "$cur"
-          return 0
+          printf 'local: %s\n' "$d"
         fi
         ;;
       *sh | eval)
-        # A payload that runs the command says where; otherwise only eval's cd outlives it, as sh -c
-        # runs in a child shell.
+        # A payload's commands are judged where they run; only eval's cd outlives it, as sh -c runs in a child shell.
         _guardrails_shell_payload "$seg" || continue
-        if d="$(_guardrails_git_walk_cwd "$_GUARDRAILS_PAYLOAD" "$want" "$cur" "$((depth + 1))")"; then
-          printf '%s' "$d"
-          return 0
-        fi
+        while IFS= read -r line; do
+          case "$line" in end:*) d="${line#end: }" ;; *) printf '%s\n' "$line" ;; esac
+        done < <(_guardrails_git_walk_cwd "$_GUARDRAILS_PAYLOAD" "$want" "$cur" "$((depth + 1))")
         [ "$_GUARDRAILS_CMD" = eval ] && [ "$wrapped" = 0 ] && cur="$d"
         ;;
     esac
   done < <(_guardrails_split_segments "$cmdline")
-  printf '%s' "$cur"
-  return 1
+  printf 'end: %s\n' "$cur"
 }

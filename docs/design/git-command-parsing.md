@@ -190,6 +190,12 @@ to be honoured, and they compose, so segments are walked in order:
 | `cd <path> && git commit` | The payload `cwd` never changes, so this is the form that bites under worktree-per-ticket. |
 | `git -C <path> commit` | Cumulative — each `-C` is relative to the previous one. |
 
+Every matching command is judged, not only the first, so `git -C a push && git -C b push` has
+both directories judged, each once. A command with none, such as a pipe into a shell, has the
+directory it ends in judged. Each directory costs `guard-default-branch` some 33 ms of git
+calls at load 10, and a command within the length cap can name 6,500 of them, which would
+time the hook out. So past 64 directories it asks.
+
 ## Two splits, never weaker than one
 
 The splitter carries quote state across lines, so a quoted argument spanning lines
@@ -197,8 +203,8 @@ stays data. A shell construct it misreads can leave it inside a quote the shell 
 already closed, hiding the lines that follow. So every guard also reads the per-line
 split it replaced (`_GUARDRAILS_SPLIT_PER_LINE=1`), and git counts as run if either split
 sees it. Each split's lines are read by that split's own rule for a here-string, and a script
-a line runs is split both ways again, whichever split it came from (#152). When the two disagree on the directory, `_guardrails_git_effective_cwd` prints
-both and `guard-default-branch` refuses if either is on its default branch. The cost is
+a line runs is split both ways again, whichever split it came from (#152). `_guardrails_git_effective_cwd` prints the
+directories of both, and `guard-default-branch`, `test-gate` and `lint-warn` judge every one. The cost is
 that the per-line split's false positives remain for the git guards.
 
 Where the carried split's quotes never close, bash still runs the lines before them, so the

@@ -31,9 +31,17 @@ _guardrails_invokes_git "$cmd" commit || unseen="$(_guardrails_unseen_shell_stdi
 
 # Judge the repo git will actually act on, not the one the shell happens to sit in —
 # under worktree-per-ticket they differ, and resolving from .cwd refuses commits that
-# were never going to land there; where the two splits disagree on it, judge both.
+# were never going to land there; judge every directory a commit runs in, by either split.
 # See docs/design/git-command-parsing.md.
+n=0
 while IFS= read -r dir; do
+  # Each directory costs some 33 ms of git calls, so past 64 the guard could time out, which lets the command through.
+  n=$((n + 1))
+  if [ "$n" -gt 64 ]; then
+    jq -cn --arg r "Could not check this does not commit on a default branch: it commits in more than 64 directories, more than the guard can check in time." \
+      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+    exit 0
+  fi
   repo="$(git -C "${dir:-.}" rev-parse --show-toplevel 2>/dev/null)" || continue
   cur="$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null)" || continue
 
