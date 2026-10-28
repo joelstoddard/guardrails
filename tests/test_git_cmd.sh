@@ -149,6 +149,10 @@ cwd $'cd /a && bash <<EOF\ncd b\ngit commit -m x\nEOF'         commit /s /a/b  "
 cwd $'bash <<A\nbash <<B\ncd /x\nB\ngit commit -m y\nA'       commit /s /s    "a nested heredoc's cd stays in it"
 cwd $'x=$(bash <<EOF\ncd /y\ngit commit -m z\nEOF\n)'          commit /s /y    "a shell's heredoc inside a substitution"
 cwd $'bash <<EOF\necho $(true && cd /x); git commit -m y\nEOF' commit /s /s    "a cd cut from a substitution in a heredoc"
+# The shell expands an unquoted heredoc's substitutions before the shell it feeds starts, so they run where its opener
+# stands; a quoted heredoc's are that shell's to run.
+walk $'bash <<EOF\ncd /x\necho $(git commit -m y)\nEOF'     commit /s 'local: /s' "an unquoted shell heredoc's substitution runs before it"
+walk $'bash <<\'EOF\'\ncd /x\necho $(git commit -m y)\nEOF' commit /s 'local: /x' "a quoted shell heredoc's substitution runs in it"
 
 # A shell or eval payload is a script of its own (#65).
 yes "bash -c 'git commit -m x'"                   commit "inside bash -c"

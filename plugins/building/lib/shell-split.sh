@@ -36,12 +36,13 @@ _guardrails_split_awk() {
     # inside a substitution, as a piece of one cut at an operator does, or B for one in a shell heredoc body, with the line
     # that opened it after. The segments of a substitution are tagged S, the operator before each and their instance, after
     # a line O for each instance as it opens, with its parent instance, or 0 and the line in place that holds it: ol counts
-    # those lines, and hs[e] is the line that opened heredoc e, whose body runs with it. lk, lb and lh2 are the kind, base
-    # depth and opener of the line in place being read, and sop[k] the operator before the next segment of level k.
+    # those lines, and hs[e] is the line that opened heredoc e, whose body runs with it, as do the substitutions the shell
+    # expands in an unquoted body before the shell it feeds starts. lk, lb and lh2 are the kind, base depth and opener of
+    # the line in place being read, and sop[k] the operator before the next segment of level k.
     function subopen(k, start) {
       if (k > hb + 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
       cs[k] = start; ln[k] = 0; seal(sf[k] == 1 || ev[k - 1])
-      if (tag) { sid[k] = ++nsid; sop[k] = ";"; xp[++nxp] = "O" nsid " " (k > hb + 1 ? sid[k - 1] " 0" : "0 " (inb ? hs[lh[lv]] : ol)) "\n" }
+      if (tag) { sid[k] = ++nsid; sop[k] = ";"; xp[++nxp] = "O" nsid " " (k > hb + 1 ? sid[k - 1] " 0" : "0 " (inb || (lv && ex[lh[lv]]) ? hs[lh[lv]] : ol)) "\n" }
     }
     function nl(op) { if (!tag || inb) return "\n"; ol++; return "\n" lk op (d > lb) lh2 "\n" }
     function subemit(k, e,   j, t) {
