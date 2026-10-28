@@ -26,8 +26,8 @@ if why="$(_guardrails_unreadable "$cmd")"; then
   exit 0
 fi
 
-# The stdin check runs in the publish check's subshell, so it shares the lookup kept for a long segment. The publish check
-# prints nothing when it finds nothing, its rc 1, so the output is then the stdin check's alone.
+# The stdin check runs in the publish check's subshell, so it shares the lookup kept for a long segment. The publish
+# check prints nothing when it finds nothing, its rc 1, so the output is then the stdin check's alone.
 reason="$(_guardrails_publishes_as_user "$cmd"; rc=$?; [ "$rc" != 1 ] || _guardrails_unseen_shell_stdin "$cmd"; exit "$rc")"; rc=$?
 why=""; [ "$rc" != 1 ] || { why="$reason"; reason=""; }
 [ "$rc" = 0 ] || {

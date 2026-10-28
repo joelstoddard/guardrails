@@ -543,7 +543,9 @@ _guardrails_command_skip() {
       # These run their command elsewhere, as you: ssh's is a command line, read as its payload unless a shell runs it, and
       # the others' words are the command, as sudo's are (#113). ssh takes options after its host, and -N, -W, -O, -G, -Q
       # or -V start no shell.
-      ssh) vals=BbcDEeFIiJLlmOoPpQRSWw; no='^-[^BbcDEeFIiJLlmOoPpQRSWw]*[NWOGQV]'; ops=1; remote="$i"; rb="$b"; ws="$b"; rr="$nrem"; nrem=$((nrem + 1)) ;;
+      ssh)
+        vals=BbcDEeFIiJLlmOoPpQRSWw; no='^-[^BbcDEeFIiJLlmOoPpQRSWw]*[NWOGQV]'; ops=1; remote="$i"; rb="$b"; ws="$b"
+        rr="$nrem"; nrem=$((nrem + 1)) ;;
       docker)
         [ "${toks[$((i + 1))]:-}" = exec ] || break
         vals=euw; ops=1; sub=1; nrem=$((nrem + 1)); longs='--env --env-file --user --workdir --detach-keys' ;;

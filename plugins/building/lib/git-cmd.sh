@@ -176,8 +176,8 @@ _guardrails_git_switch_target() {
   done
 }
 
-# _guardrails_git_resolve <dir>... → moves the caller's d to each directory in turn, each relative to the last. Joined at
-# once from the last absolute one, as appending one at a time is quadratic in their number.
+# _guardrails_git_resolve <dir>... → moves the caller's d to each directory in turn, each relative to the last. Joined
+# at once from the last absolute one, as appending one at a time is quadratic in their number.
 _guardrails_git_resolve() {
   local k=$# w
   local -a rel=()
