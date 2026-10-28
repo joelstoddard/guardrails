@@ -50,6 +50,8 @@ no  "git -C /some/path status"             commit "globals skipped but subcomman
 
 # --- effective cwd: which repo git actually runs in, reached by `cd` or by -C ---
 cwd() { OUT="$(_guardrails_git_effective_cwd "$1" "$2" "$3")"; assert_eq "$OUT" "$4" "$5"; }
+# walk reads the carried split alone, whose tags place each command, without the per-line split's false positives.
+walk() { OUT="$(_guardrails_git_walk_cwd "$1" "$2" "$3" | sed '/^end:/d')"; assert_eq "$OUT" "$4" "$5"; }
 
 # no redirection → the starting cwd stands
 cwd "git commit -m x"            commit /start /start "plain commit keeps cwd"
@@ -128,6 +130,18 @@ yes $'cat <<EOF `true\ngit commit -m x\n`\nbody\nEOF' commit "a backtick spannin
 yes $'bash -c \'source /dev/stdin\' <<EOF\ngit commit -m x\nEOF' commit "a heredoc fed to a shell that also has -c (#93)"
 yes $'bash script.sh <<EOF\ngit commit -m x\nEOF'  commit "a heredoc fed to a shell that also has a script file (#93)"
 
+# Each command of a pipeline but the last runs in a subshell, so its cd does not last (#115). zsh runs the last in the
+# current shell, so a cd there is followed, as before.
+walk 'cd /x | git commit -m y'                    commit /s 'local: /s'  "a cd piped into the commit"
+walk 'cd /x |& git commit -m y'                   commit /s 'local: /s'  "a cd piped into the commit with |&"
+walk 'cd /x | cat; git commit -m y'               commit /s 'local: /s'  "a cd piped into another command"
+walk 'true | cd /x | cat; git commit -m y'        commit /s 'local: /s'  "a cd in the middle of a pipeline"
+walk 'echo | cd /x; git commit -m y'              commit /s 'local: /x'  "a cd at the end of a pipeline"
+walk 'x=$(cd /x | true; git commit -m y)'         commit /s 'local: /s'  "a piped cd in a substitution"
+walk "eval 'cd /x' | cat; git commit -m y"        commit /s 'local: /s'  "eval's cd in a pipeline"
+walk 'cd /x $(a | b) | git commit -m y'           commit /s 'local: /s'  "a piped cd that holds a pipe in a substitution"
+walk 'cd /x $(a | b); git commit -m y'            commit /s 'local: /x'  "a pipe in a cd's substitution does not pipe the cd"
+
 # A shell's heredoc is the script that shell runs, so a cd in it ends with that shell, and it runs where its opener does.
 cwd $'bash <<EOF\ncd /x\nEOF\ngit commit -m y'                commit /s /s    "a shell's heredoc's cd does not outlive it"
 cwd $'bash <<EOF; cd /y\ngit commit -m x\nEOF'                commit /s /s    "a shell's heredoc runs before the command after its opener"
@@ -158,7 +172,6 @@ yes 'cat <(git commit -m x)'               commit "inside a process substitution
 no  "echo '\$(git commit -m x)'"           commit "inside single quotes it is text"
 cwd 'x=$(cd /x; pwd); git commit -m y'     commit /start /start "a cd inside a substitution does not last"
 # A substitution runs before the command that holds it, in a child shell, so its commands are judged there (#114).
-walk() { OUT="$(_guardrails_git_walk_cwd "$1" "$2" "$3" | sed '/^end:/d')"; assert_eq "$OUT" "$4" "$5"; }
 cwd 'echo $(git commit -m y); cd /feature'          commit /s /s  "a substitution's commit before a later cd"
 cwd 'echo $(cd /x); echo $(git commit -m y)'         commit /s /s  "a cd in one substitution does not reach another"
 cwd $'cat <<EOF; cd /y\n$(git commit -m x)\nEOF'     commit /s /s  "a heredoc body's substitution runs with the heredoc's command"

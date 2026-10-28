@@ -123,9 +123,9 @@ _guardrails_git_resolve() {
 # The carried split tags where each segment runs, so a substitution's commands are judged where it runs, before the
 # command that holds it, in a child shell of its own (#114). See docs/design/git-command-parsing.md
 _guardrails_git_walk_cwd() {
-  local cmdline="$1" want="$2" top="$3" depth="${4:-0}" segs j=0 n=0 tg key cur id par host
-  local -a lines=() plain=()
-  local -A scur curat
+  local cmdline="$1" want="$2" top="$3" depth="${4:-0}" segs j k n=0 tg key cur id par host nop
+  local -a lines=() plain=() after=() at=()
+  local -A scur curat later
   [ "$depth" -gt 4 ] && { printf 'end: %s\n' "$top"; return; }
   if [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ]; then
     segs="$(_guardrails_split_awk 0 "$cmdline")"; [ -z "$segs" ] || mapfile -t plain <<<"$segs"
@@ -134,33 +134,44 @@ _guardrails_git_walk_cwd() {
     segs="$(_guardrails_split_awk 1 "$cmdline" 0 1)" || mapfile -t plain < <(_guardrails_split_awk 0 "$cmdline" 1)
     [ -z "$segs" ] || mapfile -t lines <<<"$segs"
   fi
+  # after[j] is the operator after the segment tagged at j, before the next one in its scope that is not a piece. at
+  # holds where the tags are, as an O tag has no segment after it.
+  for ((j = 0; j < ${#lines[@]}; j++)); do case "${lines[$j]}" in O*) ;; *) at+=("$j"); j=$((j + 1)) ;; esac; done
+  for ((k = ${#at[@]} - 1; k >= 0; k--)); do
+    j="${at[$k]}"; tg="${lines[$j]}"
+    key="${tg:0:1}"; case "$tg" in B*) key="b${tg#B?? }" ;; S*) key="s${tg#S?}" ;; esac
+    after[j]="${later[$key]:-;}"
+    case "$tg" in [TB]?1*) ;; *) later[$key]="${tg:1:1}" ;; esac
+  done
+  j=0
   while [ "$j" -lt "${#lines[@]}" ]; do
-    tg="${lines[$j]}"; j=$((j + 1)); key=t; cur="$top"
+    tg="${lines[$j]}"; nop="${after[$j]:-;}"; j=$((j + 1)); key=t; cur="$top"
     case "$tg" in
       T*) ;;
       # A shell's heredoc is a script of its own, run where the line that opened it stands.
-      B*) host="${tg#B? }"; key="b$host"; [ -n "${scur[$key]+x}" ] || scur[$key]="${curat[$host]-$top}"; cur="${scur[$key]}" ;;
+      B*) host="${tg#B?? }"; key="b$host"; [ -n "${scur[$key]+x}" ] || scur[$key]="${curat[$host]-$top}"; cur="${scur[$key]}" ;;
       O*)
         id="${tg#O}"; par="${id#* }"; host="${par#* }"; id="${id%% *}"; par="${par%% *}"
         if [ "$par" = 0 ]; then scur[s$id]="${curat[$host]-$top}"; else scur[s$id]="${scur[s$par]-$top}"; fi
         continue ;;
-      *) key="s${tg#S}"; cur="${scur[$key]-$top}" ;;
+      *) key="s${tg#S?}"; cur="${scur[$key]-$top}" ;;
     esac
     case "$tg" in
       # A piece of a substitution cut at an operator is read whole in the substitution's own segments.
-      [TB]1*) curat[$n]="$cur"; n=$((n + 1)); j=$((j + 1)); continue ;;
+      [TB]?1*) curat[$n]="$cur"; n=$((n + 1)); j=$((j + 1)); continue ;;
       [TB]*) curat[$n]="$cur"; n=$((n + 1)) ;;
     esac
     _guardrails_git_walk_seg "${lines[$j]:-}"; j=$((j + 1))
     if [ "$key" = t ]; then top="$cur"; else scur[$key]="$cur"; fi
   done
-  cur="$top"
+  # An untagged line shows no operator, so it is read as after a ;, as before.
+  cur="$top"; nop=";"
   for j in "${!plain[@]}"; do _guardrails_git_walk_seg "${plain[$j]}"; done
   printf 'end: %s\n' "$cur"
 }
 
 # _guardrails_git_walk_seg <segment> → prints a record for a matching git command in it, and moves the caller's cur
-# where a cd or eval moves it. Reads the caller's want and depth.
+# where a cd or eval moves it. Reads the caller's want and depth, and nop, the operator after the segment.
 _guardrails_git_walk_seg() {
   local seg="$1" i k d w wrapped line
   local -a toks
@@ -171,7 +182,8 @@ _guardrails_git_walk_seg() {
   case "$_GUARDRAILS_CMD" in
     cd)
       # A cd in a subshell does not last and one after a keyword may not run, so following either could miss a commit.
-      [ "$wrapped" = 0 ] || return
+      # Nor does one piped into the next command, as each command of a pipeline but the last runs in a subshell (#115).
+      [ "$wrapped" = 0 ] && [ "$nop" != "|" ] || return
       # Its options, such as -P, come before its directory, and -- ends them.
       for ((k = i + 1; k < ${#toks[@]}; k++)); do case "${toks[$k]}" in --) k=$((k + 1)); break ;; -?*) ;; *) break ;; esac; done
       i=$((k + 1)); w="${toks[$k]:-}"
@@ -196,7 +208,7 @@ _guardrails_git_walk_seg() {
       while IFS= read -r line; do
         case "$line" in end:*) d="${line#end: }" ;; *) printf '%s\n' "$line" ;; esac
       done < <(_guardrails_git_walk_cwd "$_GUARDRAILS_PAYLOAD" "$want" "$d" "$((depth + 1))")
-      [ "$_GUARDRAILS_CMD" = eval ] && [ "$wrapped" = 0 ] && cur="$d"
+      [ "$_GUARDRAILS_CMD" = eval ] && [ "$wrapped" = 0 ] && [ "$nop" != "|" ] && cur="$d"
       ;;
   esac
 }

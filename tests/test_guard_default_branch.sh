@@ -306,6 +306,10 @@ assert_rc 2 "a commit after a cd inside a substitution on the default branch blo
 run_hook "$S" "$(jsonat "$r13" $'bash <<EOF; cd '"$r2"$'\ngit commit -m x\nEOF')"
 assert_rc 2 "a commit on the default branch in a shell's heredoc before a cd blocked"
 
+# A cd piped into the commit runs in a subshell, so the commit lands where the shell sits (#115).
+run_hook "$S" "$(jsonat "$r13" "cd $r2 | git commit -m x")"
+assert_rc 2 "a commit on the default branch after a piped cd blocked"
+
 # Every commit is judged, not only the first.
 run_hook "$S" "$(jsonat "$r2" "git commit -m x && git -C $r13 commit -m y")"
 assert_rc 2 "a second commit, on a default branch, blocked"

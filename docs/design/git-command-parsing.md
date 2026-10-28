@@ -164,8 +164,9 @@ Two readers use the lookup with care:
   `gh pr create --draft --body "$(cat <<'EOF' …)"` and `git commit -m "$(cat <<EOF …)"`
   read the body as the text it is. A pipe into `source /dev/stdin` asks, as a pipe into a
   shell does.
-- **The directory walk follows only a plain `cd`.** A `cd` in a subshell, `(cd /x)`, does
-  not last, and one after a keyword, `if false; then cd /x; fi`, may not run. Following
+- **The directory walk follows only a plain `cd`.** A `cd` in a subshell, `(cd /x)` or a
+  pipeline's `cd /x | …`, does not last, and one after a keyword, `if false; then cd /x; fi`,
+  may not run. Following
   either could judge a repo other than the one the commit lands in, which is weaker than
   not following it. The same holds for the `cd` in an `eval` behind a keyword. A `cd`
   behind any other word the lookup skips, a redirect included, is not followed either. A
@@ -213,8 +214,11 @@ commands after it. A heredoc body's substitutions are held by the line that open
 heredoc is the script that shell runs, so its lines are tagged `B` with the line that opened it,
 and the walk reads them as a script of their own, started where that line stands: a `cd` in it
 reaches nothing past its delimiter, nor does one after its opener, as in `bash <<EOF; cd /y`,
-reach it. Only the walk reads tags; the guards' other passes read the split as before, byte for
-byte.
+reach it. Each tag also names the operator before its segment, so the walk knows a `cd` piped
+into the next command, which runs in the pipeline's subshell and does not last (#115). bash runs
+the last command of a pipeline in a subshell too, but zsh runs it in the current shell, so a
+`cd` there is followed, as before. Only the walk reads tags; the guards' other passes read the
+split as before, byte for byte.
 
 ## Two splits, never weaker than one
 

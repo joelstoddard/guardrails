@@ -32,21 +32,22 @@ _guardrails_split_awk() {
     # rest, as backticks are written as sh -c "...". Level k of nesting holds its text from cs[k] on this
     # line, after pieces lp[k, 1..ln[k]] from earlier lines; a nested level leaves its opener and closer.
     # Levels at or below hb enclose an unquoted heredoc body being read, whose text is data, not theirs.
-    # In tag mode a line in place is tagged T and 1 if it starts inside a substitution, as a piece of one cut at an
-    # operator does, or B for one in a shell heredoc body, with the line that opened it, after it. The segments of a
-    # substitution are tagged S and their instance, after a line O for each instance as it opens, with its parent
-    # instance, or 0 and the line in place that holds it: ol counts those lines, and hs[e] is the line that opened heredoc
-    # e, whose body runs with it. lk, lb and lh2 are the kind, base depth and opener of the line in place being read.
+    # In tag mode a line in place is tagged T, then the operator before it, one of ; | a (&&) o (||), then 1 if it starts
+    # inside a substitution, as a piece of one cut at an operator does, or B for one in a shell heredoc body, with the line
+    # that opened it after. The segments of a substitution are tagged S, the operator before each and their instance, after
+    # a line O for each instance as it opens, with its parent instance, or 0 and the line in place that holds it: ol counts
+    # those lines, and hs[e] is the line that opened heredoc e, whose body runs with it. lk, lb and lh2 are the kind, base
+    # depth and opener of the line in place being read, and sop[k] the operator before the next segment of level k.
     function subopen(k, start) {
       if (k > hb + 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
       cs[k] = start; ln[k] = 0; seal(sf[k] == 1 || ev[k - 1])
-      if (tag) { sid[k] = ++nsid; xp[++nxp] = "O" nsid " " (k > hb + 1 ? sid[k - 1] " 0" : "0 " (inb ? hs[lh[lv]] : ol)) "\n" }
+      if (tag) { sid[k] = ++nsid; sop[k] = ";"; xp[++nxp] = "O" nsid " " (k > hb + 1 ? sid[k - 1] " 0" : "0 " (inb ? hs[lh[lv]] : ol)) "\n" }
     }
-    function nl() { if (!tag || inb) return "\n"; ol++; return "\n" lk (d > lb) lh2 "\n" }
+    function nl(op) { if (!tag || inb) return "\n"; ol++; return "\n" lk op (d > lb) lh2 "\n" }
     function subemit(k, e,   j, t) {
       t = substr($0, cs[k], e - cs[k])
       if (t == "" && !ln[k]) return
-      if (tag) xp[++nxp] = "S" sid[k] "\n"
+      if (tag) xp[++nxp] = "S" sop[k] sid[k] "\n"
       if (kind[k] == "`") xp[++nxp] = "sh -c \""
       for (j = 1; j <= ln[k]; j++) xp[++nxp] = lp[k, j]
       xp[++nxp] = t
@@ -126,7 +127,7 @@ _guardrails_split_awk() {
       if (carry && q == "" && !cont) { cw = ""; fsh = 0; qd = 0; fev = 0; ps = 0 }
       if (fresh) {
         if (lv && es[lh[lv]] == 1) { lk = "B"; lb = ld[lv]; lh2 = " " hs[lh[lv]] } else { lk = "T"; lb = 0; lh2 = "" }
-        ltag = lk (d > lb) lh2
+        ltag = lk ";" (d > lb) lh2
       }
       # Indexing the line split into characters keeps the scan linear: substr rescans the line on each call.
       cont = 0; ar = 0; n = split($0, chars, "")
@@ -229,9 +230,10 @@ _guardrails_split_awk() {
 
         if ((c == "&" && chars[i + 1] == "&") ||
             (c == "|" && chars[i + 1] == "|")) {
-          if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
+          j = (c == "&" ? "a" : "o")
+          if (carry && d > 0) { subemit(d, i); cs[d] = i + 2; sop[d] = j }
           if (carry) { wordend(); seal(fsh == 1 || ev[d]) }
-          out = out nl(); i++; wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
+          out = out nl(j); i++; wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
         }
         # A lone & ends a command as ; does, but the & in >&, <&, &> and |& belongs to a redirect or pipe.
         if (carry && ((index("<>", c) && chars[i + 1] == "&") || (c == "&" && chars[i + 1] == ">"))) {
@@ -239,10 +241,10 @@ _guardrails_split_awk() {
         }
         if (c == "|" || c == ";" || (carry && c == "&")) {
           j = (carry && c == "|" && chars[i + 1] == "&")
-          if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 + j }
+          if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 + j; sop[d] = (c == "|" ? "|" : ";") }
           if (carry) { wordend(); seal(fsh == 1 || ev[d]) }
           i += j
-          out = out nl(); wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
+          out = out nl(c == "|" ? "|" : ";"); wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
         }
         if (carry) wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         # cw keeps only what a shell name needs, five characters after the last slash, so a long word stays linear.
@@ -251,7 +253,7 @@ _guardrails_split_awk() {
       }
       # Inside a substitution a line break ends a command too, unless quoted, escaped or in backticks.
       if (carry && d > hb) {
-        if (kind[d] == "$" && q == "" && !cont) subemit(d, i)
+        if (kind[d] == "$" && q == "" && !cont) { subemit(d, i); sop[d] = ";" }
         else lp[d, ++ln[d]] = substr($0, cs[d], i - cs[d]) (cont ? "" : ";")
         cs[d] = 1
       }
