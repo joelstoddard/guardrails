@@ -343,7 +343,9 @@ Tokens are split on whitespace, so a quoted argument of several words is several
 split. A directory is read as one shell word, joined across the words its quotes or escaped
 blanks span and without its quotes, so `git -C '/path with spaces' commit` and `cd "/x"` are
 judged where they run, as is a value of git's that holds a blank, as in `-c "user.name=a b"`
-(#150). Joined words keep one blank between them, where the command may have had several. A
+(#150). A leading `~` or `~/` outside quotes is `$HOME`, as the shell expands it, so `cd ~/wt`
+is judged in the worktree rather than skipped as a path that does not exist; another user's
+`~u` is not guessed at. Joined words keep one blank between them, where the command may have had several. A
 long option that takes a separate value but is not in its wrapper's list reads its value as
 the command word, which fails open: the guard lets the command through rather than blocking
 it wrongly.

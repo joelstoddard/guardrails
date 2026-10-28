@@ -25,12 +25,15 @@ _guardrails_git_opt_takes_value() {
 }
 
 # _guardrails_git_dir_word → sets the caller's w, the word at its index k, to the shell word that starts there, with i
-# past it: joined across the words of the split that a quote it leaves open or an escaped blank spans, and without the
-# quotes and backslashes the shell drops (#150). Reads the caller's toks.
+# past it: joined across the words of the split that a quote it leaves open or an escaped blank spans, with a leading ~
+# or ~/ expanded to $HOME, and without the quotes and backslashes the shell drops (#150). Reads the caller's toks.
 _GUARDRAILS_OPEN_REST='^([^"'"'"'\\]|\\.|"([^"\\]|\\.)*"|'"'"'[^'"'"']*'"'"')*(['"'"'"].*|\\)$'
 _guardrails_git_dir_word() {
+  local home=""
   case "$w" in *[\"\'\\]*) [[ $w =~ $_GUARDRAILS_OPEN_REST ]] && { _guardrails_skip_quoted "${BASH_REMATCH[3]}"; w="${toks[*]:k:i-k}"; } ;; esac
+  case "$w" in \~ | \~/*) home="${HOME:-}"; [ -z "$home" ] || w="${w#\~}" ;; esac
   case "$w" in *[\"\'\\]*) _guardrails_unquote "$_GUARDRAILS_SPLIT_MAX" ;; esac
+  w="$home$w"
 }
 
 # _guardrails_git_skip_globals <index> <words> → sets _GUARDRAILS_GIT_SUB to the subcommand after git's global options,
