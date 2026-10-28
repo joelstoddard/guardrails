@@ -76,6 +76,18 @@ cwd "cd -- -x && git commit"      commit /start /start/-x   "a directory after -
 cwd "cd -P && git commit"         commit /start /start      "cd with an option and no directory"
 cwd "cd - && git commit"         commit /start /start      "cd - not guessed at"
 
+# pushd changes the directory as cd does, and popd returns to the one before it.
+cwd 'pushd /x && git commit -m y'                commit /s /x  "pushd then commit"
+cwd 'pushd /x >/dev/null && git commit -m y'     commit /s /x  "pushd with its output redirected"
+cwd 'pushd /x && popd && git commit -m y'        commit /s /s  "popd returns"
+cwd 'pushd /x && pushd /y && popd && git commit' commit /s /x  "popd returns one level"
+cwd 'popd && git commit -m y'                    commit /s /s  "popd with nothing pushed is not guessed at"
+cwd 'pushd -n /x && git commit -m y'             commit /s /s  "pushd -n does not change the directory"
+cwd 'pushd && git commit -m y'                   commit /s /s  "pushd alone swaps to a directory not known"
+cwd 'pushd +1 && git commit -m y'                commit /s /s  "pushd +N rotates to a directory not known"
+walk 'pushd /x | true; git commit -m y'          commit /s 'local: /s' "a piped pushd does not last"
+cwd '(pushd /x); git commit -m y'                commit /s /s  "a pushd in a subshell does not last"
+
 # the two compose, and -C wins when absolute
 cwd "cd /a && git -C /b commit"  commit /start /b          "cd then absolute -C"
 cwd "cd /a && git -C sub commit" commit /start /a/sub      "cd then relative -C"

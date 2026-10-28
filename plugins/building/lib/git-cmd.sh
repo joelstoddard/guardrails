@@ -196,7 +196,7 @@ _guardrails_git_walk_cwd() {
   local cmdline="$1" want="$2" top="$3" depth="${4:-0}" remote="${5:-0}" segs j k n=0 tg key cur id par host op nop rem away
   local moved="" r
   local -a lines=() plain=() after=() at=() recs=()
-  local -A scur curat later srem remat awayat swb swd
+  local -A scur curat later srem remat awayat swb swd dstk
   [ "$depth" -gt 4 ] && { printf 'end: %s\n' "$top"; return; }
   if [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ]; then
     segs="$(_guardrails_split_awk 0 "$cmdline")"; [ -z "$segs" ] || mapfile -t plain <<<"$segs"
@@ -267,20 +267,30 @@ _guardrails_git_walk_seg() {
   d="$cur"; [ "$wrapped" = 0 ] || { _guardrails_git_resolve "${_GUARDRAILS_CMD_DIRS[@]}"; [ "$_GUARDRAILS_CMD_REMOTE" = 0 ] || away=1; }
   [ "$_GUARDRAILS_CMD" != ssh ] || away=1
   case "$_GUARDRAILS_CMD" in
-    cd)
+    cd | pushd)
       # A cd in a subshell does not last and one after a keyword may not run, so following either could miss a commit.
       # Nor does one piped into the next command, as each command of a pipeline but the last runs in a subshell (#115).
       [ "$wrapped" = 0 ] && [ "$nop" != "|" ] || return
-      # Its options, such as -P, come before its directory, and -- ends them.
-      for ((k = i + 1; k < ${#toks[@]}; k++)); do case "${toks[$k]}" in --) k=$((k + 1)); break ;; -?*) ;; *) break ;; esac; done
+      # Its options, such as -P, come before its directory, and -- ends them; pushd -n leaves the directory be.
+      for ((k = i + 1; k < ${#toks[@]}; k++)); do
+        case "${toks[$k]}" in --) k=$((k + 1)); break ;; -n) [ "$_GUARDRAILS_CMD" = cd ] || return ;; -?*) ;; *) break ;; esac
+      done
       i=$((k + 1)); w="${toks[$k]:-}"
       _guardrails_dir_word
-      # `cd` alone (home) and `cd -` (previous) are not worth guessing at; leave cur be.
+      # `cd` alone (home), `cd -` (previous), and pushd alone or with +N or -N (another on its stack) are not worth
+      # guessing at.
+      case "$_GUARDRAILS_CMD/$w" in */ | cd/- | pushd/[+-][0-9]*) return ;; esac
+      # pushd keeps the directory it leaves, for popd.
+      [ "$_GUARDRAILS_CMD" = cd ] || dstk[$key]="$cur"$'\n'"${dstk[$key]-}"
       case "$w" in
-        '' | '-') ;;
         /*) cur="$w" ;;
         *) cur="$cur/$w" ;;
       esac
+      ;;
+    popd)
+      [ "$wrapped" = 0 ] && [ "$nop" != "|" ] && [ -n "${dstk[$key]-}" ] || return
+      case "${toks[$((i + 1))]:-}" in [+-]*) return ;; esac
+      cur="${dstk[$key]%%$'\n'*}"; dstk[$key]="${dstk[$key]#*$'\n'}"
       ;;
     git)
       _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"

@@ -352,6 +352,10 @@ assert_rc 2 "a commit after a cd to a variable, from a default-branch repo, bloc
 run_hook "$S" "$(jsonat "$r2" "mkdir new && cd new && git commit -m x")"
 assert_rc 0 "a commit in a directory the command makes, in a feature-branch repo, allowed"
 
+# pushd changes the directory as cd does.
+run_hook "$S" "$(jsonat "$r2" "pushd $r13 && git commit -m x")"
+assert_rc 2 "a pushd into a default-branch repo then commit blocked"
+
 # Every commit is judged, not only the first.
 run_hook "$S" "$(jsonat "$r2" "git commit -m x && git -C $r13 commit -m y")"
 assert_rc 2 "a second commit, on a default branch, blocked"

@@ -201,6 +201,7 @@ to be honoured, and they compose, so segments are walked in order:
 | Form | Behaviour |
 |---|---|
 | `cd <path> && git commit` | The payload `cwd` never changes, so this is the form that bites under worktree-per-ticket. |
+| `pushd <path> && git commit` | As `cd`; `popd` returns to the directory before it. `pushd` alone, or with `+N`, `-N` or `-n`, is not guessed at. |
 | `git -C <path> commit` | Cumulative — each `-C` is relative to the previous one. |
 | `env -C <path> git commit` | `env -C`, `sudo -D` and their `--chdir` run that one command there, before git's own `-C` (#112). |
 
