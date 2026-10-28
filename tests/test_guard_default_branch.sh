@@ -295,6 +295,13 @@ assert_rc 2 "a cd under ~ into a default-branch repo then commit blocked"
 run_hook "$S" "$(jsonat "$r2" "env -C $r13 git commit -m x")"
 assert_rc 2 "a commit behind env -C into a default-branch repo blocked"
 
+# A substitution's commit is judged where it runs, before a cd after it, and a cd cut from inside one is not followed
+# to a path that does not exist (#114).
+run_hook "$S" "$(jsonat "$r13" "echo \$(git commit -m x); cd $r2")"
+assert_rc 2 "a substitution's commit on the default branch before a cd blocked"
+run_hook "$S" "$(jsonat "$r13" "echo \$(true && cd $r2); git commit -m x")"
+assert_rc 2 "a commit after a cd inside a substitution on the default branch blocked"
+
 # Every commit is judged, not only the first.
 run_hook "$S" "$(jsonat "$r2" "git commit -m x && git -C $r13 commit -m y")"
 assert_rc 2 "a second commit, on a default branch, blocked"

@@ -120,46 +120,78 @@ _guardrails_git_resolve() {
 }
 
 # Prints a line "local: <dir>" for each matching git command, then "end: <dir>", the directory in effect at the end.
+# The carried split tags where each segment runs, so a substitution's commands are judged where it runs, before the
+# command that holds it, in a child shell of its own (#114). See docs/design/git-command-parsing.md
 _guardrails_git_walk_cwd() {
-  local cmdline="$1" want="$2" cur="$3" depth="${4:-0}" seg i k d w wrapped line
-  local -a toks
-  [ "$depth" -gt 4 ] && { printf 'end: %s\n' "$cur"; return; }
-  while IFS= read -r seg; do
-    read -r -a toks <<<"$seg" || continue
-    _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; wrapped="$_GUARDRAILS_CMD_WRAPPED"
-    # A wrapper such as env -C runs its command in another directory (#112).
-    d="$cur"; [ "$wrapped" = 0 ] || _guardrails_git_resolve "${_GUARDRAILS_CMD_DIRS[@]}"
-    case "$_GUARDRAILS_CMD" in
-      cd)
-        # A cd in a subshell does not last and one after a keyword may not run, so following either could miss a commit.
-        [ "$wrapped" = 0 ] || continue
-        # Its options, such as -P, come before its directory, and -- ends them.
-        for ((k = i + 1; k < ${#toks[@]}; k++)); do case "${toks[$k]}" in --) k=$((k + 1)); break ;; -?*) ;; *) break ;; esac; done
-        i=$((k + 1)); w="${toks[$k]:-}"
-        _guardrails_dir_word
-        # `cd` alone (home) and `cd -` (previous) are not worth guessing at; leave cur be.
-        case "$w" in
-          '' | '-') ;;
-          /*) cur="$w" ;;
-          *) cur="$cur/$w" ;;
-        esac
-        ;;
-      git)
-        _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"
-        if [ "$_GUARDRAILS_GIT_SUB" = "$want" ]; then
-          _guardrails_git_resolve "${_GUARDRAILS_GIT_DIRS[@]}"
-          printf 'local: %s\n' "$d"
-        fi
-        ;;
-      *sh | eval)
-        # A payload's commands are judged where they run; only eval's cd outlives it, as sh -c runs in a child shell.
-        _guardrails_shell_payload "$seg" || continue
-        while IFS= read -r line; do
-          case "$line" in end:*) d="${line#end: }" ;; *) printf '%s\n' "$line" ;; esac
-        done < <(_guardrails_git_walk_cwd "$_GUARDRAILS_PAYLOAD" "$want" "$d" "$((depth + 1))")
-        [ "$_GUARDRAILS_CMD" = eval ] && [ "$wrapped" = 0 ] && cur="$d"
-        ;;
+  local cmdline="$1" want="$2" top="$3" depth="${4:-0}" segs j=0 n=0 tg key cur id par host
+  local -a lines=() plain=()
+  local -A scur curat
+  [ "$depth" -gt 4 ] && { printf 'end: %s\n' "$top"; return; }
+  if [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ]; then
+    segs="$(_guardrails_split_awk 0 "$cmdline")"; [ -z "$segs" ] || mapfile -t plain <<<"$segs"
+  else
+    # Where quotes never close, every line is also read on its own, untagged, after the tagged lines.
+    segs="$(_guardrails_split_awk 1 "$cmdline" 0 1)" || mapfile -t plain < <(_guardrails_split_awk 0 "$cmdline" 1)
+    [ -z "$segs" ] || mapfile -t lines <<<"$segs"
+  fi
+  while [ "$j" -lt "${#lines[@]}" ]; do
+    tg="${lines[$j]}"; j=$((j + 1)); key=t; cur="$top"
+    case "$tg" in
+      T0) curat[$n]="$top"; n=$((n + 1)) ;;
+      # A piece of a substitution cut at an operator is read whole in the substitution's own segments.
+      T1) curat[$n]="$top"; n=$((n + 1)); j=$((j + 1)); continue ;;
+      O*)
+        id="${tg#O}"; par="${id#* }"; host="${par#* }"; id="${id%% *}"; par="${par%% *}"
+        if [ "$par" = 0 ]; then scur[s$id]="${curat[$host]-$top}"; else scur[s$id]="${scur[s$par]-$top}"; fi
+        continue ;;
+      *) key="s${tg#S}"; cur="${scur[$key]-$top}" ;;
     esac
-  done < <(_guardrails_split_segments "$cmdline")
+    _guardrails_git_walk_seg "${lines[$j]:-}"; j=$((j + 1))
+    if [ "$key" = t ]; then top="$cur"; else scur[$key]="$cur"; fi
+  done
+  cur="$top"
+  for j in "${!plain[@]}"; do _guardrails_git_walk_seg "${plain[$j]}"; done
   printf 'end: %s\n' "$cur"
+}
+
+# _guardrails_git_walk_seg <segment> → prints a record for a matching git command in it, and moves the caller's cur
+# where a cd or eval moves it. Reads the caller's want and depth.
+_guardrails_git_walk_seg() {
+  local seg="$1" i k d w wrapped line
+  local -a toks
+  read -r -a toks <<<"$seg" || return
+  _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; wrapped="$_GUARDRAILS_CMD_WRAPPED"
+  # A wrapper such as env -C runs its command in another directory (#112).
+  d="$cur"; [ "$wrapped" = 0 ] || _guardrails_git_resolve "${_GUARDRAILS_CMD_DIRS[@]}"
+  case "$_GUARDRAILS_CMD" in
+    cd)
+      # A cd in a subshell does not last and one after a keyword may not run, so following either could miss a commit.
+      [ "$wrapped" = 0 ] || return
+      # Its options, such as -P, come before its directory, and -- ends them.
+      for ((k = i + 1; k < ${#toks[@]}; k++)); do case "${toks[$k]}" in --) k=$((k + 1)); break ;; -?*) ;; *) break ;; esac; done
+      i=$((k + 1)); w="${toks[$k]:-}"
+      _guardrails_dir_word
+      # `cd` alone (home) and `cd -` (previous) are not worth guessing at; leave cur be.
+      case "$w" in
+        '' | '-') ;;
+        /*) cur="$w" ;;
+        *) cur="$cur/$w" ;;
+      esac
+      ;;
+    git)
+      _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"
+      if [ "$_GUARDRAILS_GIT_SUB" = "$want" ]; then
+        _guardrails_git_resolve "${_GUARDRAILS_GIT_DIRS[@]}"
+        printf 'local: %s\n' "$d"
+      fi
+      ;;
+    *sh | eval)
+      # A payload's commands are judged where they run; only eval's cd outlives it, as sh -c runs in a child shell.
+      _guardrails_shell_payload "$seg" || return
+      while IFS= read -r line; do
+        case "$line" in end:*) d="${line#end: }" ;; *) printf '%s\n' "$line" ;; esac
+      done < <(_guardrails_git_walk_cwd "$_GUARDRAILS_PAYLOAD" "$want" "$d" "$((depth + 1))")
+      [ "$_GUARDRAILS_CMD" = eval ] && [ "$wrapped" = 0 ] && cur="$d"
+      ;;
+  esac
 }

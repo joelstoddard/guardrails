@@ -25,19 +25,27 @@
 
 # carry=1 carries quotes across lines and exits 3 if they never close; carry=0 resets them per line. here=1, for the
 # lines read on their own when quotes never close, reads a here-string as one word, which opens no heredoc (#61, #152).
+# tag=1, with carry=1, writes a line before each segment that says where it runs, for the directory walk (#114).
 _guardrails_split_awk() {
-  printf '%s' "$2" | awk -v carry="$1" -v here="${3:-0}" '
+  printf '%s' "$2" | awk -v carry="$1" -v here="${3:-0}" -v tag="${4:-0}" '
     # Carry mode also writes each command inside a $( ), <( ) or >( ) as a segment of its own, after the
     # rest, as backticks are written as sh -c "...". Level k of nesting holds its text from cs[k] on this
     # line, after pieces lp[k, 1..ln[k]] from earlier lines; a nested level leaves its opener and closer.
     # Levels at or below hb enclose an unquoted heredoc body being read, whose text is data, not theirs.
+    # In tag mode a line in place is tagged T and 1 if it starts inside a substitution, as a piece of one cut at an
+    # operator does. The segments of a substitution are tagged S and their instance, after a line O for each instance as
+    # it opens, with its parent instance, or 0 and the line in place that holds it: ol counts those lines, and hs[e] is
+    # the line that opened heredoc e, whose body runs with it.
     function subopen(k, start) {
       if (k > hb + 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
       cs[k] = start; ln[k] = 0; seal(sf[k] == 1 || ev[k - 1])
+      if (tag) { sid[k] = ++nsid; xp[++nxp] = "O" nsid " " (k > hb + 1 ? sid[k - 1] " 0" : "0 " (inb ? hs[lh[lv]] : ol)) "\n" }
     }
+    function nl() { if (!tag || inb) return "\n"; ol++; return "\nT" (d > 0) "\n" }
     function subemit(k, e,   j, t) {
       t = substr($0, cs[k], e - cs[k])
       if (t == "" && !ln[k]) return
+      if (tag) xp[++nxp] = "S" sid[k] "\n"
       if (kind[k] == "`") xp[++nxp] = "sh -c \""
       for (j = 1; j <= ln[k]; j++) xp[++nxp] = lp[k, j]
       xp[++nxp] = t
@@ -81,7 +89,7 @@ _guardrails_split_awk() {
       for (; d > hb; d--) subemit(d, cs[d])
       q = hq; inb = 0; hb = 0; cont = 0
     }
-    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1; cw = ""; fsh = 0 }
+    BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); hd = ""; d = 0; q = ""; out = ""; cont = 0; wb = 1; cw = ""; fsh = 0; fresh = 1; ol = 0 }
     {
       # A heredoc body starts once its opening line ends, and a backslash-newline has not ended it.
       if (!carry && hd != "") { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); if (t == hd) hd = ""; next }
@@ -115,6 +123,7 @@ _guardrails_split_awk() {
       if (!cont) wb = 1
       # cw is the end of the word being read, and fsh notes a shell word before it in the segment.
       if (carry && q == "" && !cont) { cw = ""; fsh = 0; qd = 0; fev = 0; ps = 0 }
+      if (fresh) ltag = "T" (d > 0)
       # Indexing the line split into characters keeps the scan linear: substr rescans the line on each call.
       cont = 0; ar = 0; n = split($0, chars, "")
       for (i = 1; i <= n; i++) {
@@ -209,7 +218,7 @@ _guardrails_split_awk() {
           if (dl != "") {
             wordend()
             if (here && chars[i - 1] == "<") { out = out substr($0, i, j - i); i = j - 1; continue }
-            if (!carry) hd = dl; else { ed[++en] = dl; ex[en] = !quoted; es[en] = -1; if (en == pb + 1 || d < pd) pd = d }
+            if (!carry) hd = dl; else { ed[++en] = dl; ex[en] = !quoted; es[en] = -1; hs[en] = ol; if (en == pb + 1 || d < pd) pd = d }
             out = out "<<"; i = j - 1; wb = 0; continue
           }
         }
@@ -218,7 +227,7 @@ _guardrails_split_awk() {
             (c == "|" && chars[i + 1] == "|")) {
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 2 }
           if (carry) { wordend(); seal(fsh == 1 || ev[d]) }
-          out = out "\n"; i++; wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
+          out = out nl(); i++; wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
         }
         # A lone & ends a command as ; does, but the & in >&, <&, &> and |& belongs to a redirect or pipe.
         if (carry && ((index("<>", c) && chars[i + 1] == "&") || (c == "&" && chars[i + 1] == ">"))) {
@@ -229,7 +238,7 @@ _guardrails_split_awk() {
           if (carry && d > 0) { subemit(d, i); cs[d] = i + 1 + j }
           if (carry) { wordend(); seal(fsh == 1 || ev[d]) }
           i += j
-          out = out "\n"; wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
+          out = out nl(); wb = 1; cw = ""; fsh = 0; fev = 0; ps = 0; qd = 0; continue
         }
         if (carry) wb = (index(" \t<>&(", c) > 0 || (c == ")" && d == 0))
         # cw keeps only what a shell name needs, five characters after the last slash, so a long word stays linear.
@@ -246,11 +255,13 @@ _guardrails_split_awk() {
       # A line is written only once read whole, so an awk that aborts mid-line writes none of it, as
       # before. A line break inside a quote is data here, but a separator to the sh -c or eval that
       # re-splits the quote, so it is written as a semicolon.
+      if (tag && fresh) printf "%s\n", ltag
+      fresh = 0
       for (k = 1; k <= np; k++) printf "%s", piece[k]
       printf "%s", out; out = ""; np = 0; appended = 0
       if (carry && q != "") { printf ";"; next }
       if (cont) next
-      print ""
+      print ""; fresh = 1; ol++
     }
     END {
       if (inb) bodyend()

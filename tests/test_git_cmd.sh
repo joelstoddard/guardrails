@@ -149,6 +149,19 @@ yes 'x=`git push origin HEAD`'             push   "inside backticks in an assign
 yes 'cat <(git commit -m x)'               commit "inside a process substitution"
 no  "echo '\$(git commit -m x)'"           commit "inside single quotes it is text"
 cwd 'x=$(cd /x; pwd); git commit -m y'     commit /start /start "a cd inside a substitution does not last"
+# A substitution runs before the command that holds it, in a child shell, so its commands are judged there (#114).
+walk() { OUT="$(_guardrails_git_walk_cwd "$1" "$2" "$3" | sed '/^end:/d')"; assert_eq "$OUT" "$4" "$5"; }
+cwd 'echo $(git commit -m y); cd /feature'          commit /s /s  "a substitution's commit before a later cd"
+cwd 'echo $(cd /x); echo $(git commit -m y)'         commit /s /s  "a cd in one substitution does not reach another"
+cwd $'cat <<EOF; cd /y\n$(git commit -m x)\nEOF'     commit /s /s  "a heredoc body's substitution runs with the heredoc's command"
+walk 'cd /a; echo `cd /b && git commit -m y`'        commit /s 'local: /b'  "a backtick's cd before its commit, after a cd before it"
+walk 'echo $(cd /x && git commit -m y)'              commit /s 'local: /x'  "a cd in a substitution before its commit"
+walk 'echo $(cd /x && echo $(git commit -m y))'      commit /s 'local: /x'  "a nested substitution after its parent's cd"
+walk 'echo $(echo $(cd /x); git commit -m y)'        commit /s 'local: /s'  "a nested substitution's cd does not reach its parent"
+walk 'cd /a; x=$(git commit -m y)'                   commit /s 'local: /a'  "a substitution after a cd"
+# A line cut from inside a substitution at an operator is not a command of its own: its cd is not followed, as it would
+# send the guard to a path that does not exist, such as /x), which skips the check.
+walk 'echo $(true && cd /x); git commit -m y'        commit /s 'local: /s'  "a cd cut from a substitution is not followed"
 
 # A lone & ends a command (#89).
 yes 'true & git commit -m x'               commit "a commit after a lone &"

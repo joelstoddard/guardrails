@@ -199,6 +199,19 @@ directory it ends in judged. Each directory costs `guard-default-branch` some 33
 calls at load 10, and a command within the length cap can name 6,500 of them, which would
 time the hook out. So past 64 directories it asks.
 
+A command substitution runs before the command that holds it, in a child shell of its own, but
+the carried split writes its commands after all the rest (#87). So the walk reads that split in
+tag mode, `_guardrails_split_awk 1 <cmd> 0 1`, where a line before each segment says where it
+runs (#114). A line in place is tagged `T`, and `T1` when it starts inside a substitution: a
+piece of one cut at an operator inside it, such as ` cd /x)` from `echo $(true && cd /x)`. Its
+commands are in the substitution's own segments, so the walk skips it, where it used to follow
+that `cd` to `/x)`, a path that does not exist, and skip the check. Each instance of a
+substitution opens with a line `O` naming its parent instance, or the line in place that holds
+it, and its segments are tagged `S`. So the walk starts each one where the line that holds it,
+or its parent at the point it opens, stands, and a `cd` in one reaches neither another nor the
+commands after it. A heredoc body's substitutions are held by the line that opened it. Only the
+walk reads tags; the guards' other passes read the split as before, byte for byte.
+
 ## Two splits, never weaker than one
 
 The splitter carries quote state across lines, so a quoted argument spanning lines
