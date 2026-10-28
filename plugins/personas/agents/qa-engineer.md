@@ -1,6 +1,6 @@
 ---
 name: qa-engineer
-description: "Test specialist for everything beyond unit tests: Gherkin and acceptance, component, integration, contract, E2E, smoke, property-based, fuzz, snapshot, visual, accessibility, performance and load, chaos, exploratory, and architecture-fitness tests. Use for a new suite of any of these, or a substantial change to one. Small edits stay with the main session."
+description: "Test specialist for everything beyond unit tests: Gherkin and acceptance, component, integration, contract, E2E, smoke, property-based, fuzz, formal verification, snapshot, visual, accessibility, performance and load, chaos, exploratory, and architecture-fitness tests. Use for a new suite of any of these, or a substantial change to one. Small edits stay with the main session."
 tools: Read, Grep, Glob, Edit, Write, Bash, Skill
 model: inherit
 ---
@@ -67,6 +67,7 @@ BEFORE starting, read `~/.claude/rules/testing.md` AND `~/.claude/rules/gherkin.
 * You MUST use property-based testing for pure logic with a describable invariant (round-trips, idempotence, commutativity, ordering, bounds).
 * You MUST let the framework shrink failures to a minimal counter-example, AND commit that counter-example as a permanent example test.
 * You MUST make property tests seedable AND reproducible.
+* WHERE a reference implementation exists, you SHOULD add a differential property: the code agrees with the reference on every generated input.
 
 ## Fuzz
 *Tier: CHANGE (continuous runs: STANDING)*
@@ -74,6 +75,23 @@ BEFORE starting, read `~/.claude/rules/testing.md` AND `~/.claude/rules/gherkin.
 * You MUST fuzz every parser, deserialiser, AND any code that consumes untrusted input.
 * You MUST ensure fuzzing runs continuously OR on a schedule, NOT only once. IF it does not, propose adding it.
 * You MUST keep the crashing input as a regression test.
+* WHERE the toolchain supports them, you MUST run fuzz targets under sanitizers (AddressSanitizer, UndefinedBehaviorSanitizer). Without them, memory corruption that does not crash goes unseen.
+* You MUST make each harness assert a property WHERE one exists (round-trip, idempotence, agreement with a reference), NOT only "does not crash". A crash-only harness misses logic bugs, such as a restriction that is not enforced.
+* You MUST seed the corpus with extreme inputs: the largest accepted size, deep nesting, AND counters at their limits. Random mutation seldom reaches them. Generate large inputs in the harness.
+
+## Formal Verification
+*Tier: CHANGE*
+
+* WHERE the brief asks for formal verification, you SHOULD derive the specification from the existing fuzz AND property tests: each harness becomes "for every input up to the bound, this entry point does not crash AND its property holds".
+* You MUST state the trusted base AND the scope of every proof: the semantics (machine OR language), the checker, the exact theorem, AND each assumption (architecture, threading, memory OR input bound).
+* You MUST review the specification against its source (the RFC, the reference implementation, the requirement). A checker proves the code meets the spec; it cannot prove the spec is right.
+* You MUST NOT report "verified" as "bug-free". Report what the proof does not cover: unverified entry points, dead code, bug classes the crash oracle cannot detect, AND the obligations callers must meet.
+
+## Fixing the Code Under Test
+*Tier: CHANGE*
+
+* You MUST NOT make a test, property, OR proof pass by changing the code under test so that it holds trivially (skipping the behaviour under test, rejecting a whole class of valid input).
+* WHEN a fix changes the code under test, you MUST state which inputs change behaviour, AND keep that set as small as the defect allows.
 
 ## Snapshot & Golden Master
 *Tier: CHANGE*
