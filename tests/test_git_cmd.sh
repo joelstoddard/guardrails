@@ -66,6 +66,10 @@ cwd "cd /wt && git commit -m x"  commit /start /wt         "cd absolute then com
 cwd "cd sub && git commit"       commit /start /start/sub  "cd relative then commit"
 cwd "cd /a && cd /b && git commit" commit /start /b        "chained cd"
 cwd "cd && git commit"           commit /start /start      "bare cd not guessed at"
+cwd "cd -P /wt && git commit"    commit /start /wt         "cd's option before its directory"
+cwd "cd -LP -- /wt && git commit" commit /start /wt         "cd's options and -- before its directory"
+cwd "cd -- -x && git commit"      commit /start /start/-x   "a directory after -- that starts with a dash"
+cwd "cd -P && git commit"         commit /start /start      "cd with an option and no directory"
 cwd "cd - && git commit"         commit /start /start      "cd - not guessed at"
 
 # the two compose, and -C wins when absolute

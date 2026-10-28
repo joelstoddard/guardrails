@@ -132,7 +132,9 @@ _guardrails_git_walk_cwd() {
       cd)
         # A cd in a subshell does not last and one after a keyword may not run, so following either could miss a commit.
         [ "$wrapped" = 0 ] || continue
-        k=$((i + 1)); i=$((k + 1)); w="${toks[$k]:-}"
+        # Its options, such as -P, come before its directory, and -- ends them.
+        for ((k = i + 1; k < ${#toks[@]}; k++)); do case "${toks[$k]}" in --) k=$((k + 1)); break ;; -?*) ;; *) break ;; esac; done
+        i=$((k + 1)); w="${toks[$k]:-}"
         _guardrails_git_dir_word
         # `cd` alone (home) and `cd -` (previous) are not worth guessing at; leave cur be.
         case "$w" in
