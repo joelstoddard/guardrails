@@ -61,14 +61,14 @@ _guardrails_split_awk() {
       if (k > hb + 1) cs[k - 1] = e
     }
     # A shell word anywhere in a segment makes the body of a heredoc opened in it its script, so no wrapper hides one
-    # (#90), nor a redirect before the shell, as in <<EOF bash (#132). So do chroot and ssh, or an option with s or i
-    # after sudo or doas, as each starts a shell with no command (#113, #133); fsh is 2 after sudo or doas. seal decides for the
+    # (#90), nor a redirect before the shell, as in <<EOF bash (#132). So do chroot, ssh, su and nsenter, or an option with s
+    # or i after sudo or doas, as each starts a shell with no command (#113, #133); fsh is 2 after sudo or doas. seal decides for the
     # heredocs opened from pseg on once their segment ends, or a substitution opens in it, whose own heredocs it decides
     # for when it closes. So does source or . of /dev/stdin or -, which ps notes the first word of. fev notes eval, or a
     # -c after a shell, which runs a substitution in its words as a script, so ev[k] marks level k as one, and a heredoc
     # opened in it as its script; so does a shell or source before a <( ).
     function wordend() {
-      if (index(" sh bash zsh dash ksh chroo ssh ", " " cw " ")) fsh = 1
+      if (index(" sh bash zsh dash ksh chroo ssh su nsent ", " " cw " ")) fsh = 1
       else if (cw == "sudo" || cw == "doas") { if (!fsh) fsh = 2 }
       else if (fsh == 2 && (cw ~ /^-[^-]*[si]/ || cw == "--she" || cw == "--log")) fsh = 1
       if (cw == "eval" || (fsh == 1 && cw ~ /^-[^-]*c/)) fev = 1
@@ -316,9 +316,9 @@ _guardrails_unreadable() {
         t = part[i]; gsub(/["\047\\]/, "", t); nw = split(t, w, /[^A-Za-z0-9_.-]+/); at = pre
         for (j = 1; j <= nw; j++) {
           at += length(w[j]); sh = (w[j] == "sh" || w[j] == "bash" || w[j] == "zsh" || w[j] == "dash" || w[j] == "ksh")
-          ev = (w[j] == "eval" || w[j] == "ssh")
-          if (f == 1 && (sh || ev)) s++
-          if (ev || (sh && i <= last)) { k++; r[f] += L - at }
+          ev = (w[j] == "eval" || w[j] == "ssh"); sc = ((w[j] == "su" || w[j] == "script") && i <= last)
+          if (f == 1 && (sh || ev || sc)) s++
+          if (ev || sc || (sh && i <= last)) { k++; r[f] += L - at }
         }
         n += k; pre += length(part[i]) + 1
       }
@@ -350,7 +350,7 @@ _guardrails_command_at() {
     *[=/\(\)\<\>\"\'\\]* | '' | '!' | '{' | if | then | elif | else | while | until | do | in) _guardrails_command_skip ;;
     function | coproc | case) _guardrails_command_skip ;;
     sudo | env | exec | time | xargs | ssh | nohup | command) _guardrails_command_skip ;;
-    timeout | nice | stdbuf | doas | setsid | chroot | docker | kubectl | nsenter) _guardrails_command_skip ;;
+    timeout | nice | stdbuf | doas | setsid | chroot | docker | kubectl | nsenter | runuser | script) _guardrails_command_skip ;;
     *) [ "${toks[1]:-}" != '()' ] || _guardrails_command_skip ;;   # f () { ...; }
   esac
 }
@@ -536,6 +536,9 @@ _guardrails_command_skip() {
       stdbuf) vals=ioe; longs='--input --output --error' ;;
       doas) vals=Cu; so='^-[^Cu]*s' ;;
       chroot) vals=ugG; ops=1; longs='--userspec --groups'; ws="$b" ;;
+      runuser) vals=cgGsuw; longs='--user --group --supp-group --shell --command --session-command --whitelist-environment' ;;
+      # script runs the command after its file, or a command line -c gives it, which is read as a shell's.
+      script) vals=EBIOTmot; ops=1; ws="$b"; longs='--echo --log-io --log-in --log-out --log-timing --logging-format --output-limit' ;;
       nohup | command | setsid) vals="" ;;
       # These run their command elsewhere, as you: ssh's is a command line, read as its payload unless a shell runs it, and
       # the others' words are the command, as sudo's are (#113). ssh takes options after its host, and -N, -W, -O, -G, -Q
@@ -566,8 +569,9 @@ _guardrails_command_skip() {
             case " $longs " in *" $o "*) i=$((i + 1)) ;; esac
             case "$o" in --shell | --login) [ -z "$so" ] || ws="$b" ;; esac ;;
           -?*)
-            # command -v and -V name a command without running it.
+            # command -v and -V name a command without running it, and script -c runs a command line.
             [[ $b == command && $o == -*[vV]* ]] && { i="$start"; break 3; }
+            [[ $b == script && $o =~ ^-[^-EBIOTmot]*c ]] && { i="$start"; break 3; }
             # A shell option counts before the first option in its cluster that takes a value, which takes the rest.
             [[ -n $so && $o == *[si]* && $o =~ $so ]] && ws="$b"
             [[ -n $no && $o == *[NWOGQV]* && $o =~ $no ]] && ws=""
@@ -582,7 +586,7 @@ _guardrails_command_skip() {
       done
       [ "$ops" -gt 0 ] || break
       # kubectl and ssh take options after their pod or host as well.
-      ops=0; i=$((i + 1)); case "$b" in kubectl | ssh) ;; *) break ;; esac
+      ops=0; i=$((i + 1)); case "$b" in kubectl | ssh) ;; script) [ "${toks[$i]:-}" != -- ] || i=$((i + 1)); break ;; *) break ;; esac
     done
     ((start != remote)) || ra="$i"
   done
@@ -614,7 +618,7 @@ _guardrails_shell_payload() {
     eval) inner="${toks[*]:$((i + 1))}" ;;
     # With no command, ssh has none, though a redirect may follow its host.
     ssh) [ -z "$_GUARDRAILS_CMD_SHELL" ] || return 1; inner="${toks[*]:$_GUARDRAILS_CMD_ARGS}" ;;
-    sh | bash | zsh | dash | ksh)
+    sh | bash | zsh | dash | ksh | su | script)
       for ((k = i + 1; k < ${#toks[@]}; k++)); do
         case "${toks[$k]}" in
           --*) ;;
@@ -635,7 +639,7 @@ _guardrails_shell_payload() {
 # _guardrails_shell_reads_stdin <segment> → rc 0 and a reason if the segment is a shell or another interpreter reading
 # commands from a stdin the command line does not show, such as a pipe; not a heredoc, here-string, file or script.
 _guardrails_shell_reads_stdin() {
-  local i shell w
+  local i shell w n=0
   local -a toks
   # The splits read a here-string as a script only when a shell is the command, so it falls through.
   case "$1" in *'<<<'*) ;; *'<'*) return 1 ;; esac
@@ -653,6 +657,19 @@ _guardrails_shell_reads_stdin() {
           - | -*s*) break ;;
           -* | +*) ;;
           *) return 1 ;;
+        esac
+      done ;;
+    # su runs its user's shell, which reads stdin unless given a command or arguments after the user.
+    su)
+      for ((i = i + 1; i < ${#toks[@]}; i++)); do
+        w="${toks[$i]}"
+        case "$w" in *[\<\>]*) _guardrails_skip_redirect && { i=$((i - 1)); continue; } ;; esac
+        case "$w" in
+          --command* | --session-command* | --help | --version) return 1 ;;
+          -s | -g | -G | -w | --shell | --group | --supp-group | --whitelist-environment) i=$((i + 1)) ;;
+          - | --*) ;;
+          -*) [[ $w =~ ^-[^sgGw]*[chV] ]] && return 1; [[ $w =~ ^-[^sgGw]*[sgGw]$ ]] && i=$((i + 1)) ;;
+          *) n=$((n + 1)); [ "$n" -lt 2 ] || return 1 ;;
         esac
       done ;;
     python | python[23] | python[23].[0-9]* | node | nodejs | perl | ruby | php | lua | deno | bun)
@@ -718,10 +735,12 @@ _guardrails_names_shell() {
   case "$t" in *[\"\'\\]*) local LC_ALL=C; t="${t//\\$'\n'/}"; t="${t//[\"\'\\]/}" ;; esac
   case "$t" in
     */dev/stdin*) return 0 ;;
-    *sh* | *eval* | *sudo* | *doas* | *chroot* | *python* | *node* | *perl* | *ruby* | *php* | *lua* | *deno* | *bun*) ;;
+    *sh* | *eval* | *sudo* | *doas* | *chroot* | *python* | *node* | *perl* | *ruby* | *php* | *lua* | *deno* | *bun* | *su* | \
+      *script* | *nsenter*) ;;
     *) return 1 ;;
   esac
-  for w in sh bash zsh dash ksh eval sudo doas chroot ssh python python2 python3 node nodejs perl ruby php lua deno bun; do
+  for w in sh bash zsh dash ksh eval sudo doas chroot ssh su script nsenter python python2 python3 node nodejs perl ruby php lua \
+    deno bun; do
     case " $t " in *[!A-Za-z0-9_.-]"$w"[!A-Za-z0-9_.-]*) return 0 ;; esac
   done
   # A python by version, such as python3.12.

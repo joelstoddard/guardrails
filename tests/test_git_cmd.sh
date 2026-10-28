@@ -345,6 +345,14 @@ there 'ssh host git commit -m x'                      commit "a commit ssh runs 
 yes $'ssh host <<EOF\ngit commit -m x\nEOF'           commit "a heredoc fed to ssh with no command"
 no  'ssh host git status'                             commit "ssh running another subcommand"
 
+# su -c and script -c run a command line through a shell; runuser -u and script with a file run their words.
+yes "su -c 'git commit -m x' root"                    commit "a commit su -c runs"
+yes 'runuser -u me -- git commit -m x'                commit "a commit runuser -u runs"
+yes "script -qc 'git commit -m x' /dev/null"          commit "a commit script -c runs"
+yes 'script -q /dev/null git commit -m x'             commit "a commit script runs after its file"
+cwd "su -c 'cd /x && git commit -m y' root"           commit /s /x "a cd in su -c's command"
+cwd "su -c 'cd /x'; git commit -m y"                  commit /s /s "su -c's cd ends with its shell"
+
 # A command ssh, docker exec, kubectl exec or nsenter runs is read, but it runs elsewhere, so its repo is not here.
 there 'kubectl exec pod -- git commit -m x'           commit "a commit kubectl exec runs"
 there 'nsenter -t 1 -m git commit -m x'               commit "a commit nsenter runs in another namespace"

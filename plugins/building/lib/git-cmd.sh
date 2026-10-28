@@ -86,7 +86,7 @@ _guardrails_git_in_segments() {
         _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"
         [ "$_GUARDRAILS_GIT_SUB" = "$want" ] && { [ "$r" = 1 ] || return 0; rc=2; }
         ;;
-      *sh | eval)
+      *sh | eval | su | script)
         # A payload is split both ways again, whichever split it came from. ssh's runs on another host.
         [ "$_GUARDRAILS_CMD" != ssh ] || r=1
         _guardrails_shell_payload "$seg" || continue
@@ -243,7 +243,7 @@ _guardrails_git_walk_seg() {
         if [ "$away" = 1 ]; then printf 'remote: %s\n' "$d"; else printf 'local: %s\n' "$d"; fi
       fi
       ;;
-    *sh | eval)
+    *sh | eval | su | script)
       # A payload's commands are judged where they run; only eval's cd outlives it, as sh -c runs in a child shell.
       _guardrails_shell_payload "$seg" || return
       while IFS= read -r line; do

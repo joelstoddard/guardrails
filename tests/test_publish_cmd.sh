@@ -646,6 +646,37 @@ payload 'ssh -p 22 host -t ls -l'     "ls -l"             "ssh's options on both
 payload 'ssh host'                    "(none)"            "ssh with no command has no payload"
 too_much "$(printf 'ssh h x\n%.0s' {1..17})"              "seventeen ssh commands to re-read"
 
+# su and script -c run a command line through a shell, as sh -c does; runuser -u, nsenter and script with a file run
+# their words as the command. With no command, su, nsenter and script start a shell that reads stdin.
+blocks "su -c 'gh pr comment 1 -b x' root"                  "a publish su -c runs"
+blocks "su root -c 'gh pr comment 1 -b x'"                  "a publish su runs with -c after its user"
+blocks "su -lc 'gh pr comment 1 -b x'"                      "a publish su runs with -c in a cluster"
+blocks $'su <<EOF\ngh pr comment 1 -b x\nEOF'               "a heredoc fed to su"
+blocks 'runuser -u me -- gh pr comment 1 -b x'              "a publish runuser -u runs"
+blocks 'runuser --user=me gh pr comment 1 -b x'             "a publish runuser --user= runs"
+blocks "script -qc 'gh pr comment 1 -b x' /dev/null"        "a publish script -c runs"
+blocks 'script -q /dev/null gh pr comment 1 -b x'           "a publish script runs after its file"
+blocks 'script -q out.log -- gh pr comment 1 -b x'          "a publish script runs after its file and --"
+blocks $'nsenter -t 1 -a <<EOF\ngh pr comment 1 -b x\nEOF'  "a heredoc fed to nsenter with no command"
+allows 'script -q /dev/null make'                           "script running a command that publishes nothing"
+unseen 'cat x | su'                                         "a pipe into su"
+unseen 'cat x | su - root'                                  "a pipe into a login su"
+unseen 'cat x | su -s /bin/bash root'                       "a pipe into su with a shell and a user"
+unseen 'cat x | nsenter -t 1 -a'                            "a pipe into nsenter with no command"
+unseen 'cat x | script -q /dev/null'                        "a pipe into script with no command"
+unseen 'cat x | su -l root'                                 "a pipe into su with a cluster of options"
+unseen 'cat x | su -ms /bin/bash root'                      "a pipe into su whose last option in a cluster takes the next word"
+seen   "cat x | su -c 'tee f' root"                         "su -c runs its command, not stdin"
+seen   "cat x | su -lc 'tee f' root"                        "su -c in a cluster runs its command, not stdin"
+seen   'cat x | su root script.sh'                          "su runs a script file with its arguments"
+seen   'cat x | su --help'                                  "su's help reads no stdin"
+seen   'cat x | nsenter -t 1 -n tee f'                      "nsenter running a command"
+seen   'cat x | script -q /dev/null tee f'                  "script running a command"
+payload "su -c 'cd /srv && make' root"   "cd /srv && make' root"   "su -c's payload, as sh -c's, runs to the end of its words"
+too_much "$(printf "su -c 'x'\n%.0s" {1..17})"              "seventeen su -c commands to re-read"
+too_much "$(printf "script -c 'x'\n%.0s" {1..17})"          "seventeen script -c commands to re-read"
+in_time "$(printf 'echo a su script\n%.0s' {1..17})"        "su and script as words with no -c to re-read"
+
 # Another interpreter reads its script from stdin when given no script file, code, module or option that exits first, so
 # a pipe into one runs what no guard can read (#92).
 unseen 'cat x | python3'                                  "a pipe into python3"

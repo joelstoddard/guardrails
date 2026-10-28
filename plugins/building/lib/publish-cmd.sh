@@ -140,7 +140,7 @@ _guardrails_publishes_as_user() {
     [ "$i" -lt "${#toks[@]}" ] || continue
 
     case "$base" in
-      sh | bash | zsh | dash | ksh | eval)
+      sh | bash | zsh | dash | ksh | eval | su | script)
         # Re-scan the payload; `sh -c '<cmd>'` hides everything from prefix rules.
         if _guardrails_shell_payload "$seg"; then
           _guardrails_publishes_as_user "$_GUARDRAILS_PAYLOAD" "$((depth + 1))" && return 0

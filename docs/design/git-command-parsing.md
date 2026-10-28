@@ -86,8 +86,8 @@ the git guards and the shell readers, finds the command word through one lookup,
 - a function's header (`f()`, `f ()`, `function f`), a case arm's pattern (a word ending in
   `)`, after `case … in`) and `coproc` with its name, so the body or arm is read (#110);
 - the wrappers `sudo`, `env`, `nohup`, `exec`, `command`, `time`, `xargs`, `timeout`,
-  `nice`, `stdbuf`, `doas`, `setsid`, `chroot`, `docker exec`, `kubectl exec` and `nsenter`,
-  with their options, and the duration
+  `nice`, `stdbuf`, `doas`, `setsid`, `chroot`, `docker exec`, `kubectl exec`, `nsenter`,
+  `runuser` and `script`, with their options, and the duration
   of `timeout` and the root of `chroot`. In a cluster such as `-Eu`, the first option
   that takes a value takes the rest of the word, or the next word if none is left, as
   getopt does. A long option that takes a value, such as `sudo --user`, takes the next
@@ -116,10 +116,13 @@ zsh, dash and ksh all take it as a cluster of options and refuse it, and `-c""` 
 script in the next word, which is read as before.
 
 A wrapper with no command after it usually fails or prints something, but `chroot DIR`,
-`sudo -s` or `-i`, `doas -s` and `ssh host` start a shell that reads commands from stdin, so
-a pipe into one asks, as a pipe into a shell does, and so does a here-string (#113, #133).
-The lookup notes such a wrapper in `_GUARDRAILS_CMD_SHELL` when no command follows it. `ssh`
-with `-N`, `-W`, `-O`, `-G`, `-Q` or `-V` starts none.
+`sudo -s` or `-i`, `doas -s`, `ssh host`, `nsenter` and `script FILE` start a shell that reads
+commands from stdin, so a pipe into one asks, as a pipe into a shell does, and so does a
+here-string (#113, #133). The lookup notes such a wrapper in `_GUARDRAILS_CMD_SHELL` when no
+command follows it. `ssh` with `-N`, `-W`, `-O`, `-G`, `-Q` or `-V` starts none. `su` runs its
+user's shell, read like a shell: its `-c` gives a payload, and with no `-c` and no argument after
+its user, a pipe into it asks. `script -c` runs a command line too, read the same way, where
+`script FILE CMD`, and util-linux's `script FILE -- CMD`, run `CMD` as a wrapper's command.
 
 `command -v` and `-V` name a command without running it, so there `command` is the
 command word. `ssh host`, `docker exec container`, `kubectl exec pod --` and `nsenter` run
