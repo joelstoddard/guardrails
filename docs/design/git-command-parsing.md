@@ -210,6 +210,14 @@ directory it ends in judged. Each directory costs `guard-default-branch` some 33
 calls at load 10, and a command within the length cap can name 6,500 of them, which would
 time the hook out. So past 64 directories it asks.
 
+A directory that does not exist when the hook runs, as one the command makes first or names
+through a variable, as in `mkdir d && env -C d git commit` or `cd "$WT"`, used to be skipped,
+which let the commit through. `guard-default-branch` now judges it at its nearest existing
+ancestor, where git would find its repo, as main did for `env -C`, whose directory it did not
+read. A prefix of a path exists if a longer one does, so it finds that ancestor by halving the
+path's components, as climbing one at a time is quadratic in a deep path: 16,000 `env -Cx`
+wrappers before a commit took it 14 s that way, and take 4.4 s.
+
 A command substitution runs before the command that holds it, in a child shell of its own, but
 the carried split writes its commands after all the rest (#87). So the walk reads that split in
 tag mode, `_guardrails_split_awk 1 <cmd> 0 1`, where a line before each segment says where it

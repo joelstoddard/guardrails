@@ -343,6 +343,15 @@ assert_rc 2 "a switch then a commit after a ; on a default branch blocked"
 run_hook "$S" "$(jsonat "$r2" 'git switch main && git commit -m x')"
 assert_rc 2 "a switch to the default branch then a commit blocked"
 
+# A directory that does not exist yet, as one the command makes or names through a variable, is judged at its nearest
+# existing ancestor, where git finds the repo, rather than skipped: main judged where the shell sat.
+run_hook "$S" "$(jsonat "$r2" "mkdir -p $r13/a/b && env -C $r13/a/b git commit -m x")"
+assert_rc 2 "a commit behind env -C in a directory the command makes, in a default-branch repo, blocked"
+run_hook "$S" "$(jsonat "$r13" 'cd "$WT" && git commit -m x')"
+assert_rc 2 "a commit after a cd to a variable, from a default-branch repo, blocked"
+run_hook "$S" "$(jsonat "$r2" "mkdir new && cd new && git commit -m x")"
+assert_rc 0 "a commit in a directory the command makes, in a feature-branch repo, allowed"
+
 # Every commit is judged, not only the first.
 run_hook "$S" "$(jsonat "$r2" "git commit -m x && git -C $r13 commit -m y")"
 assert_rc 2 "a second commit, on a default branch, blocked"

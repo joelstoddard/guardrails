@@ -35,6 +35,22 @@ _guardrails_invokes_git "$cmd" commit; found=$?
 # under worktree-per-ticket they differ, and resolving from .cwd refuses commits that
 # were never going to land there; judge every directory a commit runs in, by either split.
 # See docs/design/git-command-parsing.md.
+# nearest_dir → moves dir to its nearest existing ancestor, where git finds the repo of a directory that does not exist yet,
+# as one the command makes or names through a variable, rather than skip it. A prefix exists if a longer one does, so it
+# halves the components, as climbing one at a time is quadratic in a deep path.
+nearest_dir() {
+  local IFS=/ lo=0 hi mid p root=.
+  local -a parts
+  [ "${dir:0:1}" != / ] || root=/
+  read -r -a parts <<<"$dir"
+  hi="${#parts[@]}"
+  while ((hi - lo > 1)); do
+    mid=$(((lo + hi) / 2)); p="${parts[*]:0:mid}"
+    if [ -d "${p:-$root}" ]; then lo="$mid"; else hi="$mid"; fi
+  done
+  dir="${parts[*]:0:lo}"; dir="${dir:-$root}"
+}
+
 n=0; away=""
 while IFS= read -r dir; do
   case "$dir" in remote:*) away=1; continue ;; esac
@@ -47,6 +63,7 @@ while IFS= read -r dir; do
       '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
     exit 0
   fi
+  [ -d "${dir:-.}" ] || nearest_dir
   repo="$(git -C "${dir:-.}" rev-parse --show-toplevel 2>/dev/null)" || continue
   cur="$branch"; [ -n "$cur" ] || cur="$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null)" || continue
 
