@@ -241,6 +241,8 @@ cwd "git -C 'a b' -C c commit -m y"        commit /s "/s/a b/c"     "a quoted -C
 yes "git -C '/my dir' commit -m y"         commit                   "a commit after a quoted -C directory with a blank"
 yes 'git -c "user.name=a b" commit -m y'   commit                   "a commit after a quoted -c value with a blank"
 cwd 'cd "/x" && git commit -m y'           commit /start /x         "a quoted cd directory"
+cwd 'cd /x/"a b"/c && git commit -m y'     commit /start "/x/a b/c" "a cd directory quoted in its middle"
+cwd "git -C /x/'a b' commit -m y"          commit /start "/x/a b"   "a -C directory quoted at its end"
 cwd "cd '/my dir' && git commit -m y"      commit /start "/my dir"  "a quoted cd directory with a blank"
 cwd 'cd "/é" && git commit -m y'           commit /start "/é"       "a quoted cd directory holding a multibyte character"
 long="/$(printf 'a%.0s' {1..80})"
