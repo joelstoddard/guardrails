@@ -282,6 +282,13 @@ assert_eq "$OUT" "" "a commit whose message comes from a heredoc asks nothing on
 run_hook "$S" "$(jsonat "$r13" "> 'a b c' git commit -m x")"
 assert_rc 2 "a commit after a quoted target with blanks on the default branch blocked"
 
+# A quoted directory is read without its quotes, as the shell passes it, so it does not resolve to a path that does not
+# exist and slip past the guard (#150).
+run_hook "$S" "$(jsonat "$r2" "git -C \"$r13\" commit -m x")"
+assert_rc 2 "a commit -C into a quoted default-branch directory blocked"
+run_hook "$S" "$(jsonat "$r2" "cd '$r13' && git commit -m x")"
+assert_rc 2 "a cd into a quoted default-branch directory then commit blocked"
+
 # Every commit is judged, not only the first.
 run_hook "$S" "$(jsonat "$r2" "git commit -m x && git -C $r13 commit -m y")"
 assert_rc 2 "a second commit, on a default branch, blocked"

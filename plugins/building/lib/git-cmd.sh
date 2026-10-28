@@ -24,10 +24,17 @@ _guardrails_git_opt_takes_value() {
   esac
 }
 
+# _guardrails_git_dir_word → sets the caller's w, the word at its index k, to the shell word that starts there, with i
+# past it: joined across the words of the split that a quote or an escaped blank in it spans, and without the quotes and
+# backslashes the shell drops (#150). Reads the caller's toks.
+_guardrails_git_dir_word() {
+  case "$w" in *[\"\'\\]*) _guardrails_skip_quoted "$w"; w="${toks[*]:k:i-k}"; _guardrails_unquote "$_GUARDRAILS_SPLIT_MAX" ;; esac
+}
+
 # _guardrails_git_skip_globals <index> <words> → sets _GUARDRAILS_GIT_SUB to the subcommand after git's global options,
 # and _GUARDRAILS_GIT_DIRS to the -C directories in order. Variables, as a subshell per git command is slow.
 _guardrails_git_skip_globals() {
-  local i="$1" w opt=""; shift
+  local i="$1" w opt="" k; shift
   local -a toks=("$@")
   _GUARDRAILS_GIT_SUB=""; _GUARDRAILS_GIT_DIRS=()
   while [ "$i" -lt "${#toks[@]}" ]; do
@@ -36,8 +43,12 @@ _guardrails_git_skip_globals() {
     case "$w" in *[\<\>]*) _guardrails_skip_redirect && continue ;; esac
     case "$w" in *[\"\'\\]*) _guardrails_unquote ;; esac
     i=$((i + 1))
-    # An option that takes a value, such as -C /x, takes the next word that is not a redirect.
-    if [ -n "$opt" ]; then [ "$opt" != -C ] || _GUARDRAILS_GIT_DIRS+=("${toks[$((i - 1))]}"); opt=""; continue; fi
+    # An option that takes a value, such as -C /x, takes the next word that is not a redirect: one shell word, though a
+    # quote or an escaped blank in it spans several words of the split (#150).
+    if [ -n "$opt" ]; then
+      k=$((i - 1)); w="${toks[$k]}"; _guardrails_git_dir_word
+      [ "$opt" != -C ] || _GUARDRAILS_GIT_DIRS+=("$w"); opt=""; continue
+    fi
     case "$w" in
       --*=*) ;;                                                  # --git-dir=/x
       -*) _guardrails_git_opt_takes_value "$w" && opt="$w" ;;    # -C /x, --no-pager
@@ -106,7 +117,7 @@ _guardrails_git_effective_cwd() {
 
 # Prints a line "local: <dir>" for each matching git command, then "end: <dir>", the directory in effect at the end.
 _guardrails_git_walk_cwd() {
-  local cmdline="$1" want="$2" cur="$3" depth="${4:-0}" seg i d v wrapped line
+  local cmdline="$1" want="$2" cur="$3" depth="${4:-0}" seg i k d w wrapped line
   local -a toks
   [ "$depth" -gt 4 ] && { printf 'end: %s\n' "$cur"; return; }
   while IFS= read -r seg; do
@@ -116,22 +127,23 @@ _guardrails_git_walk_cwd() {
       cd)
         # A cd in a subshell does not last and one after a keyword may not run, so following either could miss a commit.
         [ "$wrapped" = 0 ] || continue
-        d="${toks[$((i + 1))]:-}"
+        k=$((i + 1)); i=$((k + 1)); w="${toks[$k]:-}"
+        _guardrails_git_dir_word
         # `cd` alone (home) and `cd -` (previous) are not worth guessing at; leave cur be.
-        case "$d" in
+        case "$w" in
           '' | '-') ;;
-          /*) cur="$d" ;;
-          *) cur="$cur/$d" ;;
+          /*) cur="$w" ;;
+          *) cur="$cur/$w" ;;
         esac
         ;;
       git)
         _guardrails_git_skip_globals "$((i + 1))" "${toks[@]}"
         if [ "$_GUARDRAILS_GIT_SUB" = "$want" ]; then
           d="$cur"
-          for v in "${_GUARDRAILS_GIT_DIRS[@]}"; do
-            case "$v" in
-              /*) d="$v" ;;
-              ?*) d="$d/$v" ;;
+          for w in "${_GUARDRAILS_GIT_DIRS[@]}"; do
+            case "$w" in
+              /*) d="$w" ;;
+              ?*) d="$d/$w" ;;
             esac
           done
           printf 'local: %s\n' "$d"

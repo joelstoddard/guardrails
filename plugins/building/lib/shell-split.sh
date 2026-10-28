@@ -415,11 +415,12 @@ _guardrails_split_fused() {
   i="$j"; return 0
 }
 
-# _guardrails_unquote → rc 0 with the quotes and backslashes the shell drops removed from the caller's word w, if it is
-# short (#111). Callers pass only a word that holds a quote or backslash.
+# _guardrails_unquote [max] → rc 0 with the quotes and backslashes the shell drops removed from the caller's word w, if
+# it is no longer than max, 64 by default (#111). Callers pass only a word that holds a quote or backslash.
 _guardrails_unquote() {
-  # A name is short, and a long word would make the substitution slow.
-  [ "${#w}" -le 64 ] || return 1
+  # A name is short, and a long word makes the substitution slow, quadratic in a UTF-8 locale, so one is read as bytes.
+  [ "${#w}" -le "${1:-64}" ] || return 1
+  [ "${#w}" -le 64 ] || local LC_ALL=C
   w="${w#\$}"; w="${w//[\"\'\\]/}"
 }
 
@@ -461,8 +462,9 @@ _guardrails_command_skip() {
     esac
     case "$w" in
       [A-Za-z_]*=*) i=$((i + 1)); continue ;;
-      # The shell drops a command word's quotes and backslashes (#111).
-      *[\"\'\\]*) _guardrails_unquote && _GUARDRAILS_CMD_WRAPPED=1 ;;
+      # The shell drops a command word's quotes and backslashes (#111). One piece of a quoted argument is not a command
+      # the shell runs, so a cd read from one is not followed (#150).
+      *[\"\'\\]*) _guardrails_whole_word || _GUARDRAILS_CMD_WRAPPED=1; _guardrails_unquote ;;
     esac
     case "$w" in
       '' | '!' | '{' | if | then | elif | else | while | until | do | in) _GUARDRAILS_CMD_WRAPPED=1; i=$((i + 1)); continue ;;

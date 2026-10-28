@@ -168,7 +168,9 @@ Two readers use the lookup with care:
   not last, and one after a keyword, `if false; then cd /x; fi`, may not run. Following
   either could judge a repo other than the one the commit lands in, which is weaker than
   not following it. The same holds for the `cd` in an `eval` behind a keyword. A `cd`
-  behind any other word the lookup skips, a redirect included, is not followed either.
+  behind any other word the lookup skips, a redirect included, is not followed either. A
+  quoted `"cd"` or `"eval"` is, as the shell runs it, but not one piece of a quoted argument,
+  such as `"cd /x"`, which the shell would run as a command of that whole name (#150).
 
 ## Which repository the command acts on
 
@@ -337,11 +339,14 @@ redirects among its flags 3.5 s (#146). These were measured at load 13 to 17.
 
 ## Known limitation
 
-Tokens are split on whitespace with no quote handling, so
-`git -C '/path with spaces' commit` is not parsed correctly. This is consistent
-with the tripwire framing: the failure is fail-open, and the guard lets the command
-through rather than blocking it wrongly. For the same reason a long option that takes a
-separate value but is not in its wrapper's list reads its value as the command word.
+Tokens are split on whitespace, so a quoted argument of several words is several words of the
+split. A directory is read as one shell word, joined across the words its quotes or escaped
+blanks span and without its quotes, so `git -C '/path with spaces' commit` and `cd "/x"` are
+judged where they run, as is a value of git's that holds a blank, as in `-c "user.name=a b"`
+(#150). Joined words keep one blank between them, where the command may have had several. A
+long option that takes a separate value but is not in its wrapper's list reads its value as
+the command word, which fails open: the guard lets the command through rather than blocking
+it wrongly.
 
 A quoted argument of several words is read as several words, as it always was. Its middle
 words hold no quote, so a verb among them blocks, as before: `python3 x.py "a post here"`. Its
