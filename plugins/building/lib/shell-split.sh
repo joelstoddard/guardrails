@@ -424,6 +424,18 @@ _guardrails_unquote() {
   w="${w#\$}"; w="${w//[\"\'\\]/}"
 }
 
+# _guardrails_dir_word → sets the caller's w, the word at its index k, to the shell word that starts there, with i
+# past it: joined across the words of the split that a quote it leaves open or an escaped blank spans, with a leading ~
+# or ~/ expanded to $HOME, and without the quotes and backslashes the shell drops (#150). Reads the caller's toks.
+_GUARDRAILS_OPEN_REST='^([^"'"'"'\\]|\\.|"([^"\\]|\\.)*"|'"'"'[^'"'"']*'"'"')*(['"'"'"].*|\\)$'
+_guardrails_dir_word() {
+  local home=""
+  case "$w" in *[\"\'\\]*) [[ $w =~ $_GUARDRAILS_OPEN_REST ]] && { _guardrails_skip_quoted "${BASH_REMATCH[3]}"; w="${toks[*]:k:i-k}"; } ;; esac
+  case "$w" in \~ | \~/*) home="${HOME:-}"; [ -z "$home" ] || w="${w#\~}" ;; esac
+  case "$w" in *[\"\'\\]*) _guardrails_unquote "$_GUARDRAILS_SPLIT_MAX" ;; esac
+  w="$home$w"
+}
+
 # _guardrails_whole_word → rc 0 if every quote and backslash in the caller's word w closes within it, so the word is
 # whole and not one piece of a quoted argument that the split on blanks cut (#131). A word too long to unquote is not.
 _GUARDRAILS_WHOLE_WORD='^([^"'"'"'\\]|\\.|"([^"\\]|\\.)*"|'"'"'[^'"'"']*'"'"')*$'
@@ -432,17 +444,29 @@ _guardrails_whole_word() {
   case "$w" in *[\"\']* | *\\) [[ $w =~ $_GUARDRAILS_WHOLE_WORD ]] ;; esac
 }
 
+# _guardrails_chdir <index> [prefix] → adds the directory a wrapper's option names, the shell word at <index> less its
+# prefix, to _GUARDRAILS_CMD_DIRS, with the caller's i on that word's last word of the split (#112). Reads the caller's toks.
+_guardrails_chdir() {
+  local k="$1" w="${toks[$1]:-}"
+  i="$k"; case "$w" in *[\"\'\\~]*) i=$((k + 1)); _guardrails_dir_word; i=$((i - 1)) ;; esac
+  _GUARDRAILS_CMD_DIRS+=("${w#"${2:-}"}")
+}
+
 # The guards' passes read a segment up to five times, and the loop is linear in the words before the command, so a long
 # segment's lookup is kept, keyed by the split and its words; a subshell inherits it. Callers read toks only past the
 # command, which the loop's splitting of fused redirects leaves as they were. See docs/design/git-command-parsing.md
-declare -A _GUARDRAILS_CMD_CACHE
+# _GUARDRAILS_CMD_DIRS are the directories that wrappers such as env -C run the command in, set only when
+# _GUARDRAILS_CMD_WRAPPED is 1.
+declare -A _GUARDRAILS_CMD_CACHE _GUARDRAILS_CMD_CACHE_DIRS
 _guardrails_command_skip() {
-  local i=0 w b="" vals longs o start ops sub remote=-1 rb ra so no ws="" key=""
+  local i=0 w b="" vals longs o start ops sub remote=-1 rb ra so no ws="" key="" cdo
+  _GUARDRAILS_CMD_DIRS=()
   if [ "${#toks[@]}" -ge 64 ]; then
     key="${_GUARDRAILS_SPLIT_PER_LINE:-} ${toks[*]}"
     if [ -n "${_GUARDRAILS_CMD_CACHE[$key]+x}" ]; then
       IFS=/ read -r _GUARDRAILS_CMD_AT _GUARDRAILS_CMD_WRAPPED _GUARDRAILS_CMD_SHELL _GUARDRAILS_CMD_ARGS _GUARDRAILS_CMD \
         <<<"${_GUARDRAILS_CMD_CACHE[$key]}"
+      [ -z "${_GUARDRAILS_CMD_CACHE_DIRS[$key]+x}" ] || mapfile -t _GUARDRAILS_CMD_DIRS <<<"${_GUARDRAILS_CMD_CACHE_DIRS[$key]}"
       return
     fi
   fi
@@ -478,12 +502,13 @@ _guardrails_command_skip() {
     # A wrapper runs the command after its options and its operand, if it has one: a duration, root, host or
     # container. vals are its short options that take a value, and longs its long ones (#116). ws names it if, with no
     # command, it starts a shell that reads stdin, as chroot and ssh do, and sudo or doas with an option in so (#113, #133).
-    ops=0; sub=0; longs=""; so=""; no=""; ws=""
+    # cdo is its short option that, like --chdir, runs the command in another directory (#112).
+    ops=0; sub=0; longs=""; so=""; no=""; ws=""; cdo=""
     case "$b" in
       sudo)
-        vals=CDghpRrTtUu; so='^-[^CDghpRrTtUu]*[si]'
+        vals=CDghpRrTtUu; so='^-[^CDghpRrTtUu]*[si]'; cdo=D
         longs='--user --group --chdir --close-from --host --prompt --role --type --command-timeout --other-user --chroot' ;;
-      env) vals=CPSu; longs='--unset --chdir --split-string' ;;
+      env) vals=CPSu; longs='--unset --chdir --split-string'; cdo=C ;;
       exec) vals=a ;;
       time) vals=fo; longs='--output --format' ;;
       xargs) vals=adEIJLnPRSs; longs='--arg-file --delimiter --max-args --max-procs --max-chars --process-slot-var' ;;
@@ -514,6 +539,10 @@ _guardrails_command_skip() {
           --) i=$((i + 1)); break ;;
           # A long option written with = holds its value.
           --*)
+            case "$o" in
+              --chdir) [ -z "$cdo" ] || { _guardrails_chdir "$((i + 1))"; continue; } ;;
+              --chdir=*) [ -z "$cdo" ] || { _guardrails_chdir "$i" --chdir=; continue; } ;;
+            esac
             case " $longs " in *" $o "*) i=$((i + 1)) ;; esac
             case "$o" in --shell | --login) [ -z "$so" ] || ws="$b" ;; esac ;;
           -?*)
@@ -523,6 +552,10 @@ _guardrails_command_skip() {
             [[ -n $so && $o == *[si]* && $o =~ $so ]] && ws="$b"
             [[ -n $no && $o == *[NWOGQV]* && $o =~ $no ]] && ws=""
             # In a cluster, the first option taking a value takes the rest of the word, or the next word if none is left.
+            if [[ -n $cdo && $o == *$cdo* && $o =~ ^-[^$vals]*$cdo ]]; then
+              if [ "${#o}" -gt "${#BASH_REMATCH[0]}" ]; then _guardrails_chdir "$i" "${BASH_REMATCH[0]}"; else _guardrails_chdir "$((i + 1))"; fi
+              continue
+            fi
             [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1)) ;;
           *) break ;;
         esac
@@ -541,6 +574,9 @@ _guardrails_command_skip() {
   _GUARDRAILS_CMD_AT="$i"; _GUARDRAILS_CMD="$b"
   # A name holds no /, as the loop reads it from the last one.
   [ -z "$key" ] || _GUARDRAILS_CMD_CACHE[$key]="$i/$_GUARDRAILS_CMD_WRAPPED/$_GUARDRAILS_CMD_SHELL/${_GUARDRAILS_CMD_ARGS:-}/$b"
+  [ -z "$key" ] || [ "${#_GUARDRAILS_CMD_DIRS[@]}" = 0 ] || {
+    printf -v o '%s\n' "${_GUARDRAILS_CMD_DIRS[@]}"; _GUARDRAILS_CMD_CACHE_DIRS[$key]="${o%$'\n'}"
+  }
 }
 
 # _guardrails_shell_payload <segment> → rc 0 with _GUARDRAILS_PAYLOAD set to the script a shell runs from

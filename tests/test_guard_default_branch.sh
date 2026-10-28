@@ -291,6 +291,10 @@ assert_rc 2 "a cd into a quoted default-branch directory then commit blocked"
 HOME="$(dirname "$r13")" run_hook "$S" "$(jsonat "$r2" "cd ~/$(basename "$r13") && git commit -m x")"
 assert_rc 2 "a cd under ~ into a default-branch repo then commit blocked"
 
+# env -C and sudo -D run their command in another directory (#112).
+run_hook "$S" "$(jsonat "$r2" "env -C $r13 git commit -m x")"
+assert_rc 2 "a commit behind env -C into a default-branch repo blocked"
+
 # Every commit is judged, not only the first.
 run_hook "$S" "$(jsonat "$r2" "git commit -m x && git -C $r13 commit -m y")"
 assert_rc 2 "a second commit, on a default branch, blocked"

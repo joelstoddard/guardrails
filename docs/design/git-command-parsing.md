@@ -191,6 +191,7 @@ to be honoured, and they compose, so segments are walked in order:
 |---|---|
 | `cd <path> && git commit` | The payload `cwd` never changes, so this is the form that bites under worktree-per-ticket. |
 | `git -C <path> commit` | Cumulative — each `-C` is relative to the previous one. |
+| `env -C <path> git commit` | `env -C`, `sudo -D` and their `--chdir` run that one command there, before git's own `-C` (#112). |
 
 Every matching command is judged, not only the first, so `git -C a push && git -C b push` has
 both directories judged, each once. A command with none, such as a pipe into a shell, has the

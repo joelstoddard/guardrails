@@ -207,6 +207,25 @@ no  'docker exec c git commit -m x'        commit "a commit in a container is no
 cwd 'timeout 5 cd /x; git commit -m y'     commit /start /start "a cd behind a new wrapper is not followed"
 cwd 'f() { cd /x; }; git commit -m y'      commit /start /start "a cd in a function body is not followed"
 
+# env -C and sudo -D run their command in another directory (#112).
+cwd 'env -C /x git commit -m y'                   commit /start /x       "env -C"
+cwd 'sudo -D /x git commit -m y'                  commit /start /x       "sudo -D"
+cwd 'env --chdir=/x git commit -m y'              commit /start /x       "env --chdir=/x"
+cwd 'sudo --chdir /x git commit -m y'             commit /start /x       "sudo --chdir /x"
+cwd 'env -iC /x git commit -m y'                  commit /start /x       "env -C in a cluster"
+cwd 'env -C/x git commit -m y'                    commit /start /x       "env -C with its directory fused"
+cwd 'sudo -uroot -D /x git commit -m y'           commit /start /x       "sudo -D after an option with its value fused"
+cwd 'env -C a sudo -D b git -C c commit -m y'     commit /s /s/a/b/c     "each directory relative to the last"
+cwd "env -C '/my dir' git commit -m y"            commit /start "/my dir" "a quoted directory with a blank"
+HOME=/h cwd 'env -C ~/x git commit -m y'          commit /start /h/x     "a directory under ~"
+cwd "env -C /x bash -c 'git commit -m y'"         commit /start /x       "a payload runs there"
+cwd 'env -C /x true; git commit -m y'             commit /start /start   "the directory does not outlast the command"
+cwd 'env -C /x cd /y; git commit -m y'            commit /start /start   "a cd it wraps is not followed"
+chdirs() { local -a toks; read -r -a toks <<<"$1"; _guardrails_command_at; got="$got ${_GUARDRAILS_CMD_DIRS[*]}"; }
+got=""; chdirs "$(printf 'a=1 %.0s' {1..64})env -C /x git commit"; chdirs "$(printf 'a=1 %.0s' {1..64})env -C /x git commit"
+assert_eq "$got" " /x /x" "a long segment's kept lookup keeps its directory"
+yes "env -C '/my dir' git commit -m y"            commit                 "a commit after a quoted directory with a blank"
+
 # A wrapper's long option can take the next word as its value; written with = it takes none (#116).
 yes 'sudo --user root git commit -m x'     commit "behind sudo --user"
 yes 'env --chdir /x git push'              push   "behind env --chdir"
