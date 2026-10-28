@@ -26,7 +26,10 @@ if why="$(_guardrails_unreadable "$cmd")"; then
   exit 0
 fi
 
-reason="$(_guardrails_publishes_as_user "$cmd")"; rc=$?
+# The stdin check runs in the publish check's subshell, so it shares the lookup kept for a long segment. The publish check
+# prints nothing when it finds nothing, its rc 1, so the output is then the stdin check's alone.
+reason="$(_guardrails_publishes_as_user "$cmd"; rc=$?; [ "$rc" != 1 ] || _guardrails_unseen_shell_stdin "$cmd"; exit "$rc")"; rc=$?
+why=""; [ "$rc" != 1 ] || { why="$reason"; reason=""; }
 [ "$rc" = 0 ] || {
   # A verb read from one piece of a quoted argument may not be the command's (#131).
   if [ "$rc" = 2 ]; then
@@ -37,7 +40,7 @@ reason="$(_guardrails_publishes_as_user "$cmd")"; rc=$?
   elif reason="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$cmd")"; then
     ask="Could not be sure this does not publish as you. Read line by line: $reason. A quoted argument spanning lines reads the same way, so allow it only if nothing here posts under your name."
   # A shell reading commands from a pipe runs what no guard can read (#63).
-  elif why="$(_guardrails_unseen_shell_stdin "$cmd")"; then
+  elif [ -n "$why" ]; then
     ask="Could not check this does not publish as you: $why. Allow it only if nothing it runs posts under your name."
   else
     exit 0

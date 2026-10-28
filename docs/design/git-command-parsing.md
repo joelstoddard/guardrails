@@ -366,8 +366,9 @@ result for a segment of 64 words or more is kept, keyed by the split and the wor
 subshells the later passes run in inherit it. Callers read a segment's words only past its
 command, which the lookup's splitting of fused redirects leaves as they were, so a kept
 result reads the same. guard-default-branch now reads that segment once for each split, in
-4.4 s. guard-publish runs each pass in a subshell of its own, so it still reads it three
-times: 5.2 s before a pipe into python3. The lookup also reads a word whose redirect it
+4.4 s. guard-publish runs its stdin check in its publish check's subshell, which prints nothing
+when it finds nothing, so the two share the kept lookup and it reads that segment twice: 4.3 s
+before a pipe into python3, where three reads took 5.6 s, at load 17 to 24. The lookup also reads a word whose redirect it
 splits off at the redirect's target, where it reads next, rather than moving the redirect
 there, which took a read of 14,000 such wrappers from 1.2 s to 1.0 s.
 
