@@ -10,6 +10,9 @@ r="$(make_repo main)"
 run_hook "$S" "$(json "$r" "git commit -m x")"
 assert_rc 2 "commit on main blocked"
 assert_err "default branch" "block reason surfaced"
+# The refusal names the step to take, not a skill that ships in no plugin (#80).
+assert_err "Create a branch first" "block names the step"
+case "$ERR" in *start-ticket*) echo "  FAIL [block names no missing skill]: $ERR"; FAILS=1 ;; esac
 
 # On a feature branch → allowed
 r2="$(make_repo main)"; git -C "$r2" switch -q -c nbc-1-x

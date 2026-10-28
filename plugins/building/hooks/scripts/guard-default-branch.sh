@@ -51,7 +51,7 @@ while IFS= read -r dir; do
         '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
       exit 0
     fi
-    echo "Refusing to commit on the default branch '$def'. Start a ticket branch (see the start-ticket skill), or set ALLOW_DEFAULT_COMMIT=1 to override." >&2
+    echo "Refusing to commit on the default branch '$def'. Create a branch first, or set ALLOW_DEFAULT_COMMIT=1 to override." >&2
     exit 2
   fi
 done < <(_guardrails_git_effective_cwd "$cmd" commit "${cwd:-.}")
