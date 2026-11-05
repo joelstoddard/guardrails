@@ -60,10 +60,10 @@ assert_out 'reads commands from stdin' "a pipe into a shell warns, saying why, w
 run_hook "$S" "$(json "$rp" "cat cmds.txt | bash")"
 assert_eq "$OUT" "" "a pipe into a shell warns nothing when lint passes"
 
-# Past 64 directories the hook could time out, so it judges the first 64, then warns. A cwd of one directory per
-# line is printed back as the walk's directories, so it stands in for a command that commits in many.
-many() { local d="$1" n="$2"; shift 2; jq -cn --arg cwd "$(for x in "$@"; do printf '%s\n' "$x"; done; for _ in $(seq "$n"); do printf '%s\n' "$d"; done)" \
-  '{cwd:$cwd,tool_input:{command:"git commit -m x"}}'; }
+# Past 64 directories the hook could time out, so it judges the first 64, then warns.
+many() { local d="$1" n="$2" c="" i; shift 2; for x in "$@"; do c="$c git -C $x commit -m x &&"; done
+  for i in $(seq "$n"); do mkdir -p "$d/d$i"; c="$c git -C $d/d$i commit -m x &&"; done
+  jq -cn --arg cwd "$d" --arg c "${c% &&}" '{cwd:$cwd,tool_input:{command:$c}}'; }
 run_hook "$S" "$(many "$rp" 64)"
 assert_eq "$OUT" "" "64 directories whose lint passes warn nothing"
 run_hook "$S" "$(many "$rp" 65)"

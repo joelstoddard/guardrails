@@ -5,10 +5,18 @@
 # matching the other hooks in this plugin.
 command -v jq >/dev/null 2>&1 || exit 0
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SELF_DIR/../../lib/publish-cmd.sh"
 input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
+
+# Fail closed: a library that does not load, or loads in part, checks nothing, so the command gets a question.
+if ! . "$SELF_DIR/../../lib/publish-cmd.sh" ||
+  ! declare -F _guardrails_unreadable _guardrails_publishes_as_user _guardrails_unseen_shell_stdin >/dev/null; then
+  [ "${ALLOW_PUBLISH_AS_ME:-}" = "1" ] && exit 0
+  jq -cn --arg r "Could not load the publish guard's library, so it cannot check this command does not publish as you. Allow it only if nothing here posts under your name." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+fi
 
 # Fail closed: a command the guard cannot read in full gets a question, not a pass.
 if why="$(_guardrails_unreadable "$cmd")"; then
@@ -18,18 +26,22 @@ if why="$(_guardrails_unreadable "$cmd")"; then
   exit 0
 fi
 
-reason="$(_guardrails_publishes_as_user "$cmd")"; rc=$?
+# The stdin check runs in the publish check's subshell, so it shares the lookup kept for a long segment. The publish
+# check prints nothing when it finds nothing, its rc 1, so the output is then the stdin check's alone.
+reason="$(_guardrails_publishes_as_user "$cmd"; rc=$?; [ "$rc" != 1 ] || _guardrails_unseen_shell_stdin "$cmd"; exit "$rc")"; rc=$?
+why=""; [ "$rc" != 1 ] || { why="$reason"; reason=""; }
 [ "$rc" = 0 ] || {
-  # A verb read from one piece of a quoted argument may not be the command's (#131).
+  # A verb read from one piece of a quoted argument may not be the command's (#131), and a host may not be local.
   if [ "$rc" = 2 ]; then
-    ask="Could not be sure this does not publish as you: $reason. The shell passes that argument whole, so allow it only if nothing here posts under your name."
+    why="Allow it"; case "$reason" in *'quoted argument') why="The shell passes that argument whole, so allow it" ;; esac
+    ask="Could not be sure this does not publish as you: $reason. $why only if nothing here posts under your name."
   # Read line by line, as before quotes carried, it may still publish: a quote spanning lines
   # looks the same as shell syntax the carried split misreads, so only the human can tell.
   # That split cuts every quoted line into pieces, so a verb read from one asks nothing there.
   elif reason="$(_GUARDRAILS_SPLIT_PER_LINE=1 _guardrails_publishes_as_user "$cmd")"; then
     ask="Could not be sure this does not publish as you. Read line by line: $reason. A quoted argument spanning lines reads the same way, so allow it only if nothing here posts under your name."
   # A shell reading commands from a pipe runs what no guard can read (#63).
-  elif why="$(_guardrails_unseen_shell_stdin "$cmd")"; then
+  elif [ -n "$why" ]; then
     ask="Could not check this does not publish as you: $why. Allow it only if nothing it runs posts under your name."
   else
     exit 0

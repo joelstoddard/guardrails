@@ -88,10 +88,10 @@ assert_out 'reads commands from stdin' "the question says why"
 run_hook "$S" "$(json "$r" "cat cmds.txt | bash")"
 assert_eq "$OUT" "" "a pipe into a shell asks nothing when the tests pass"
 
-# Past 64 directories the gate could time out, so it judges the first 64, then asks. A cwd of one directory per
-# line is printed back as the walk's directories, so it stands in for a command that pushes from many.
-many() { local d="$1" n="$2"; shift 2; jq -cn --arg cwd "$(for x in "$@"; do printf '%s\n' "$x"; done; for _ in $(seq "$n"); do printf '%s\n' "$d"; done)" \
-  '{cwd:$cwd,tool_input:{command:"git push origin HEAD"}}'; }
+# Past 64 directories the gate could time out, so it judges the first 64, then asks.
+many() { local d="$1" n="$2" c="" i; shift 2; for x in "$@"; do c="$c git -C $x push origin HEAD &&"; done
+  for i in $(seq "$n"); do mkdir -p "$d/d$i"; c="$c git -C $d/d$i push origin HEAD &&"; done
+  jq -cn --arg cwd "$d" --arg c "${c% &&}" '{cwd:$cwd,tool_input:{command:$c}}'; }
 run_hook "$S" "$(many "$r" 64)"
 assert_eq "$RC:$OUT" "0:" "64 directories whose tests pass push"
 run_hook "$S" "$(many "$r" 65)"

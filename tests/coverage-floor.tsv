@@ -7,7 +7,7 @@ plugins/building/hooks/scripts/post-merge-cleanup.sh	100.0	0
 plugins/building/hooks/scripts/suppression-warn.sh	100.0	0
 plugins/building/hooks/scripts/test-gate.sh	100.0	0
 plugins/building/lib/git-cmd.sh	100.0	0
-plugins/building/lib/publish-cmd.sh	96.9	3
+plugins/building/lib/publish-cmd.sh	100.0	0
 plugins/building/lib/repo-cmd.sh	100.0	0
 plugins/building/lib/shell-split.sh	100.0	0
 plugins/personas/hooks/scripts/persona-report.sh	100.0	0
@@ -16,12 +16,12 @@ plugins/recording/hooks/scripts/findings-gate.sh	100.0	0
 plugins/recording/hooks/scripts/findings-reminder.sh	100.0	0
 plugins/recording/hooks/scripts/lessons-nudge.sh	100.0	0
 plugins/recording/lib/findings.sh	100.0	0
-TOTAL	99.5	3
+TOTAL	100.0	0
 awk:plugins/building/hooks/scripts/allow-gh-api-read.sh	100.0	0
 awk:plugins/building/hooks/scripts/comment-warn.sh	93.5	2
 awk:plugins/building/hooks/scripts/lint-warn.sh	100.0	0
 awk:plugins/building/hooks/scripts/test-gate.sh	100.0	0
-awk:plugins/building/lib/shell-split.sh	97.3	9
+awk:plugins/building/lib/shell-split.sh	98.3	8
 awk:plugins/personas/hooks/scripts/persona-report.sh	94.1	1
 awk:plugins/recording/hooks/scripts/findings-capture.sh	100.0	0
 awk:plugins/recording/hooks/scripts/findings-gate.sh	100.0	0
