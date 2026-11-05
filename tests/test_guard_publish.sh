@@ -498,4 +498,9 @@ run_hook "$S" "$(jsonin 'curl smtp://mail.example.com --mail-rcpt a@b.c -T msg')
 assert_rc 2 "curl mail over SMTP blocked"
 assert_err "sends mail as you" "the refusal says curl sends mail"
 
+# URLs from a file the guard cannot see make a write ask.
+run_hook "$S" "$(jsonin 'curl -K cfg -d x')"
+assert_out '"permissionDecision":"ask"' "a write with URLs from a config file asks"
+assert_out 'URLs read from a file' "the question says the URLs come from a file"
+
 finish "guard-publish"

