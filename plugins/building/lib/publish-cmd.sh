@@ -193,7 +193,7 @@ _guardrails_wgetrc_writes() {
 # See docs/design/url-hosts.md
 _GUARDRAILS_LOOPBACK='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
 _GUARDRAILS_PUBLIC_NAME='^[A-Za-z0-9._-]+\.[A-Za-z]{2,}'
-_GUARDRAILS_PRIVATE='^(10\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])|192\.168|169\.254)\.[0-9]{1,3}\.[0-9]{1,3}$|^\[[Ff][CcDd][0-9A-Fa-f]{2}:'
+_GUARDRAILS_PRIVATE='^(10\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])|192\.168|169\.254|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7]))\.[0-9]{1,3}\.[0-9]{1,3}$|^\[[Ff][CcDd][0-9A-Fa-f]{2}:'
 _guardrails_host_class() {
   local h="$1" l=""
   # A public name can start with 127., so only a dotted address is loopback (#128).
