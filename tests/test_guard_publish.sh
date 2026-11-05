@@ -508,4 +508,9 @@ run_hook "$S" "$(jsonin 'curl -G -d q=1 https://example.com/search')"
 assert_rc 0 "a curl -G query allowed"
 assert_eq "$OUT" "" "a curl -G query asks nothing"
 
+# A mail tool asked for its help sends nothing.
+run_hook "$S" "$(jsonin 'mail --help')"
+assert_rc 0 "help for a mail tool allowed"
+assert_eq "$OUT" "" "help for a mail tool asks nothing"
+
 finish "guard-publish"

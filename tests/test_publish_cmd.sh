@@ -43,6 +43,14 @@ blocks '/opt/homebrew/bin/gh pr comment 1 -b x'  "tool via absolute path"
 blocks 'mail -s subject someone@example.com'     "mail"
 blocks 'sendmail -t < msg.txt'                   "sendmail"
 blocks 'msmtp someone@example.com'               "msmtp"
+# Help as the first option sends nothing, but sendmail, mail and mailx read -h as a hop count, and still send.
+allows 'mail --help'                             "mail's help"
+allows 'sendmail --help'                         "sendmail's help"
+allows 'mutt -h'                                 "mutt's -h is its help"
+allows 's-nail -h'                               "s-nail's -h is its help"
+blocks 'sendmail -h 5 someone@example.com'       "sendmail's -h is a hop count"
+blocks 'mailx -h 5 someone@example.com'          "mailx's -h is a hop count"
+blocks 'mutt -s hi someone@example.com --help'   "help after another option"
 
 # ---------------------------------------------------------------------------
 # Any authenticated/bodied HTTP write to a remote host — regardless of vendor.

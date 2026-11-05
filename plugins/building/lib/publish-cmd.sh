@@ -333,6 +333,8 @@ _guardrails_publishes_as_user() {
 
     case " $_GUARDRAILS_MAIL_TOOLS " in
       *" $base "*)
+        # Help as the first option sends nothing, but sendmail, mail and mailx read -h as a hop count, and send.
+        case "$base/${toks[$((i + 1))]:-}" in */--help | mutt/-h | neomutt/-h | s-nail/-h) continue ;; esac
         printf '%s sends mail as you' "$base"
         return 0 ;;
     esac
