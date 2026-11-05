@@ -31,8 +31,25 @@ _guardrails_unfence() {
     }'
 }
 
+# _guardrails_pipe_rows → stdin with a leading pipe added to each row of a GFM table written without
+# one, so the parser reads both forms alike. A table starts at a pipe-bearing line above a delimiter
+# row (--- | ---) and runs while its lines hold a pipe.
+_guardrails_pipe_rows() {
+  awk '
+    function delim(s) { return s ~ /[|]/ && s ~ /-/ && s ~ /^[-:|[:space:]]+$/ }
+    { line[NR] = $0 }
+    END {
+      for (i = 1; i <= NR; i++) {
+        if (!t && i < NR && line[i] ~ /[|]/ && delim(line[i + 1])) t = 1
+        if (line[i] !~ /[|]/) t = 0
+        if (t && line[i] !~ /^[[:space:]]*[|]/) { match(line[i], /^[[:space:]]*/); line[i] = substr(line[i], 1, RLENGTH) "| " substr(line[i], RLENGTH + 1) }
+        print line[i]
+      }
+    }'
+}
+
 _guardrails_findings() {
-  _guardrails_unfence "$1" | H="$_GUARDRAILS_HEADING_RE" awk '
+  _guardrails_unfence "$1" | _guardrails_pipe_rows | H="$_GUARDRAILS_HEADING_RE" awk '
     function flush() { if (item != "") print item; item = "" }
     # Emphasis, parentheses and a dashed reason do not make an empty list a finding.
     function empty(s) {

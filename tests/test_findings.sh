@@ -67,6 +67,34 @@ OUT="$(_guardrails_untracked '**Findings outside scope:**
 | Retries are unbounded | |')"
 assert_eq "Retries are unbounded" "$OUT" "a row tracks by the reference in its last cell"
 
+# A GFM table may drop its leading pipes: a pipe-bearing row above a delimiter row starts one.
+OUT="$(_guardrails_findings '### Findings outside scope
+- Listed first #11
+Finding | Issue
+--- | :---:
+Cache never expires | #12
+Retries are unbounded |
+
+Next: run these.
+1. `make clean`')"
+assert_eq "Listed first #11
+Cache never expires #12
+Retries are unbounded" "$OUT" "a table without leading pipes: each body row is a finding, and a paragraph break still ends it"
+OUT="$(_guardrails_untracked '### Findings outside scope
+
+  Finding | Issue
+  ---|---
+  Cache never expires | https://github.com/o/r/issues/12
+  Retries are unbounded |')"
+assert_eq "Retries are unbounded" "$OUT" "a pipeless row tracks by the reference in its last cell, even indented"
+OUT="$(_guardrails_findings '### Findings outside scope
+- Cache never expires
+Pipes | in prose
+---
+- Retries are unbounded')"
+assert_eq "Cache never expires Pipes | in prose
+Retries are unbounded" "$OUT" "a rule with no pipe under a prose line is not a delimiter row"
+
 # #154: a bold-only line inside the section labels the items below it; it does not end the section.
 OUT="$(_guardrails_findings '### Findings outside scope
 - Cache never expires #12

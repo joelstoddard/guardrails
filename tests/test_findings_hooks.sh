@@ -35,6 +35,11 @@ run_hook "$GATE" "$(stop '### Findings outside scope
 | The cache never expires | |')"
 assert_out "The cache never expires" "an untracked finding in a table blocks (#154)"
 run_hook "$GATE" "$(stop '### Findings outside scope
+Finding | Issue
+--- | ---
+The cache never expires |')"
+assert_out "The cache never expires" "an untracked finding in a table without leading pipes blocks"
+run_hook "$GATE" "$(stop '### Findings outside scope
 - Tracked one #3
 
 **Also:**
