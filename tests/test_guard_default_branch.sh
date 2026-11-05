@@ -405,4 +405,13 @@ rw="$(make_repo main)"
 run_hook "$S" "$(jsonat "$rw" "bash -c 'git commit' a0")"
 assert_rc 2 "a commit that ends bash -c's script, with an argument after it, blocked"
 
+# The shell expands a substitution in ssh's double-quoted command here, so it asks nothing of another host, and passes
+# an escaped one on, to run there.
+fb="$(make_repo main)"; git -C "$fb" switch -q -c fix/x
+run_hook "$S" "$(jsonat "$fb" 'ssh h "echo $(git commit -m x)"')"
+assert_rc 0 "a substitution expanded before ssh runs, on a feature branch, allowed"
+assert_eq "$OUT" "" "a substitution expanded before ssh runs asks nothing of another host"
+run_hook "$S" "$(jsonat "$fb" 'ssh h "echo \$(git commit -m x)"')"
+assert_out '"permissionDecision":"ask"' "an escaped substitution in ssh's command asks, as it commits there"
+
 finish "guard-default-branch"

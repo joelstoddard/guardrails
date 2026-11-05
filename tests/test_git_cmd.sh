@@ -423,8 +423,8 @@ walk 'docker exec c git -C /x commit -m x'            commit /s 'remote: /x'  "a
 walk $'ssh host <<EOF\ngit commit -m x\nEOF'          commit /s 'remote: /s'  "a heredoc's commit on another host is remote"
 walk $'ssh host bash <<\'EOF\'\necho $(git commit -m x)\nEOF' commit /s 'remote: /s' "a quoted heredoc's substitution on another host"
 walk $'ssh host bash <<EOF\necho $(git commit -m x)\nEOF'   commit /s 'local: /s'  "an unquoted heredoc's substitution is expanded here"
-walk 'ssh h "echo $(git commit -m x)"'                commit /s $'remote: /s\nlocal: /s' \
-  "ssh's substitution is expanded here, and read again in its command, which asks rather than allows"
+walk 'ssh h "echo $(git commit -m x)"'                commit /s 'local: /s' \
+  "ssh's substitution is expanded here, and not read again in its command"
 walk 'git commit -m x; ssh h git commit -m y'         commit /s $'local: /s\nremote: /s' "a commit here and one on another host"
 cwd 'ssh h git commit -m x'                           commit /s /s            "a commit only on another host leaves the end directory"
 
@@ -463,5 +463,16 @@ assert_eq "$got" " 66/git 66/git 65/w 65/w" "a long segment's kept lookup is its
 fused="$(printf 'sudo> x %.0s' {1..40})git -C /y commit -m x"
 yes "$fused" commit "a commit behind 40 wrappers with a redirect fused to each"
 cwd "$fused" commit /start /y "the same commit's directory, its lookup kept"
+
+# The shell expands a substitution in a double-quoted script before it passes the script on, and passes an escaped one
+# on to run there.
+yes 'bash -c "echo \$(git commit -m x)"'               commit "an escaped substitution in a double-quoted script"
+yes 'eval "echo \`git commit -m x\`"'                  commit "an escaped backtick in eval's double-quoted words"
+there 'ssh h "echo \$(git commit -m x)"'               commit "an escaped substitution in ssh's command runs there"
+no  "bash -c 'echo \\\$(git commit -m x)'"             commit "an escaped substitution in a single-quoted script"
+no  'bash -c "echo \\\$(git commit -m x)"'             commit "an escaped backslash before an escaped substitution"
+targets 'ssh h "echo $(git commit -m x)"'               'local: /s' "a substitution in ssh's command runs here only"
+yes $'bash -c "echo "\' $(git commit -m x)\''         commit "a single-quoted substitution after a double-quoted piece"
+targets 'bash -c "cd /x && echo \$(git commit -m x)"'   'local: /x' "an escaped substitution runs where the script stands"
 
 finish "git-cmd"

@@ -460,9 +460,15 @@ as main did. The walk reports such a command as `remote`, and `guard-default-bra
 about it, on any branch, rather than judge the local checkout, which it used to refuse a
 commit on when that checkout was on its default branch. Main let these through, so asking is
 still stronger. The local shell expands a substitution in ssh's double-quoted command line,
-or in an unquoted heredoc fed to ssh, before ssh runs, so that runs here and is judged here;
-the payload reader reads a double-quoted one again as ssh's, which adds a question rather than
-an allowance.
+or in an unquoted heredoc fed to ssh, before ssh runs, so that runs here and is judged here.
+
+A script in double quotes, as `bash -c "…"`, `eval "…"` or ssh's command line, is read as the
+shell passes it on (`_guardrails_dq_payload`): an escaped `\$`, `` \` ``, `\"` or `\\` loses its
+backslash, so `bash -c "echo \$(git commit)"` commits in that shell, and a substitution the shell
+expands here first is made inert (`$(` becomes `$_(`, and a backtick `_`), as the split has read
+it where it runs. So `ssh h "echo $(git commit)"` is judged here only, where it used to be read
+again as ssh's and add a question. A script that is not one string in double quotes, as `"a"' $(b)'`, is
+read as written, as before, since its single-quoted piece passes `$(b)` on to run there.
 
 ## Failure mode if you change this
 

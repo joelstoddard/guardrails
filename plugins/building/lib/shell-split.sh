@@ -611,7 +611,7 @@ _guardrails_command_skip() {
 # its command line (a -c argument, alone or in a cluster such as -lc, or a here-string), eval runs, or ssh runs on its
 # host (#113), else rc 1. It sets a variable rather than printing, since a subshell for every segment is slow.
 _guardrails_shell_payload() {
-  local seg="$1" i k inner="" here='<<<[[:space:]]*(.*)$'
+  local seg="$1" i k inner="" dq="" here='<<<[[:space:]]*(.*)$'
   local -a toks
   case "$seg" in *eval* | *'<<<'* | *-*c* | *[\"\'\\]* | *ssh*) ;; *) return 1 ;; esac
   read -r -a toks <<<"$seg" || return 1
@@ -640,10 +640,23 @@ _guardrails_shell_payload() {
     *) return 1 ;;
   esac
   # Slices, as ${inner#["']} and ${inner%["']} are quadratic on a long payload in a UTF-8 locale (#107).
-  case "${inner:0:1}" in [\"\']) inner="${inner:1}" ;; esac
+  case "${inner:0:1}" in \") dq=1; inner="${inner:1}" ;; \') inner="${inner:1}" ;; esac
   case "${inner: -1}" in [\"\']) inner="${inner:0:${#inner}-1}" ;; esac
   [ -n "$inner" ] && [ "$inner" != "$seg" ] || return 1
+  case "$dq$inner" in 1*[\$\`]*) _guardrails_dq_payload ;; esac
   _GUARDRAILS_PAYLOAD="$inner"
+}
+
+# _guardrails_dq_payload → the caller's inner, a script in double quotes, as the shell passes it on: an escaped $, `, "
+# or \ unescaped, so an escaped substitution runs in the script, and a substitution made inert, as the shell expands it
+# here, where the split reads it, first. A script that is not one string in double quotes, as "a"' $(b)', stays as it
+# was. As bytes, as the substitutions are quadratic on long text in a UTF-8 locale.
+_guardrails_dq_payload() {
+  local LC_ALL=C b=$'\001' d=$'\002' t=$'\003' w
+  w="${inner//\\\\/$b}"; w="${w//\\\"/}"; case "$w" in *\"*) return ;; esac
+  inner="${inner//\\\\/$b}"; inner="${inner//\\\$/$d}"; inner="${inner//\\\`/$t}"; inner="${inner//\\\"/\"}"
+  inner="${inner//\$(/\$_(}"; inner="${inner//\`/_}"
+  inner="${inner//$d/\$}"; inner="${inner//$t/\`}"; inner="${inner//$b/\\}"
 }
 
 # _guardrails_shell_reads_stdin <segment> → rc 0 and a reason if the segment is a shell or another interpreter reading
