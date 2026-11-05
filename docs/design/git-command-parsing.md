@@ -426,6 +426,13 @@ a commit, 4.3 s; 9,000 nested `docker exec`, `kubectl exec` and `nsenter` before
 1,600 lines of a switch, an add and a commit in one chain, 2.4 s. guard-publish reads 4,400
 lines of prose naming `su` and `script` in 2.6 s, where it took 1.4 s.
 
+The last fix pass leaves the slowest input where it was: 25,000 options with a redirect fused
+to each between `git` and `commit` take guard-default-branch 6.2 s at load 6 to 8. Its own
+slowest paths, at that load, are 8,000 `sudo -p "a b"` wrappers before a commit, whose quoted
+values are now joined, 3.6 s in either guard (1.2 s on main, which read only the first wrapper
+and missed the commit); a `bash -c` script of 60,000 words with an argument after it, 4.2 s;
+and one curl write with 9,000 long options, 2.4 s in guard-publish (1.2 s).
+
 ## What was rejected
 
 - **Substring matching.** The original approach; produced the `gh pr create` false
