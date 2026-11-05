@@ -56,6 +56,7 @@ _guardrails_gh_api_writes() {
 
 # How each client reads a cluster of short options: flags, then one that takes a value, attached or as the next word.
 _GUARDRAILS_CURL_SHORT='^-[aqfGgI0k46jlLMnNZ#pJORSis231BvVh:]*([AbCcDdEeFHKmoPQrTtUuwXxYyz])(.*)$'
+_GUARDRAILS_CURL_GET='^-[aqfgI0k46jlLMnNZ#pJORSis231BvVh:]*G'
 _GUARDRAILS_WGET_SHORT='^-[VhbdqvFcNS46xErkKmpHL]*([eoaiBtOTwQPUlARDIXn])(.*)$'
 _GUARDRAILS_HTTPIE_SHORT='^-[jfxhmbvSdcqFI46k]*([aAopPs])(.*)$'
 # An httpie or xh request item whose first separator sends data: =, :=, @, =@ or :=@, where == and : do not.
@@ -68,7 +69,7 @@ _GUARDRAILS_HTTPIE_DATA='^[^:=@;]*(=[^=]|=$|:=|@)'
 # elsewhere than its URL reads: the URL comes from a variable, a substitution or a file, or curl sends it to another
 # host. Sets _GUARDRAILS_HTTP_MAIL where curl sends mail: a mail recipient, or an SMTP URL.
 _guardrails_http_writes() {
-  local base="$1" i="$2" w v j k d re p=0 u=1 opts=1 rc=1
+  local base="$1" i="$2" w v j k d re p=0 u=1 opts=1 rc=1 data="" get=""
   local -a kept=("${toks[@]:0:i}")
   _GUARDRAILS_HTTP_ASK=""; _GUARDRAILS_HTTP_MAIL=""
   case "$base" in curl) re="$_GUARDRAILS_CURL_SHORT" ;; wget) re="$_GUARDRAILS_WGET_SHORT" ;; *) re="$_GUARDRAILS_HTTPIE_SHORT" ;; esac
@@ -88,12 +89,16 @@ _guardrails_http_writes() {
       1--) opts="" ;;
       1--*)
         case "$base$w" in
-          curl--data | curl--data-ascii | curl--data-binary | curl--data-raw | curl--data-urlencode | curl--json | \
-            curl--form | curl--form-string | curl--upload-file | wget--post-data | wget--post-file | wget--body-data | \
-            wget--body-file | http*--raw | xh*--raw)
+          # curl's -G sends these as a query string in a GET.
+          curl--data | curl--data-ascii | curl--data-binary | curl--data-raw | curl--data-urlencode)
+            _guardrails_http_value; data=1 ;;
+          curl--data=* | curl--data-*=*) data=1 ;;
+          curl--get) get=1 ;;
+          curl--json | curl--form | curl--form-string | curl--upload-file | wget--post-data | wget--post-file | \
+            wget--body-data | wget--body-file | http*--raw | xh*--raw)
             _guardrails_http_value; rc=0 ;;
-          curl--data=* | curl--data-*=* | curl--json=* | curl--form=* | curl--form-string=* | curl--upload-file=* | \
-            wget--post-*=* | wget--body-*=* | http*--raw=* | xh*--raw=*) rc=0 ;;
+          curl--json=* | curl--form=* | curl--form-string=* | curl--upload-file=* | wget--post-*=* | wget--body-*=* | \
+            http*--raw=* | xh*--raw=*) rc=0 ;;
           curl--request | wget--method) _guardrails_http_value; _guardrails_is_write_verb "$v" && rc=0 ;;
           curl--request=* | wget--method=*) v="${w#--request=}"; _guardrails_is_write_verb "${v#--method=}" && rc=0 ;;
           wget--execute) _guardrails_http_value; _guardrails_wgetrc_writes && rc=0 ;;
@@ -123,11 +128,13 @@ _guardrails_http_writes() {
             _guardrails_http_value ;;
         esac ;;
       1-?*)
+        case "$base$w" in curl-*G*) [[ $w =~ $_GUARDRAILS_CURL_GET ]] && get=1 ;; esac
         # A failed match empties BASH_REMATCH, so a cluster of flags alone takes no value.
         [[ $w =~ $re ]]; v="${BASH_REMATCH[2]:-}"; w="${BASH_REMATCH[1]:-}"
         [ -z "$w" ] || [ -n "$v" ] || _guardrails_http_value
         case "$base$w" in
-          curl[dFT]) rc=0 ;;
+          curld) data=1 ;;
+          curl[FT]) rc=0 ;;
           curlX) _guardrails_is_write_verb "$v" && rc=0 ;;
           wgete) _guardrails_wgetrc_writes && rc=0 ;;
           curlK | wgeti) _GUARDRAILS_HTTP_ASK="URLs read from a file" ;;
@@ -155,6 +162,7 @@ _guardrails_http_writes() {
     [ -n "$d" ] || for ((k = j; k < i; k++)); do kept+=("${toks[$k]}"); done
   done
   _GUARDRAILS_HTTP_WORDS="${kept[*]}"
+  [ -z "$data" ] || [ -n "$get" ] || rc=0
   return "$rc"
 }
 

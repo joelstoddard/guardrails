@@ -503,4 +503,9 @@ run_hook "$S" "$(jsonin 'curl -K cfg -d x')"
 assert_out '"permissionDecision":"ask"' "a write with URLs from a config file asks"
 assert_out 'URLs read from a file' "the question says the URLs come from a file"
 
+# curl -G turns the data into a query string, a read.
+run_hook "$S" "$(jsonin 'curl -G -d q=1 https://example.com/search')"
+assert_rc 0 "a curl -G query allowed"
+assert_eq "$OUT" "" "a curl -G query asks nothing"
+
 finish "guard-publish"

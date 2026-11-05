@@ -44,7 +44,9 @@ its own options:
   `--form-string`, `-T`, `--upload-file`), or a write method after `-X` or
   `--request`. A cluster of short options is read as curl reads it: flags, then one
   that takes a value, attached or as the next word. So `-sd x` and `-XPOST` write, and
-  `-od` writes the response to the file `d`.
+  `-od` writes the response to the file `d`. `-G` (`--get`) sends the data of `-d` and the
+  `--data` forms as a query string in a GET, so with only those it reads; `--json`, a
+  form, an upload or a write method still writes.
 - **curl's mail:** a mail recipient (`--mail-rcpt`), or a write to an `smtp://` or
   `smtps://` URL, sends mail as you, so it is refused whatever the host, as a mail tool
   such as `sendmail` is: a mail server on this machine relays it on.
