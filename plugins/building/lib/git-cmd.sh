@@ -196,7 +196,7 @@ _guardrails_git_walk_cwd() {
   local cmdline="$1" want="$2" top="$3" depth="${4:-0}" remote="${5:-0}" segs j k n=0 tg key cur id par host op nop rem away
   local moved="" r
   local -a lines=() plain=() after=() at=() recs=()
-  local -A scur curat later srem remat awayat swb swd dstk
+  local -A scur curat later srem remat awayat swb swd dstk gsave
   [ "$depth" -gt 4 ] && { printf 'end: %s\n' "$top"; return; }
   if [ "${_GUARDRAILS_SPLIT_PER_LINE:-}" = 1 ]; then
     segs="$(_guardrails_split_awk 0 "$cmdline")"; [ -z "$segs" ] || mapfile -t plain <<<"$segs"
@@ -242,16 +242,40 @@ _guardrails_git_walk_cwd() {
     esac
     # A switch carries to the commands after it only through &&.
     [ "$op" = a ] || unset "swb[$key]"
-    away="$rem"; _guardrails_git_walk_seg "${lines[$j]:-}"; j=$((j + 1))
+    away="$rem"; _guardrails_git_walk_seg "${lines[$j]:-}"; _guardrails_git_group_end "${lines[$j]:-}"; j=$((j + 1))
     case "$tg" in [TB]*) awayat[$n]="$away"; n=$((n + 1)) ;; esac
     if [ "$key" = t ]; then top="$cur"; else scur[$key]="$cur"; fi
   done
   # An untagged line shows no operator, so it is read as after a ;, as before.
   cur="$top"; op=";"; nop=";"; rem="$remote"; key=u
-  for j in "${!plain[@]}"; do away="$rem"; _guardrails_git_walk_seg "${plain[$j]}"; done
+  for j in "${!plain[@]}"; do away="$rem"; _guardrails_git_walk_seg "${plain[$j]}"; _guardrails_git_group_end "${plain[$j]}"; done
   # Where HEAD may have moved some other way, as in a payload or a rebase, no branch a record names is sure.
   for r in "${recs[@]}"; do [ -z "$moved" ] || r="${r%%:*}: ${r#* }"; printf '%s\n' "$r"; done
   printf 'end: %s\n' "$cur"
+}
+
+# _guardrails_git_group_open → drops the ( and { that open groups from the start of the caller's toks, and notes in the
+# caller's gsave the directory the outermost open group of its key started in.
+_guardrails_git_group_open() {
+  local g=""
+  while :; do
+    case "${toks[0]:-}" in
+      '{') toks=("${toks[@]:1}") ;;
+      '(('*) break ;;
+      '('*) toks[0]="${toks[0]#(}"; [ -n "${toks[0]}" ] || toks=("${toks[@]:1}") ;;
+      *) break ;;
+    esac
+    g=1
+  done
+  [ -z "$g" ] || [ -n "${gsave[$key]+x}" ] || gsave[$key]="$cur"
+}
+
+# _guardrails_git_group_end <segment> → moves the caller's cur back to where its open group started once a segment holds
+# a ) or }, which may close it. One that closes nothing ends the group early, which judges what follows where the group
+# started, as before groups were followed, rather than late, where a cd that no longer holds would judge it.
+_guardrails_git_group_end() {
+  [ -n "${gsave[$key]+x}" ] || return 0
+  case "$1" in *[\)\}]*) cur="${gsave[$key]}"; unset "gsave[$key]" ;; esac
 }
 
 # _guardrails_git_walk_seg <segment> → adds a record to the caller's recs for a matching git command in it, and moves
@@ -262,6 +286,9 @@ _guardrails_git_walk_seg() {
   local seg="$1" i k d w wrapped line
   local -a toks
   read -r -a toks <<<"$seg" || return
+  # A cd in a ( ) or { } group lasts to the group's end, so the group's openers do not wrap it, and the group keeps the
+  # directory it opened in.
+  case "${toks[0]}" in '{' | '('*) _guardrails_git_group_open ;; esac
   _guardrails_command_at; i="$_GUARDRAILS_CMD_AT"; wrapped="$_GUARDRAILS_CMD_WRAPPED"
   # A wrapper such as env -C runs its command in another directory (#112), and one such as docker exec elsewhere.
   d="$cur"; [ "$wrapped" = 0 ] || { _guardrails_git_resolve "${_GUARDRAILS_CMD_DIRS[@]}"; [ "$_GUARDRAILS_CMD_REMOTE" = 0 ] || away=1; }

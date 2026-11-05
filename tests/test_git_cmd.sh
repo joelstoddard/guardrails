@@ -493,4 +493,18 @@ yes "sudo --prompt 'a b c' git commit -m x"          commit "a quoted value of a
 yes 'script -q "my log" git commit -m x'             commit "a quoted file before script's command"
 cwd 'sudo -D"/a b" git commit -m x'                  commit /s "/a b" "a quoted directory attached to sudo -D"
 
+# A cd in a ( ) or { } group is followed for the commands after it in the group, and not past the group's end.
+targets '(cd /x && git commit -m y)'                          'local: /x'           "a cd in a subshell before its commit"
+targets '(cd /x; git commit -m y)'                            'local: /x'           "a ; in a subshell"
+targets '{ cd /x; git commit -m y; }'                         'local: /x'           "a cd in a brace group"
+targets '(cd /x && git commit -m y); git commit -m z'         $'local: /x\nlocal: /s' "a subshell's cd ends with it"
+targets '(cd /x && git commit -m y) 2>/dev/null; git commit -m z' $'local: /x\nlocal: /s' "a redirect after the group"
+targets '{ cd /x; }; git commit -m y'                         'local: /s'           "a brace group's cd is followed inside it only"
+targets '( (cd /x); git commit -m y )'                        'local: /s'           "a nested subshell's cd ends with it"
+targets '(cd /x | cat; git commit -m y)'                      $'local: /s\nlocal: /x' \
+  "a piped cd in a subshell, which the per-line split follows, as it sees no pipe, as without the subshell"
+targets '(sudo cd /x; git commit -m y)'                       'local: /s'           "a wrapped cd in a subshell"
+targets 'if true; then (cd /x && git commit -m y); fi'        'local: /s'           "a group after a keyword, as before"
+targets '((n++)) && cd /x && git commit -m y'                  'local: /x'           "arithmetic opens no group"
+
 finish "git-cmd"

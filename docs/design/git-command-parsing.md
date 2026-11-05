@@ -186,6 +186,13 @@ Two readers use the lookup with care:
   behind any other word the lookup skips, a redirect included, is not followed either. A
   quoted `"cd"` or `"eval"` is, as the shell runs it, but not one piece of a quoted argument,
   such as `"cd /x"`, which the shell would run as a command of that whole name (#150).
+  A `cd` inside a `( … )` or `{ …; }` group is followed for the commands after it in the group,
+  so `(cd /wt && git commit)` is judged in `/wt`. The walk drops the openers at a segment's start
+  and restores the directory the group opened in after the first segment that holds a `)` or
+  `}`. A `)` that closes nothing, as in a quoted message, ends the group early, which judges the
+  rest where the group started, as before groups were followed, never late. A brace group runs
+  in the current shell, so its `cd` lasts past it, but the walk follows it inside the group only,
+  as the user chose: `{ cd /x; }; git commit` is judged where the shell sits, as before.
 
 ## Which repository the command acts on
 

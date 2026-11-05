@@ -422,4 +422,10 @@ assert_rc 2 "an escaped substitution in a shell's unquoted heredoc blocked"
 run_hook "$S" "$(jsonat "$rw" 'sudo -p "Password please:" git commit -m x')"
 assert_rc 2 "a commit behind a quoted prompt blocked"
 
+# A cd in a subshell is followed to the subshell's end, so its commit is judged where it lands.
+run_hook "$S" "$(jsonat "$rw" "(cd $fb && git commit -m x)")"
+assert_rc 0 "a commit in a subshell that cds to a feature branch allowed"
+run_hook "$S" "$(jsonat "$fb" "(cd $rw && git commit -m x)")"
+assert_rc 2 "a commit in a subshell that cds to a default branch blocked"
+
 finish "guard-default-branch"
