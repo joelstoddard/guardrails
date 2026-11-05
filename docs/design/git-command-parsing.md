@@ -222,11 +222,13 @@ directory it ends in judged. Each directory costs `guard-default-branch` some 33
 calls at load 10, and a command within the length cap can name 6,500 of them, which would
 time the hook out. So past 64 directories it asks.
 
-A directory that does not exist when the hook runs, as one the command makes first or names
-through a variable, as in `mkdir d && env -C d git commit` or `cd "$WT"`, used to be skipped,
-which let the commit through. `guard-default-branch` now judges it at its nearest existing
-ancestor, where git would find its repo, as main did for `env -C`, whose directory it did not
-read. A prefix of a path exists if a longer one does, so it finds that ancestor by halving the
+A directory that does not exist when the hook runs, as one the command makes first, as in
+`mkdir d && env -C d git commit`, used to be skipped, which let the commit through.
+`guard-default-branch` now judges it at its nearest existing ancestor, where git would find its
+repo, as main did for `env -C`, whose directory it did not read. A directory that holds an
+unexpanded `$` or a backtick, as in `cd "$WT"`, is not known until the command runs, and its
+nearest ancestor could refuse a commit bound for a worktree, so the user chose that it asks,
+after every other directory is judged, so a refusal elsewhere still refuses. A prefix of a path exists if a longer one does, so it finds that ancestor by halving the
 path's components, as climbing one at a time is quadratic in a deep path: 16,000 `env -Cx`
 wrappers before a commit took it 14 s that way, and take 4.4 s.
 

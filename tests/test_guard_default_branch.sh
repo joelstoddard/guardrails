@@ -347,8 +347,17 @@ assert_rc 2 "a switch to the default branch then a commit blocked"
 # existing ancestor, where git finds the repo, rather than skipped: main judged where the shell sat.
 run_hook "$S" "$(jsonat "$r2" "mkdir -p $r13/a/b && env -C $r13/a/b git commit -m x")"
 assert_rc 2 "a commit behind env -C in a directory the command makes, in a default-branch repo, blocked"
+# A directory a variable or substitution names is not known before the command runs, so the user chose a question.
 run_hook "$S" "$(jsonat "$r13" 'cd "$WT" && git commit -m x')"
-assert_rc 2 "a commit after a cd to a variable, from a default-branch repo, blocked"
+assert_rc 0 "a commit after a cd to a variable, from a default-branch repo, is not refused outright"
+assert_out '"permissionDecision":"ask"' "a commit after a cd to a variable asks"
+assert_out 'variable or substitution' "the question says the directory comes from a variable or substitution"
+run_hook "$S" "$(jsonat "$r2" 'cd "$WT" && git commit -m x')"
+assert_out '"permissionDecision":"ask"' "a commit after a cd to a variable, from a feature-branch repo, asks"
+run_hook "$S" "$(jsonat "$r2" 'git -C "$(pwd)/x" commit -m x')"
+assert_out '"permissionDecision":"ask"' "a commit in a directory a substitution names asks"
+run_hook "$S" "$(jsonat "$r13" 'git commit -m y; cd "$WT" && git commit -m x')"
+assert_rc 2 "a commit on a default branch beside one in a variable's directory still blocked"
 run_hook "$S" "$(jsonat "$r2" "mkdir new && cd new && git commit -m x")"
 assert_rc 0 "a commit in a directory the command makes, in a feature-branch repo, allowed"
 

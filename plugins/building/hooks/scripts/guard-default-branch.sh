@@ -36,7 +36,7 @@ _guardrails_invokes_git "$cmd" commit; found=$?
 # were never going to land there; judge every directory a commit runs in, by either split.
 # See docs/design/git-command-parsing.md.
 # nearest_dir → moves dir to its nearest existing ancestor, where git finds the repo of a directory that does not exist
-# yet, as one the command makes or names through a variable, rather than skip it. A prefix exists if a longer one does,
+# yet, as one the command makes, rather than skip it. A prefix exists if a longer one does,
 # so it halves the components, as climbing one at a time is quadratic in a deep path.
 nearest_dir() {
   local IFS=/ lo=0 hi mid p root=.
@@ -51,11 +51,13 @@ nearest_dir() {
   dir="${parts[*]:0:lo}"; dir="${dir:-$root}"
 }
 
-n=0; away=""
+n=0; away=""; named=""
 while IFS= read -r dir; do
   case "$dir" in remote:*) away=1; continue ;; esac
   # A switch in the commit's && chain names the branch it lands on (#81).
   branch="${dir%% *}"; branch="${branch#local:}"; dir="${dir#* }"
+  # A variable or substitution names a directory no one knows until the command runs, so it asks.
+  case "$dir" in *[\$\`]*) named=1; continue ;; esac
   # Each directory costs some 33 ms of git calls, so past 64 the guard could time out, which lets the command through.
   n=$((n + 1))
   if [ "$n" -gt 64 ]; then
@@ -85,6 +87,11 @@ while IFS= read -r dir; do
     exit 2
   fi
 done < <(_guardrails_git_targets "$cmd" commit "${cwd:-.}")
+if [ -n "$named" ]; then
+  jq -cn --arg r "Could not check this does not commit on a default branch: it commits in a directory a variable or substitution names, which the guard cannot know before the command runs." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+fi
 if [ -n "$away" ]; then
   jq -cn --arg r "Could not check this does not commit on a default branch: it commits on another host or in a container, through ssh, docker exec, kubectl exec or nsenter, where the guard cannot see the branch." \
     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
