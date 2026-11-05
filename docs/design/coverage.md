@@ -451,6 +451,10 @@ ceilings are now stretched for mutants. `lint-warn.sh:13` depended on the direct
 run began in, which no longer counts: from the copy's root it is killed every time, so
 its floor can rise. The depth cap at `git-cmd.sh:94` survived each run but the first,
 and when run alone; its tests have no budget, and the cause of that kill is not known.
+Three later runs of `git-cmd.sh` alone, at load 8 on 14 cores, each scored 52 of 54 with
+that mutant alive, `return 1` made `return 0`. No test walks a sixth level, as
+`eval eval eval eval eval true; cd /x && git commit` would, so it survives every time, as
+its floor already counts.
 A later run of the six heaviest files at `-j 14`, which logged every kill, found nine
 timeouts, each a mutant that hangs a loop, and no spurious kill.
 
