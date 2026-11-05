@@ -349,6 +349,18 @@ local hosts takes guard-publish 4.7 s (4.2 s before), 4,990 lines that each writ
 quoted local host 3.5 s (2.2 s), and 32,000 words with a backslash in one write 3.8 s
 (1.4 s). See [url-hosts.md](url-hosts.md).
 
+An HTTP write is read as its client reads it, a word at a time (see
+[url-hosts.md](url-hosts.md)): a word that starts with `-`, a quote, `$` or a backtick
+costs an unquote, and an option a regex. Each URL is then sorted into local, not proven
+local or remote, and the scan also finds a URL with no slashes after its scheme and an
+address with no scheme. At load 8 to 22, one curl write of 32,000 quoted words takes
+guard-publish 3.3 s (1.8 s before), 30,000 clusters of flags 2.8 s (1.5 s), 10,000
+headers whose quoted values run over three words 3.3 s (1.5 s), 30,000 httpie items
+3.0 s (1.5 s), and one `eval` re-reading 480 lines of 32 bare local hosts 5.8 s
+(4.6 s), its slowest input. The reader first kept its words with a slice of the toks
+array, which bash walks from its start, so 32,000 quoted words took it past 30 s; it
+keeps them by index.
+
 A word with a redirect fused to it, as in `git>/dev/null` or `-p>x`, is split since #91, so the
 lookup and git's skip read on past it where they stopped at it before. Each such word costs a
 regex and a second look at what is left, where an escaped option costs one unquote: 25,000

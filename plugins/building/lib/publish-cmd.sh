@@ -54,29 +54,161 @@ _guardrails_gh_api_writes() {
   return 1
 }
 
-# A regex fails on text holding an invalid byte in a UTF-8 locale, on macOS even before the byte, so such text is
-# read as bytes.
-_guardrails_http_has_body() {
-  local method='(^|[[:space:]])(-X|--request|--method)[[:space:]]*=?[[:space:]]*["'"'"']?(POST|PUT|PATCH|DELETE)'
-  local data='(^|[[:space:]])(-d|-F|--data|--data-raw|--data-binary|--data-urlencode|--json|--form|--upload-file|--post-data|--post-file)([[:space:]]|=)'
-  [[ $1 =~ ^.*$ ]] || local LC_ALL=C
-  [[ $1 =~ $method || $1 =~ $data ]]
+# How each client reads a cluster of short options: flags, then one that takes a value, attached or as the next word.
+_GUARDRAILS_CURL_SHORT='^-[aqfGgI0k46jlLMnNZ#pJORSis231BvVh:]*([AbCcDdEeFHKmoPQrTtUuwXxYyz])(.*)$'
+_GUARDRAILS_WGET_SHORT='^-[VhbdqvFcNS46xErkKmpHL]*([eoaiBtOTwQPUlARDIXn])(.*)$'
+_GUARDRAILS_HTTPIE_SHORT='^-[jfxhmbvSdcqFI46k]*([aAopPs])(.*)$'
+# An httpie or xh request item whose first separator sends data: =, :=, @, =@ or :=@, where == and : do not.
+_GUARDRAILS_HTTPIE_DATA='^[^:=@;]*(=[^=]|=$|:=|@)'
+
+# _guardrails_http_writes <client> <index> → rc 0 if the client sends a body or a write method, read from the caller's
+# toks from <index> as the shell passes them: past redirects, with quotes dropped, and a quoted word whole. Sets
+# _GUARDRAILS_HTTP_WORDS to the words that can name the host: all but redirects and the values of the options that
+# never do, an output file, a header, a header dump or a cookie jar. Sets _GUARDRAILS_HTTP_ASK to why a write may go
+# elsewhere than its URL reads: the URL comes from a variable or substitution, or curl sends it to another host.
+_guardrails_http_writes() {
+  local base="$1" i="$2" w v j k d re p=0 u=1 opts=1 rc=1
+  local -a kept=("${toks[@]:0:i}")
+  _GUARDRAILS_HTTP_ASK=""
+  case "$base" in curl) re="$_GUARDRAILS_CURL_SHORT" ;; wget) re="$_GUARDRAILS_WGET_SHORT" ;; *) re="$_GUARDRAILS_HTTPIE_SHORT" ;; esac
+  # A regex fails on text holding an invalid byte in a UTF-8 locale, on macOS even before the byte.
+  case "${toks[*]}" in *[![:ascii:]]*) local LC_ALL=C ;; esac
+  while [ "$i" -lt "${#toks[@]}" ]; do
+    w="${toks[$i]}"
+    # Only a word that starts with -, a quote, $ or \ can be an option, with < or > a redirect, and with $ or ` a URL from
+    # a variable or substitution. curl and wget read no other word here.
+    case "$base$w" in curl[!-\"\'\$\\\<\>\`]* | wget[!-\"\'\$\\\<\>\`]*) kept+=("$w"); i=$((i + 1)); continue ;; esac
+    # httpie and xh send what they read on stdin as the body.
+    case "$w" in *[\<\>]*) _guardrails_skip_redirect && { case "$base/$w" in curl/* | wget/*) ;; */*\<*) rc=0 ;; esac; continue; } ;; esac
+    j="$i"; i=$((i + 1)); d=""
+    case "$w" in *[\"\'\\]*) _guardrails_unquote ;; esac
+    case "$opts$w" in
+      1--) opts="" ;;
+      1--*)
+        case "$base$w" in
+          curl--data | curl--data-ascii | curl--data-binary | curl--data-raw | curl--data-urlencode | curl--json | \
+            curl--form | curl--form-string | curl--upload-file | wget--post-data | wget--post-file | wget--body-data | \
+            wget--body-file | http*--raw | xh*--raw)
+            _guardrails_http_value; rc=0 ;;
+          curl--data=* | curl--data-*=* | curl--json=* | curl--form=* | curl--form-string=* | curl--upload-file=* | \
+            wget--post-*=* | wget--body-*=* | http*--raw=* | xh*--raw=*) rc=0 ;;
+          curl--request | wget--method) _guardrails_http_value; _guardrails_is_write_verb "$v" && rc=0 ;;
+          curl--request=* | wget--method=*) v="${w#--request=}"; _guardrails_is_write_verb "${v#--method=}" && rc=0 ;;
+          wget--execute) _guardrails_http_value; _guardrails_wgetrc_writes && rc=0 ;;
+          wget--execute=*) v="${w#--execute=}"; _guardrails_wgetrc_writes && rc=0 ;;
+          curl--resolve | curl--connect-to) _guardrails_http_value; _GUARDRAILS_HTTP_ASK="a host that $w sends elsewhere" ;;
+          curl--output | curl--dump-header | curl--cookie-jar | curl--header | wget--output-document | wget--header | \
+            http*--output | xh*--output)
+            _guardrails_http_value; d=1 ;;
+          curl--output=* | curl--dump-header=* | curl--cookie-jar=* | curl--header=* | wget--output-document=* | \
+            wget--header=* | http*--output=* | xh*--output=*) d=1 ;;
+          # An option's value is not the URL, and httpie and xh count their arguments to tell the URL from the items.
+          curl--user | curl--user-agent | curl--cookie | curl--referer | curl--write-out | curl--max-time | \
+            curl--connect-timeout | curl--retry | curl--oauth2-bearer | curl--cert | curl--key | curl--cacert | \
+            curl--variable | curl--proxy-user | curl--range | wget--user | wget--password | wget--user-agent | \
+            wget--referer | wget--timeout | wget--tries | \
+            http*--auth | http*--auth-type | http*--session | http*--session-read-only | http*--proxy | \
+            http*--print | http*--history-print | http*--style | http*--pretty | http*--timeout | http*--verify | \
+            http*--cert | http*--cert-key | http*--ssl | http*--default-scheme | xh*--auth | xh*--auth-type | \
+            xh*--session | xh*--session-read-only | xh*--proxy | xh*--print | xh*--history-print | \
+            xh*--style | xh*--pretty | xh*--timeout | xh*--verify | xh*--cert | xh*--cert-key | xh*--ssl | \
+            xh*--default-scheme | xh*--bearer | xh*--resolve)
+            _guardrails_http_value ;;
+        esac ;;
+      1-?*)
+        # A failed match empties BASH_REMATCH, so a cluster of flags alone takes no value.
+        [[ $w =~ $re ]]; v="${BASH_REMATCH[2]:-}"; w="${BASH_REMATCH[1]:-}"
+        [ -z "$w" ] || [ -n "$v" ] || _guardrails_http_value
+        case "$base$w" in
+          curl[dFT]) rc=0 ;;
+          curlX) _guardrails_is_write_verb "$v" && rc=0 ;;
+          wgete) _guardrails_wgetrc_writes && rc=0 ;;
+          curl[oDcH] | wgetO | http*o | xh*o) d=1 ;;
+        esac ;;
+      *)
+        # A URL from a variable or a substitution can name any host.
+        case "${toks[$j]}" in \$[!\"\']* | \"\$* | \`* | \"\`*) v=1 ;; *) v="" ;; esac
+        case "$base" in curl | wget) [ -z "$v" ] || _GUARDRAILS_HTTP_ASK="a URL from a variable" ;; *)
+          # httpie and xh read their first argument as the method if it is letters only, then the URL, then the items.
+          # A quoted argument of several words is one item.
+          case "${toks[$j]}" in [\"\']?*[\"\']) ;; [\"\']*) _guardrails_skip_quoted "${toks[$j]}" ;; esac
+          p=$((p + 1))
+          if [ "$p" = 1 ] && [ "$i" = "$((j + 1))" ] && [[ $w =~ ^[A-Za-z]+$ ]]; then
+            u=2; _guardrails_is_write_verb "$w" && rc=0
+          elif [ "$p" = "$u" ]; then
+            [ -z "$v" ] || _GUARDRAILS_HTTP_ASK="a URL from a variable"
+          elif [[ ${toks[$j]} =~ $_GUARDRAILS_HTTPIE_DATA ]]; then
+            rc=0
+          fi ;;
+        esac ;;
+    esac
+    # By index, as a slice of a bash array walks it from its start.
+    [ -n "$d" ] || for ((k = j; k < i; k++)); do kept+=("${toks[$k]}"); done
+  done
+  _GUARDRAILS_HTTP_WORDS="${kept[*]}"
+  return "$rc"
 }
 
-# True when the command names a host that is not this machine. Loopback and .local
-# are development, not publishing — that distinction is the deliberate hole here.
+# _guardrails_http_value → the caller's v is an option's value: its next word past redirects, whole and unquoted.
+_guardrails_http_value() {
+  local w
+  while w="${toks[$i]:-}"; case "$w" in *[\<\>]*) _guardrails_skip_redirect ;; *) false ;; esac; do :; done
+  v="$w"; i=$((i + 1))
+  case "$w" in *[\"\'\\]*) _guardrails_skip_quoted "$w"; _guardrails_unquote && v="$w" ;; esac
+}
+
+# _guardrails_wgetrc_writes → rc 0 if the caller's v, a wgetrc command, sends a body or sets a write method. wget reads
+# a command's name in any case and without its _ and -, and a name too long to be one is cut.
+_guardrails_wgetrc_writes() {
+  local c="${v:0:64}"
+  c="${c,,}"; c="${c//[_-]/}"
+  case "$c" in
+    postdata* | postfile* | bodydata* | bodyfile*) return 0 ;;
+    method=*) _guardrails_is_write_verb "${c#method=}" ;;
+    *) return 1 ;;
+  esac
+}
+
+# _guardrails_host_class <host> [<var>] → rc 0 if the host is proven to be this machine, 1 if it is not, and 2 if it may
+# not be: a name with no dot, a private address, or, given <var>, a host a variable or substitution can change.
+# Loopback and .local are development, not publishing — that distinction is the deliberate hole here.
 # See docs/design/url-hosts.md
+_GUARDRAILS_LOOPBACK='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
+_GUARDRAILS_PUBLIC_NAME='^[A-Za-z0-9._-]+\.[A-Za-z]{2,}'
+_GUARDRAILS_PRIVATE='^(10\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])|192\.168|169\.254)\.[0-9]{1,3}\.[0-9]{1,3}$|^\[[Ff][CcDd][0-9A-Fa-f]{2}:'
+_guardrails_host_class() {
+  local h="$1" l=""
+  # A public name can start with 127., so only a dotted address is loopback (#128).
+  case "$h" in
+    localhost | 0.0.0.0 | \[::1\]) l=1 ;;
+    *[!A-Za-z0-9._-]*) ;;
+    *.local | *.localhost) l=1 ;;
+    127.*) [[ $h =~ $_GUARDRAILS_LOOPBACK ]] && l=1 ;;
+  esac
+  [ -z "$l" ] || { [ -n "$2" ] && return 2; return 0; }
+  # A public name is refused as before, whatever a variable after it adds.
+  [[ $h =~ $_GUARDRAILS_PUBLIC_NAME ]] && return 1
+  [ -z "$2" ] || return 2
+  case "$h" in "" | *[!A-Za-z0-9_-]*) [[ $h =~ $_GUARDRAILS_PRIVATE ]] && return 2; return 1 ;; esac
+  return 2
+}
+
+# _guardrails_has_remote_target <words> → rc 0 if they name a host that is not this machine, 2 if one may not be and
+# none is known not to be, and 1 otherwise. See docs/design/url-hosts.md
 _guardrails_has_remote_target() {
-  local seg="$1" rest url host re n w j=0 lead='^[[:space:]]*(.*)$' word='^[^[:space:]]*'
-  local loopback='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
-  # The host follows the last @ before the first /, ? or #, as no client reaches a host before it (#149).
-  local authority='^([^/?#]*@)?(\[[^]]*\]|[^/?#:@]*)'
-  # curl reads a URL's scheme in any case.
-  local first='[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
-  local next='[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?'
+  local seg="$1" rest url host re n w s v j=0 rc=1 lead='^[[:space:]]*(.*)$' word='^[^[:space:]]*'
+  # A variable or substitution before the path can make any host, an @ or a /.
+  local variable='^/*[^/?#]*[$`]'
+  # The host follows the slashes after the scheme, and the last @ before the first /, ? or #, as no client reaches a
+  # host before it (#149).
+  local authority='^/*([^/?#]*@)?(\[[^]]*\]|[^/?#:@]*)'
+  # curl reads a URL's scheme in any case, and xh and httpie read a word that starts with one followed by any number of
+  # slashes, none included, as a WHATWG parser does: http:evil.com is http://evil.com.
+  local first='(^|[[:space:]])[Hh][Tt][Tt][Pp][Ss]?:[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|(^|[[:space:]]))[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?|(^|[[:space:]])[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'
+  local next='[[:space:]][Hh][Tt][Tt][Pp][Ss]?:[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://[^[:space:]/?#]*@[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://\[[^]]+\][^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://localhost[^[:space:]]*|[Hh][Tt][Tt][Pp][Ss]?://127\.[^[:space:]]*|([Hh][Tt][Tt][Pp][Ss]?://|[[:space:]])[A-Za-z0-9._-]+\.[A-Za-z]{2,}(:[0-9]+)?(/[^[:space:]"'"'"']*)?|[[:space:]][0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'
   local -a toks
   # Quotes and backslashes can hide the dot or the :// of a URL.
-  case "$seg" in *.* | *://* | *[\"\'\\]*) ;; *) return 1 ;; esac
+  case "$seg" in *.* | *[Hh][Tt][Tt][Pp]:* | *[Hh][Tt][Tt][Pp][Ss]:* | *[\"\'\\]*) ;; *) return 1 ;; esac
   # Bytes: the shell splits words on ASCII blanks only, and dropping quotes is quadratic in a UTF-8 locale (#134).
   case "$seg" in *[![:ascii:]]* | *[\"\'\\]*) local LC_ALL=C ;; esac
   # The shell drops quotes, and the $ of $'' or $"", before curl reads a word (#148). A backslash can stay or make any
@@ -105,17 +237,18 @@ _guardrails_has_remote_target() {
     case "$url" in [[:space:]]*) [[ $url =~ $lead ]] && url="${BASH_REMATCH[1]}" ;; esac
     # Regexes and a guarded ${url#*://}, as ${host%%/*} and an unmatched ${url#*://} are quadratic. The host comes from
     # the URL's whole word, as a match can stop before an @ (#149), and ends at its first /, though a :// follows (#128).
-    [[ $rest =~ $word ]]; host="$url${BASH_REMATCH[0]}"
-    case "$host" in [Hh][Tt][Tt][Pp]://* | [Hh][Tt][Tt][Pp][Ss]://*) host="${host#*://}" ;; esac
+    [[ $rest =~ $word ]]; host="$url${BASH_REMATCH[0]}"; s=""; v=""
+    case "$host" in [Hh][Tt][Tt][Pp]:* | [Hh][Tt][Tt][Pp][Ss]:*) host="${host#*:}"; s=1 ;; esac
+    case "$host" in *[\$\`]*) [[ $host =~ $variable ]] && v=1 ;; esac
     [[ $host =~ $authority ]]; host="${BASH_REMATCH[2]}"
-    # A public name can start with 127., so only a dotted address is loopback (#128).
-    case "$host" in
-      localhost | localhost:* | 0.0.0.0 | \[::1\] | ::1 | *.local | *.localhost) ;;
-      127.*) [[ $host =~ $loopback ]] || return 0 ;;
-      *) return 0 ;;
+    _guardrails_host_class "$host" "$v"
+    case $? in
+      1) return 0 ;;
+      # Of a word with no scheme, only a private address asks: any other host in one was refused before.
+      2) [ -n "$s" ] || [ "$url" = "$host" ] || return 0; rc=2 ;;
     esac
   done
-  return 1
+  return "$rc"
 }
 
 _guardrails_publishes_as_user() {
@@ -172,9 +305,14 @@ _guardrails_publishes_as_user() {
     case "$base" in
       curl | wget | http | https | httpie | xh | xhs)
         # httpie takes the method as its first argument: `http POST url field=v`.
-        if _guardrails_http_has_body "$seg" || { _guardrails_is_write_verb "${lead[1]:-}" && [ -z "${piece[1]:-}" ]; }; then
-          _guardrails_has_remote_target "$seg" && { printf 'HTTP write to a remote host'; return 0; }
-        elif _guardrails_is_write_verb "${lead[1]:-}" && _guardrails_has_remote_target "$seg"; then
+        if _guardrails_http_writes "$base" "$((at + 1))" || { _guardrails_is_write_verb "${lead[1]:-}" && [ -z "${piece[1]:-}" ]; }; then
+          _guardrails_has_remote_target "$_GUARDRAILS_HTTP_WORDS"
+          case $? in
+            0) printf 'HTTP write to a remote host'; return 0 ;;
+            2) : "${_GUARDRAILS_PUBLISH_ASK:=HTTP write to a host not proven local, as a name with no dot, a private address or a variable}" ;;
+            *) [ -z "$_GUARDRAILS_HTTP_ASK" ] || : "${_GUARDRAILS_PUBLISH_ASK:=HTTP write to $_GUARDRAILS_HTTP_ASK}" ;;
+          esac
+        elif _guardrails_is_write_verb "${lead[1]:-}" && _guardrails_has_remote_target "$_GUARDRAILS_HTTP_WORDS"; then
           : "${_GUARDRAILS_PUBLISH_ASK:=HTTP write to a remote host, read from ${piece[1]}, one piece of a quoted argument}"
         fi
         continue ;;
@@ -191,12 +329,12 @@ _guardrails_publishes_as_user() {
     case " $_GUARDRAILS_TEXT_TOOLS " in
       *" $base "*) continue ;;
     esac
+    # Help as the first option publishes nothing (#78); a later -h could be another option's value, as in --title -h.
+    case "${toks[$i]:-}" in --help | -h) continue ;; esac
     # A ready review request notifies reviewers, so only a draft is safe unasked.
     # Scan the whole segment, because the flag's position can change.
     case "${lead[1]:-}/${lead[2]:-}" in
       pr/create | mr/create | merge-request/create)
-        # Help as the first option creates nothing (#78); a later -h could be another option's value, as in --title -h.
-        case "${toks[$i]:-}" in --help | -h) continue ;; esac
         # Spelled out in full only: -d is --draft in one forge CLI and --description
         # in another, so it is not proof of anything. Costs a prompt, never a leak.
         case " $seg " in

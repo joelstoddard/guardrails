@@ -3,8 +3,69 @@
 `_guardrails_has_remote_target` in `plugins/building/lib/publish-cmd.sh` decides
 whether an HTTP write from `curl`, `wget`, httpie or `xh` goes to a host off this
 machine. Loopback (`localhost`, a dotted `127.` address, `[::1]`, `0.0.0.0`) and
-`.local` or `.localhost` names are development, not publishing. Every other host it
-finds is remote, and the write is refused.
+`.local` or `.localhost` names are development, not publishing. A host that may be
+either asks, and every other host it finds is remote, and the write is refused.
+
+## Hosts not proven local
+
+The user decided that a write to a host not proven local asks, and that a public name
+is refused, as before. `_guardrails_host_class` sorts each host into one of three:
+
+| Class | Hosts | Write |
+|---|---|---|
+| Proven local | `localhost`, a dotted `127.` address, `[::1]`, `0.0.0.0`, a `.local` or `.localhost` name | allowed |
+| Not proven local | a name with no dot (`api`, `intranet`), an address in 10/8, 172.16/12, 192.168/16, 169.254/16 or fc00::/7, a host from a variable | asks |
+| Remote | a name with a dot and a top-level name of letters, and every other host: a public address, another IPv6 address, `127.1`, a host with a character no name has | refused |
+
+A variable or a substitution before the URL's path, as in `http://$HOST/x`,
+`http://localhost:$PORT/x` or `http://$U@localhost/x`, can hold any host, an `@` or a
+`/`, so it makes even a local host not proven local. A public name before one stays
+remote: `http://evil.com:$PORT/x` is refused. A whole URL from a variable,
+`curl -d x "$WEBHOOK_URL"`, asks too. A word that starts with `$` or a backtick is read
+as one if it is not an option's value, so `-d "$BODY"` and `-u "$USER:$PASS"` ask
+nothing. curl's `--resolve` and `--connect-to` send the write for the URL's host to
+another, so a write with either asks unless its URL is remote.
+
+A public address is remote, as the ranges above are the only private ones the user
+named. An address with no scheme is read as a host, as a dotted name is, and asks only
+if it is private. Of a word with no scheme, only such an address asks: a name with no
+dot or a variable after userinfo there, as in `a.local@api`, was refused before and
+still is.
+
+## Writes
+
+`_guardrails_http_writes` decides whether the command is a write. It reads the words
+as the client does, past redirects and with their quotes dropped, and each client by
+its own options:
+
+- **curl:** a body option (`-d` and the `--data` forms, `--json`, `-F`, `--form`,
+  `--form-string`, `-T`, `--upload-file`), or a write method after `-X` or
+  `--request`. A cluster of short options is read as curl reads it: flags, then one
+  that takes a value, attached or as the next word. So `-sd x` and `-XPOST` write, and
+  `-od` writes the response to the file `d`.
+- **wget:** `--post-data`, `--post-file`, `--body-data`, `--body-file`, a write method
+  after `--method`, or a wgetrc command run with `-e` that does the same. wget reads a
+  command's name in any case and without its `_` and `-`, so `-e Post-Data=x` writes.
+- **httpie and xh:** a write method as the first argument, a raw body (`--raw`), a
+  redirect of stdin, or a data item after the URL. An item sends data when its first
+  separator is `=`, `:=`, `@`, `=@` or `:=@`, not a `==` query or a `:` header. The
+  first argument is the method if it is letters only, as httpie and xh read it, so
+  `http example.com text=hi` is a POST.
+
+**Words that never name the host.** The host check reads every word after the client
+but a redirect and its target, and the value of an option that never names the host:
+curl's `-o`, `-D`, `-c` and `-H` (`--output`, `--dump-header`, `--cookie-jar`,
+`--header`), wget's `-O` (`--output-document`) and `--header`, and httpie's and xh's
+`-o` (`--output`). So `curl -d x localhost:3000 -o out.json` no longer reads
+`out.json` as a remote host. A quoted value is one word, so `-H 'Authorization:
+Bearer ab.cd.ef'` is skipped whole. The user chose this narrow list: every other
+option's value is still read, so a dotted name in a body, as in `-d evil.com`, still
+reads as a host.
+
+One regex over the segment read every client's flags as curl's, so it missed `-sd x`,
+`-dx`, a quoted `"-d"` and a redirect between `-X` and its method. It also read
+httpie's `-d` (`--download`) and `-F` (`--follow`), and wget's `-d` (`--debug`), as
+bodies.
 
 ## Problem
 
@@ -53,7 +114,10 @@ patterns do. A host is read from the URL's whole word, as a match for a dotted n
 stops before an `@`: `a.local@evil.com` goes to `evil.com`.
 
 **Scheme.** curl reads `HTTP://` and `Https://` as `http://` and `https://`, so the
-URL patterns match a scheme in any case.
+URL patterns match a scheme in any case. A WHATWG parser, as in xh, reads any number
+of slashes after `http:` or `https:`, none included, so `http:evil.com` and
+`http:/evil.com` go to `evil.com`. So a word that starts with the scheme and its colon
+is a URL, and its host follows the slashes.
 
 The 32-URL bound and the walk that finds URLs as `grep -o` does (#126) are as they
 were. What the new reading costs is in the timing section of
@@ -61,6 +125,9 @@ were. What the new reading costs is in the timing section of
 
 ## What was rejected
 
+- **Skipping the value of every option.** It would need each client's full table of
+  options that take a value, over 150 for curl, and a value the table misses would
+  hide a host. The user chose to skip only the values that never name one.
 - **Any URL with an `@` is remote.** It is simpler, but it refuses
   `http://admin:pass@127.0.0.1:5984/db`, a usual local form for CouchDB and
   Elasticsearch.
@@ -83,11 +150,16 @@ were. What the new reading costs is in the timing section of
   `-d email=me@example.com` and a JSON body with an e-mail address have the same
   shape, and the guard does not parse curl's options, so it cannot tell a URL from
   data there.
-- **A scheme URL whose host is not a dotted name,** `localhost`, a `127.` address or
-  bracketed, is not found: `http://10.0.0.5/x`, `http://intranet/x`,
-  `http://$HOST/x`, `http://{localhost,evil.com}/x`.
-- **A WHATWG parser, as in `xh`, reads `http:evil.com` and `http:/evil.com`** as
-  `http://evil.com`.
+- **A URL with no scheme whose host has no dot,** as in `curl -d x api:8080/x`, is
+  not found, for the same reason: it looks like `-d x`.
+- **A scheme URL inside a word,** not at its start, is found only as before: after
+  userinfo, bracketed, at `localhost` or `127.`, or at a dotted name. The client takes
+  its URL from a whole word, so such a URL is data, as in `-d cb=http://intranet/x`.
+- **A pipe into httpie or xh** sends what it reads as the body, as a redirect of stdin
+  does, but the guard reads each command of a pipeline alone, so `echo hi | http
+  example.com` is not read as a write.
+- **An address in 100.64/10,** which Tailscale and carrier-grade NAT use, is outside
+  the ranges the user named, so a write to one is refused as public.
 
 ## Failure mode if you change this
 
@@ -97,3 +169,7 @@ were. What the new reading costs is in the timing section of
   `evil.com` through httpie or `xh`.
 - Read in the user's locale, and a Unicode blank ends a word that the shell does not
   end.
+- Read a host a variable can change as proven local, and `http://localhost:$PORT`
+  reaches whatever host `$PORT` holds after an `@`.
+- Keep the reader's words with a slice of the toks array, which bash walks from its
+  start, and a long write takes the guard past its timeout, which lets it through.

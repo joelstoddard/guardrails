@@ -102,7 +102,7 @@ allows 'gh >out api repos/o/r'                                  "a read behind a
 allows 'http >out GET api.example.com'                          "an httpie GET behind a redirect"
 # A method or api read from one piece of a quoted argument asks, as a verb read from one does (#131).
 asks   'gh "api repos/o/r" -f body=x'                           "api read from a piece of a quoted argument"
-asks   'http "POST api.example.com" text=hi'                    "a method read from a piece of a quoted argument"
+asks   'http "POST api.example.com"'                            "a method read from a piece of a quoted argument"
 
 # The checks run per segment without starting a process (#126). httpie uppercases its method as Python does, so the
 # long s in poſt makes a POST.
@@ -113,8 +113,6 @@ blocks "curl -d x $(printf 'http://localhost/ %.0s' {1..33})"   "past 32 URLs in
 allows "curl -d x $(printf 'http://localhost/ %.0s' {1..32})"   "32 local URLs in a segment are read"
 # In a UTF-8 locale a regex misses what follows an invalid byte, and on macOS what precedes it, so such text is bytes.
 utf8() { LC_ALL=C.UTF-8 bash -c '. "$1"; shift; "$@"' _ "$DIR/../plugins/building/lib/publish-cmd.sh" "$@"; }
-utf8 _guardrails_http_has_body $'curl -d=x\xff https://api.example.com/hook' || {
-  echo "  FAIL [a body flag before an invalid byte]: not found"; FAILS=1; }
 utf8 _guardrails_has_remote_target $'curl \xc3 -d x https://api.example.com/hook' || {
   echo "  FAIL [a remote URL after an invalid byte]: not found"; FAILS=1; }
 
@@ -846,5 +844,138 @@ per_line_asks() {
   [ "$rc" = 2 ] || { echo "  FAIL [$2]: expected ASK, got rc $rc"; FAILS=1; }
 }
 per_line_asks $'git commit -m "Fix it\nsee the review"' "the per-line split cuts a quoted line into pieces too"
+
+# Help as the first option after any publish verb publishes nothing, as for pr create (#78). A later -h could be another
+# option's value, as in --title -h.
+allows 'gh pr comment --help'                       "help for a publish verb"
+allows 'npm publish --help'                         "help for npm publish"
+allows 'npm publish -h'                             "short help for npm publish"
+allows 'gh pr comment 12 --help'                    "help as the first option after the verb's arguments"
+blocks 'gh pr comment 12 -b -h'                     "-h as the value of an option after a publish verb"
+blocks 'npm publish --tag -h'                       "-h after another option of npm publish"
+blocks 'gh pr comment --help; npm publish'          "help for one command hides no publish after it"
+
+# Each HTTP client's body and method options, read as the client reads them: attached, at the end of a cluster of flags,
+# quoted, or after a redirect. wget also takes a body from a wgetrc command.
+blocks 'curl -T notes.txt https://api.example.com/upload'        "curl -T uploads a file"
+blocks 'curl -d@body.json https://api.example.com/hook'          "a body file attached to -d"
+blocks 'curl -dx https://api.example.com/hook'                   "a body attached to -d"
+blocks 'curl --data-ascii x https://api.example.com/hook'        "--data-ascii"
+blocks 'curl -sd x https://api.example.com/hook'                 "-d at the end of a cluster of flags"
+blocks 'curl -sSXPOST https://api.example.com/hook'              "a method attached to -X in a cluster"
+blocks 'curl -X >out POST https://api.example.com/hook'          "a redirect between -X and its method"
+blocks 'curl -X POST>out https://api.example.com/hook'           "a redirect fused to the method"
+blocks 'curl "-d" x https://api.example.com/hook'                "a quoted body flag"
+blocks 'curl --request post https://api.example.com/hook'        "a method in lower case"
+blocks 'wget --body-data=x https://api.example.com/hook'         "wget --body-data"
+blocks 'wget --body-file x.json https://api.example.com/hook'    "wget --body-file with its file as the next word"
+blocks 'wget -e post_data=x https://api.example.com/hook'        "a wgetrc post_data command"
+blocks "wget --execute 'Post-Data=x' https://api.example.com/x"  "a wgetrc command in another case and spelling"
+blocks 'wget -qe method=PUT https://api.example.com/thing'       "a wgetrc method at the end of a cluster"
+blocks 'wget --execute=postfile=x https://api.example.com/hook'  "a wgetrc command attached to --execute"
+allows 'curl -od https://example.com/x'                          "a flag that takes a value ends a cluster"
+allows 'wget -e robots=off https://example.com/x'                "a wgetrc command that sends nothing"
+allows 'wget -d https://example.com/file.tgz'                    "wget's -d is --debug"
+# httpie and xh send their data items, a raw body or their stdin as a POST, and read the method after their options.
+blocks 'http example.com/api text=hi'                            "an httpie data item sends a POST"
+blocks 'http example.com/api field:=1'                           "an httpie JSON item"
+blocks 'http example.com/api @body.json'                         "an httpie file item"
+blocks 'xh example.com/api "text=hi there"'                      "a quoted xh data item"
+blocks 'http -a u:p example.com/api text=hi'                     "a data item after an option's value"
+blocks 'http example.com/api -- -v=x'                            "a data item that starts with - after the end of the options"
+blocks 'http -v PUT api.example.com/thing'                       "a method after an option"
+blocks 'http --raw hi api.example.com/hook'                      "an httpie raw body"
+blocks 'http api.example.com/hook < body.json'                   "httpie sends its stdin as the body"
+blocks 'http "POST api.example.com" text=hi'                     "a data item whatever a quoted argument holds"
+allows 'http example.com/api q==x'                               "an httpie query item is a read"
+allows 'http example.com/api Accept:application/json'            "an httpie header is a read"
+allows "http example.com/api 'Authorization: Bearer a='"         "a header whose value holds an = is a read"
+allows 'http example.com/?a=b'                                   "a URL that holds an = is not an item"
+allows 'xh example.com/api --auth user=x:pw'                     "a long option's value is not an item"
+allows 'http example.com/api -a user=x:pw'                       "a short option's value is not an item"
+allows 'http -d https://example.com/file.tgz'                    "httpie's -d is --download"
+allows 'xh -F https://example.com/x'                             "xh's -F is --follow"
+utf8 _guardrails_publishes_as_user $'curl -d=x\xff https://api.example.com/hook' >/dev/null || {
+  echo "  FAIL [a body flag before an invalid byte]: not read"; FAILS=1; }
+
+# An output file, a header, a header dump or a cookie jar never names the host, nor does a redirect's target, so none
+# is read as one. The URL beside them still is.
+allows 'curl -d x localhost:3000 -o out.json'                               "an output file is not a host"
+allows 'curl -d x localhost:3000 --output out.json'                         "an output file after --output"
+allows 'curl -d x localhost:3000 -oout.json'                                "an output file attached to -o"
+allows 'curl -sSo out.json -d x localhost:3000'                             "-o at the end of a cluster"
+allows 'curl -d x localhost:3000 -D headers.txt -c cookies.txt'             "a header dump and a cookie jar"
+allows "curl -d x -H 'Authorization: Bearer ab.cd.ef' http://localhost:3000" "a header whose value looks like a name"
+allows "curl -d x --header 'Host: api.example.com' http://localhost:3000"   "a Host header goes to the URL's host"
+allows 'wget --post-data=x localhost:3000 -O out.json'                      "wget's output document"
+allows 'wget --post-data=x localhost:3000 -qO out.json'                     "wget's -O at the end of a cluster"
+allows 'wget --post-data=x localhost:3000 --header=Referer:https://a.example' "a header attached by = that holds a URL"
+allows 'http POST localhost:3000 a=b -o out.json'                           "httpie's output file"
+allows 'curl -d x localhost:3000 > out.json'                                "a redirect's target is not a host"
+blocks 'curl -d x -o out.json https://api.example.com/hook'                 "the URL beside an output file is still read"
+blocks 'curl -O -d x https://api.example.com/hook'                          "curl's -O takes no value"
+blocks 'wget -c --post-data=x https://api.example.com/hook'                 "wget's -c takes no value"
+
+# xh and httpie read a URL with any number of slashes after its scheme, none included, as a WHATWG parser does.
+blocks 'xh POST http:evil.com text=hi'                    "a scheme with no slashes"
+blocks 'http POST http:/evil.com text=hi'                 "a scheme with one slash"
+blocks 'curl -d x https:evil.com/x'                       "https with no slashes"
+blocks 'curl -d x http://localhost:3000/x http:evil.com'  "a scheme with no slashes after another URL"
+blocks 'curl -d x http:////evil.com/x'                    "a scheme with four slashes"
+blocks 'xh POST HTTP:/evil.com a=b'                       "an upper-case scheme with one slash"
+blocks "xh POST 'http:'evil.com a=b"                      "a quote between the scheme and the host"
+blocks 'xh POST http:\\evil.com a=b'                      "a backslash after the scheme"
+blocks 'xh POST http:[2001:db8::1] a=b'                   "an address with no dot after a scheme with no slashes"
+blocks 'xh POST https:[2001:db8::1] a=b'                  "an address with no dot after https with no slashes"
+allows 'xh POST http:localhost:3000/api a=b'              "a local host after a scheme with no slashes"
+allows 'xh POST http:/127.0.0.1:3000/api a=b'             "a loopback address after a scheme with one slash"
+
+# A write to a host not proven local asks: a name with no dot, a private address, or a host from a variable, which can
+# hold any host, an @ or a /. A public name or address blocks, and a remote host anywhere in the segment blocks.
+asks   'curl -d x http://api:8080/x'                        "a name with no dot"
+asks   'curl -d x http://intranet/x'                        "an intranet name"
+asks   'xh POST http://localhostevil/x a=b'                 "a name with no dot that starts with localhost"
+asks   'curl -d x http://u@api/x'                           "a name with no dot after userinfo"
+asks   'curl -d x http://10.0.0.5/x'                        "a 10/8 address"
+asks   'curl -d x http://172.31.0.1/x'                      "a 172.16/12 address"
+asks   'curl -d x http://192.168.1.10:8080/x'               "a 192.168/16 address"
+asks   'curl -d x http://169.254.169.254/latest'            "a link-local address"
+asks   'curl -d x http://[fd00::1]/x'                       "a unique local IPv6 address"
+asks   'curl -d x 192.168.1.10:8080/api'                    "a private address with no scheme"
+asks   'curl -d x http://$HOST/x'                           "a host from a variable"
+asks   'curl -d x "http://${HOST}:8080/x"'                  "a quoted host from a variable"
+asks   'curl -d x http://localhost:$PORT/x'                 "a port from a variable, which can hold an @"
+asks   'curl -d x http://$U@localhost/x'                    "userinfo from a variable, which can hold a /"
+asks   'curl -d x https://$SUB.local/x'                     "a .local name from a variable"
+asks   'curl -d x http://`cat host`/x'                      "a host from a substitution"
+asks   'curl -X POST -d @msg.json "$WEBHOOK_URL"'           "a URL from a variable"
+asks   'curl -sS -d x $URL'                                 "a URL from a variable after flags"
+asks   'curl -d x `cat url`'                                "a URL from a substitution"
+asks   'wget --post-data=x "$URL"'                          "a wget URL from a variable"
+asks   'http POST "$URL" a=b'                               "an httpie URL from a variable"
+blocks 'curl -d x http://172.15.0.1/x'                      "an address just before 172.16/12"
+blocks 'curl -d x http://172.32.0.1/x'                      "an address just past 172.16/12"
+blocks 'curl -d x http://[fe80::1]/x'                       "a link-local IPv6 address, as before"
+blocks 'curl -d x http://u@/x'                              "a URL with no host, as before"
+blocks 'curl -d x http://8.8.8.8/x'                         "a public address"
+blocks 'curl -d x 8.8.8.8/x'                                "a public address with no scheme"
+blocks 'curl -d x http://[2001:db8::1]/x'                   "another IPv6 address, as before"
+blocks 'curl -d x http://127.1/x'                           "a short loopback form, as before"
+blocks 'curl -d x http://{localhost,evil.com}/x'            "a brace the shell expands into two hosts"
+blocks 'curl -d x http://evil.com:$PORT/x'                  "a public name with a port from a variable"
+blocks 'curl -d x http://api:8080/x https://evil.com/x'     "a public name after a host that asks"
+blocks 'curl -d x a.local@api'                              "a name with no dot after userinfo with no scheme, as before"
+allows 'curl http://api:8080/x'                             "a read from a name with no dot"
+allows 'curl -d x http://localhost/$X'                      "a variable in the path"
+allows "curl -d x \$'localhost:3000'"                       "an ANSI-C quoted URL is no variable"
+allows 'curl -d "$BODY" http://localhost:3000/api'          "a body from a variable"
+allows 'curl -H "Authorization: Bearer $T" -d x http://localhost:3000/api' "a header from a variable"
+allows 'curl -u "$USER:$PASS" -d x http://localhost:3000/api' "credentials from a variable"
+allows 'curl --user "$CREDS" -d x http://localhost:3000/api' "credentials from a variable after a long option"
+allows 'http POST localhost:3000 "text=$MSG"'               "an httpie item from a variable"
+# curl's --resolve and --connect-to send the write for a URL's host to another, so the URL proves nothing local.
+asks   'curl --resolve localhost:443:203.0.113.5 -d x https://localhost/x' "--resolve sends a local URL elsewhere"
+asks   'curl --connect-to ::203.0.113.5: -d x http://localhost:3000/x'      "--connect-to sends a local URL elsewhere"
+allows 'curl --resolve localhost:443:203.0.113.5 https://localhost/x'       "--resolve on a read"
 
 finish "publish-cmd"

