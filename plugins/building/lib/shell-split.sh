@@ -42,7 +42,8 @@ _guardrails_split_awk() {
     function subopen(k, start) {
       if (k > hb + 1) lp[k - 1, ++ln[k - 1]] = substr($0, cs[k - 1], start - cs[k - 1])
       cs[k] = start; ln[k] = 0; seal(sf[k] == 1 || ev[k - 1])
-      if (tag) { sid[k] = ++nsid; sop[k] = ";"; xp[++nxp] = "O" nsid " " (k > hb + 1 ? sid[k - 1] " 0" : "0 " (inb || (lv && ex[lh[lv]]) ? hs[lh[lv]] : ol)) "\n" }
+      if (tag) { sid[k] = ++nsid; sop[k] = ";"; xp[++nxp] = "O" nsid " " (k > hb + 1 ? sid[k - 1] " 0" : "0 " (inb || (lv && ex[lh[lv]] && !ib) ? hs[lh[lv]] : ol)) "\n" }
+      bi[k] = ib; ib = 0
     }
     function nl(op) { if (!tag || inb) return "\n"; ol++; return "\n" lk op (d > lb) lh2 "\n" }
     function subemit(k, e,   j, t) {
@@ -130,6 +131,8 @@ _guardrails_split_awk() {
         if (lv && es[lh[lv]] == 1) { lk = "B"; lb = ld[lv]; lh2 = " " hs[lh[lv]] } else { lk = "T"; lb = 0; lh2 = "" }
         ltag = lk ";" (d > lb) lh2
       }
+      # ub marks a line of an unquoted heredoc that a shell runs as its script.
+      ub = (carry && lv && es[lh[lv]] == 1 && ex[lh[lv]] && !inb)
       # Indexing the line split into characters keeps the scan linear: substr rescans the line on each call.
       cont = 0; ar = 0; n = split($0, chars, "")
       for (i = 1; i <= n; i++) {
@@ -137,6 +140,12 @@ _guardrails_split_awk() {
         if (++appended > 256) { piece[++np] = out; out = ""; appended = 0 }
         c = chars[i]
 
+        # The shell that feeds an unquoted heredoc to a shell drops the backslash of \$ and \`, so the script runs that
+        # substitution itself, as its own, ib, and ends one it opened at \`.
+        if (ub && c == bs && q != sq && q != "ansi" && (q == "bt" ? bi[d] && chars[i + 1] == "`" : \
+            (chars[i + 1] == "$" && chars[i + 2] == "(" && chars[i + 3] != "(") || chars[i + 1] == "`")) {
+          ib = (q != "bt"); out = out c; continue
+        }
         # A backslash makes the next character literal, except inside single quotes.
         # At the end of an unquoted line it joins the next line to this one.
         if (carry && c == bs && q != sq) {

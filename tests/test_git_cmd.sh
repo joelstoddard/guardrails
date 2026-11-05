@@ -475,4 +475,15 @@ targets 'ssh h "echo $(git commit -m x)"'               'local: /s' "a substitut
 yes $'bash -c "echo "\' $(git commit -m x)\''         commit "a single-quoted substitution after a double-quoted piece"
 targets 'bash -c "cd /x && echo \$(git commit -m x)"'   'local: /x' "an escaped substitution runs where the script stands"
 
+# The shell that feeds an unquoted heredoc to another drops the backslash of \$ and \`, so the script runs that
+# substitution itself, where it stands.
+yes  $'bash <<EOF\necho \\$(git commit -m x)\nEOF'               commit "an escaped substitution in a shell's unquoted heredoc"
+yes  $'bash <<EOF\necho \\`git commit -m x\\`\nEOF'              commit "escaped backticks in a shell's unquoted heredoc"
+yes  $'bash <<EOF\necho "\\$(git commit -m x)"\nEOF'             commit "an escaped substitution in double quotes there"
+no   $'bash <<\'EOF\'\necho \\$(git commit -m x)\nEOF'           commit "an escaped substitution in a quoted heredoc stays text"
+no   $'cat <<EOF\necho \\$(git commit -m x)\nEOF'                commit "an escaped substitution in a heredoc no shell runs"
+no   $'bash <<EOF\necho \'\\$(git commit -m x)\'\nEOF'           commit "an escaped substitution in single quotes there"
+walk $'bash <<EOF\ncd /x\necho \\$(git commit -m x)\nEOF'   commit /s 'local: /x'  "it runs where the script stands"
+walk $'ssh host bash <<EOF\necho \\$(git commit -m x)\nEOF' commit /s 'remote: /s' "and on another host, there"
+
 finish "git-cmd"

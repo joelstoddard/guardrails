@@ -414,4 +414,8 @@ assert_eq "$OUT" "" "a substitution expanded before ssh runs asks nothing of ano
 run_hook "$S" "$(jsonat "$fb" 'ssh h "echo \$(git commit -m x)"')"
 assert_out '"permissionDecision":"ask"' "an escaped substitution in ssh's command asks, as it commits there"
 
+# An escaped substitution in a shell's unquoted heredoc runs in that shell.
+run_hook "$S" "$(jsonat "$rw" $'bash <<EOF\necho \\$(git commit -m x)\nEOF')"
+assert_rc 2 "an escaped substitution in a shell's unquoted heredoc blocked"
+
 finish "guard-default-branch"
