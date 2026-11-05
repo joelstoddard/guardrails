@@ -105,6 +105,8 @@ _guardrails_http_writes() {
           wget--execute=*) v="${w#--execute=}"; _guardrails_wgetrc_writes && rc=0 ;;
           curl--resolve | curl--connect-to) _guardrails_http_value; _GUARDRAILS_HTTP_ASK="a host that $w sends elsewhere" ;;
           curl--mail-rcpt) _guardrails_http_value; _GUARDRAILS_HTTP_MAIL=1; rc=0 ;;
+          curl--proxy | curl--preproxy | curl--socks4 | curl--socks4a | curl--socks5 | curl--socks5-hostname)
+            _guardrails_http_value; _guardrails_http_proxy ;;
           # A file the guard cannot see can name any URL.
           curl--config | wget--input-file) _guardrails_http_value; _GUARDRAILS_HTTP_ASK="URLs read from a file" ;;
           wget--input-file=*) _GUARDRAILS_HTTP_ASK="URLs read from a file" ;;
@@ -137,6 +139,7 @@ _guardrails_http_writes() {
           curl[FT]) rc=0 ;;
           curlX) _guardrails_is_write_verb "$v" && rc=0 ;;
           wgete) _guardrails_wgetrc_writes && rc=0 ;;
+          curlx) _guardrails_http_proxy ;;
           curlK | wgeti) _GUARDRAILS_HTTP_ASK="URLs read from a file" ;;
           curl[oDcH] | wgetO | http*o | xh*o) d=1 ;;
         esac ;;
@@ -172,6 +175,12 @@ _guardrails_http_value() {
   while w="${toks[$i]:-}"; case "$w" in *[\<\>]*) _guardrails_skip_redirect ;; *) false ;; esac; do :; done
   v="$w"; i=$((i + 1))
   case "$w" in *[\"\'\\]*) _guardrails_skip_quoted "$w"; _guardrails_unquote && v="$w" ;; esac
+}
+
+# _guardrails_http_proxy → adds the caller's v, a proxy, to its kept words as a URL, so a proxy with no scheme and no
+# dot, as in -x proxy:3128, is read as a host too.
+_guardrails_http_proxy() {
+  case "$v" in *://*) ;; *) kept+=("http://$v") ;; esac
 }
 
 # _guardrails_wgetrc_writes → rc 0 if the caller's v, a wgetrc command, sends a body or sets a write method. wget reads

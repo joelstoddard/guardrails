@@ -24,7 +24,9 @@ remote: `http://evil.com:$PORT/x` is refused. A whole URL from a variable,
 `curl -d x "$WEBHOOK_URL"`, asks too. A word that starts with `$` or a backtick is read
 as one if it is not an option's value, so `-d "$BODY"` and `-u "$USER:$PASS"` ask
 nothing. curl's `--resolve` and `--connect-to` send the write for the URL's host to
-another, so a write with either asks unless its URL is remote. curl's `-K` (`--config`)
+another, so a write with either asks unless its URL is remote. A write through curl's proxy (`-x`, `--proxy`,
+`--preproxy` or a `--socks` option) goes to the proxy, so its host is read as a URL's is,
+with `http://` before it if it has no scheme: `-x proxy:3128` asks. curl's `-K` (`--config`)
 and wget's `-i` (`--input-file`) read URLs from a file the guard cannot see, so a write
 with one asks the same way.
 
