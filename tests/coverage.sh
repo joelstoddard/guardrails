@@ -39,13 +39,22 @@ run_suites() { # every shell test under tracing, one log per test file; returns 
   return $rc
 }
 
+# Each suite runs under a time limit, so a parser that loops cannot spin on for days (#156). The slowest suite took
+# 85 s, and a whole traced run 342 s, on macOS at load 6 to 8; 600 s fails a stuck suite well before CI's job limit.
+# The alarm kills the suite's whole process group, so a looping child cannot outlive it. rc 142 is SIGALRM.
+within() { # <seconds> <command...>
+  perl -e '$t = shift; $p = fork; if (!$p) { setpgrp(0, 0); exec @ARGV or exit 127 }
+    $SIG{ALRM} = sub { kill "KILL", -$p; exit 142 }; alarm $t; waitpid($p, 0); exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' "$@"
+}
+
 run_one() { # <test file> <name>; reports the result, and a failing suite's output, which CI shows in place of a test run
   # stdin is /dev/null, so the awk shim, which reads stdin for both its runs, never waits on a terminal.
   # GUARDRAILS_TIME_SCALE is mutate.sh's to set: here, as in CI, the wall-clock budgets hold at full strength.
-  if COV_LOG="$OUT/logs/$2.log" COV_AWK="$awk_runs" BASH_ENV="$HERE/coverage/bash_env.sh" GUARDRAILS_TIME_SCALE='' \
-    bash "$1" </dev/null >"$OUT/logs/$2.out" 2>&1; then
-    echo "coverage: $2 passed"; return 0
-  fi
+  local limit="${GUARDRAILS_SUITE_LIMIT:-600}" r
+  COV_LOG="$OUT/logs/$2.log" COV_AWK="$awk_runs" BASH_ENV="$HERE/coverage/bash_env.sh" GUARDRAILS_TIME_SCALE='' \
+    within "$limit" bash "$1" </dev/null >"$OUT/logs/$2.out" 2>&1; r=$?
+  [ "$r" != 0 ] || { echo "coverage: $2 passed"; return 0; }
+  [ "$r" != 142 ] || echo "coverage: $2 timed out after $limit s" >&2
   { echo "coverage: $2 failed, see $OUT/logs/$2.out"; cat "$OUT/logs/$2.out"; } >&2
   return 1
 }

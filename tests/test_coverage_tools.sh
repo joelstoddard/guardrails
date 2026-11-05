@@ -213,6 +213,10 @@ setup; printf 'echo "  FAIL [why]: broken"\nexit 1\n' >"$D/tests/test_broken.sh"
 [[ $OUTPUT == *"FAIL [why]: broken"* ]] || fail red-suite-output "rc=$RC: $OUTPUT"
 [[ $OUTPUT == *"coverage: test_f.sh passed"* ]] || fail green-suite-reported "rc=$RC: $OUTPUT"
 
+echo "--- a suite that runs past its time limit fails the run instead of spinning on (#156)"
+setup; echo 'sleep 30' >"$D/tests/test_spin.sh"; GUARDRAILS_SUITE_LIMIT=1 cov
+[[ $RC == 1 && $OUTPUT == *"test_spin.sh timed out after 1 s"* ]] || fail suite-limit "rc=$RC: $OUTPUT"
+
 echo "--- a measured file without a floor fails"
 setup; cov
 [[ $RC == 1 && $(row "$S") == *"NO" ]] || fail no-floor "rc=$RC: $OUTPUT"

@@ -160,6 +160,8 @@ for code in 127 255; do
   setup; mkdir "$D/bin"
   cat >"$D/bin/perl" <<EOF
 #!/usr/bin/env bash
+# Only mutate.sh's test wrapper chdirs; coverage.sh's suite time limit (#156) passes through.
+[[ "\$*" == *chdir* ]] || exec $(command -v perl) "\$@"
 n=\$(( \$(cat "$D/calls" 2>/dev/null || echo 0) + 1 )); echo \$n > "$D/calls"
 ((n <= 1)) && exec $(command -v perl) "\$@"
 exit $code
