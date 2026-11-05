@@ -14,7 +14,7 @@ is refused, as before. `_guardrails_host_class` sorts each host into one of thre
 | Class | Hosts | Write |
 |---|---|---|
 | Proven local | `localhost`, a dotted `127.` address, `[::1]`, `0.0.0.0`, a `.local` or `.localhost` name | allowed |
-| Not proven local | a name with no dot (`api`, `intranet`), an address in 10/8, 172.16/12, 192.168/16, 169.254/16 or fc00::/7, a host from a variable | asks |
+| Not proven local | a name with no dot (`api`, `intranet`), a name under `.internal`, `.lan` or `.home.arpa` (`host.docker.internal`), an address in 10/8, 172.16/12, 192.168/16, 169.254/16 or fc00::/7, a host from a variable | asks |
 | Remote | a name with a dot and a top-level name of letters, and every other host: a public address, another IPv6 address, `127.1`, a host with a character no name has | refused |
 
 A variable or a substitution before the URL's path, as in `http://$HOST/x`,
@@ -30,9 +30,9 @@ with one asks the same way.
 
 A public address is remote, as the ranges above are the only private ones the user
 named. An address with no scheme is read as a host, as a dotted name is, and asks only
-if it is private. Of a word with no scheme, only such an address asks: a name with no
-dot or a variable after userinfo there, as in `a.local@api`, was refused before and
-still is.
+if it is private. Of a word with no scheme, only a host that starts the word asks, as such
+an address or `host.docker.internal:8080/api` does: a name with no dot or a variable after
+userinfo there, as in `a.local@api`, was refused before and still is.
 
 ## Writes
 

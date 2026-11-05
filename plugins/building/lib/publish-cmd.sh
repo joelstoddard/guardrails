@@ -187,7 +187,8 @@ _guardrails_wgetrc_writes() {
 }
 
 # _guardrails_host_class <host> [<var>] → rc 0 if the host is proven to be this machine, 1 if it is not, and 2 if it may
-# not be: a name with no dot, a private address, or, given <var>, a host a variable or substitution can change.
+# not be: a name with no dot or under .internal, .lan or .home.arpa, a private address, or, given <var>, a host a
+# variable or substitution can change.
 # Loopback and .local are development, not publishing — that distinction is the deliberate hole here.
 # See docs/design/url-hosts.md
 _GUARDRAILS_LOOPBACK='^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
@@ -203,6 +204,8 @@ _guardrails_host_class() {
     127.*) [[ $h =~ $_GUARDRAILS_LOOPBACK ]] && l=1 ;;
   esac
   [ -z "$l" ] || { [ -n "$2" ] && return 2; return 0; }
+  # Names private by convention, as Docker's host.docker.internal, are not proven local.
+  case "$h" in *[!A-Za-z0-9._-]*) ;; *.internal | *.lan | *.home.arpa) return 2 ;; esac
   # A public name is refused as before, whatever a variable after it adds.
   [[ $h =~ $_GUARDRAILS_PUBLIC_NAME ]] && return 1
   [ -z "$2" ] || return 2
@@ -262,8 +265,9 @@ _guardrails_has_remote_target() {
     _guardrails_host_class "$host" "$v"
     case $? in
       1) return 0 ;;
-      # Of a word with no scheme, only a private address asks: any other host in one was refused before.
-      2) [ -n "$s" ] || [ "$url" = "$host" ] || return 0; rc=2 ;;
+      # Of a word with no scheme, only a host that starts it asks, as a private address does: a name with no dot or a
+      # variable after userinfo in one was refused before.
+      2) [ -n "$s" ] || case "$url" in "$host"*) ;; *) return 0 ;; esac; rc=2 ;;
     esac
   done
   return "$rc"

