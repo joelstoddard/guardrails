@@ -492,7 +492,9 @@ backslash, so `bash -c "echo \$(git commit)"` commits in that shell, and a subst
 expands here first is made inert (`$(` becomes `$_(`, and a backtick `_`), as the split has read
 it where it runs. So `ssh h "echo $(git commit)"` is judged here only, where it used to be read
 again as ssh's and add a question. A script that is not one string in double quotes, as `"a"' $(b)'`, is
-read as written, as before, since its single-quoted piece passes `$(b)` on to run there.
+read as written, as before, since its single-quoted piece passes `$(b)` on to run there. The split
+writes a backtick substitution as `sh -c -- "…"` with its text as written, quotes and
+substitutions included, so the reader takes everything after the `--` as the script, as written.
 
 ## Failure mode if you change this
 

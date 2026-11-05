@@ -507,4 +507,9 @@ targets '(sudo cd /x; git commit -m y)'                       'local: /s'       
 targets 'if true; then (cd /x && git commit -m y); fi'        'local: /s'           "a group after a keyword, as before"
 targets '((n++)) && cd /x && git commit -m y'                  'local: /x'           "arithmetic opens no group"
 
+# The split writes a backtick substitution as sh -c -- "…" with its text as written, so that script is read whole, and
+# neither as one double-quoted word nor with its own substitutions made inert.
+yes 'echo "`echo "a" && git commit -m x`"'          commit "a backtick substitution whose text holds quotes"
+yes 'echo `echo $(git commit -m x)`'                 commit "a substitution inside backticks"
+
 finish "git-cmd"

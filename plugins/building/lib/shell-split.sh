@@ -29,7 +29,7 @@
 _guardrails_split_awk() {
   printf '%s' "$2" | awk -v carry="$1" -v here="${3:-0}" -v tag="${4:-0}" '
     # Carry mode also writes each command inside a $( ), <( ) or >( ) as a segment of its own, after the
-    # rest, as backticks are written as sh -c "...". Level k of nesting holds its text from cs[k] on this
+    # rest, as backticks are written as sh -c -- "...". Level k of nesting holds its text from cs[k] on this
     # line, after pieces lp[k, 1..ln[k]] from earlier lines; a nested level leaves its opener and closer.
     # Levels at or below hb enclose an unquoted heredoc body being read, whose text is data, not theirs.
     # In tag mode a line in place is tagged T, then the operator before it, one of ; | a (&&) o (||), then 1 if it starts
@@ -50,7 +50,7 @@ _guardrails_split_awk() {
       t = substr($0, cs[k], e - cs[k])
       if (t == "" && !ln[k]) return
       if (tag) xp[++nxp] = "S" sop[k] sid[k] "\n"
-      if (kind[k] == "`") xp[++nxp] = "sh -c \""
+      if (kind[k] == "`") xp[++nxp] = "sh -c -- \""
       for (j = 1; j <= ln[k]; j++) xp[++nxp] = lp[k, j]
       xp[++nxp] = t
       if (kind[k] == "`") xp[++nxp] = "\""
@@ -645,8 +645,10 @@ _guardrails_shell_payload() {
         case "${toks[$k]}" in
           --*) ;;
           # The script is the one shell word after -c, and the words after it its arguments; where its quote never
-          # closes in the segment, the rest.
+          # closes in the segment, the rest. The split writes a backtick substitution as sh -c -- "…", its text as
+          # written, which is read whole, as written.
           -*c*)
+            [ "${toks[$((k + 1))]:-}" != -- ] || { inner="${toks[*]:$((k + 2))}"; dq=0; break; }
             i=$((k + 2)); inner="${toks[$((k + 1))]:-}"
             case "$inner" in
               *[\"\'\\]*) [[ $inner =~ $_GUARDRAILS_OPEN_REST ]] &&
@@ -660,7 +662,7 @@ _guardrails_shell_payload() {
     *) return 1 ;;
   esac
   # Slices, as ${inner#["']} and ${inner%["']} are quadratic on a long payload in a UTF-8 locale (#107).
-  case "${inner:0:1}" in \") dq=1; inner="${inner:1}" ;; \') inner="${inner:1}" ;; esac
+  case "$dq${inner:0:1}" in \") dq=1; inner="${inner:1}" ;; *[\"\']) inner="${inner:1}" ;; esac
   case "${inner: -1}" in [\"\']) inner="${inner:0:${#inner}-1}" ;; esac
   [ -n "$inner" ] && [ "$inner" != "$seg" ] || return 1
   case "$dq$inner" in 1*[\$\`]*) _guardrails_dq_payload ;; esac
