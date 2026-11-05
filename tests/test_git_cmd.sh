@@ -265,7 +265,7 @@ for w in '!' '{' '(' 'if' 'then' 'elif' 'else' 'while' 'until' 'do' 'nohup' 'com
 done
 # A shell run elsewhere is seen through too, and its commit is there.
 for w in 'ssh -T h bash -c' 'docker exec -i c bash -c' 'kubectl exec p -- bash -c'; do
-  there "$w git commit -m x"               commit "seen through $w as a segment's first word"
+  there "$w 'git commit -m x'"             commit "seen through $w as a segment's first word"
 done
 yes "/usr/bin/time -p git commit -m x"     commit "seen through a wrapper by path"
 no  "env FOO=1 git status"                 commit "env before another subcommand"
@@ -399,6 +399,13 @@ yes "script -qc 'git commit -m x' /dev/null"          commit "a commit script -c
 yes 'script -q /dev/null git commit -m x'             commit "a commit script runs after its file"
 cwd "su -c 'cd /x && git commit -m y' root"           commit /s /x "a cd in su -c's command"
 cwd "su -c 'cd /x'; git commit -m y"                  commit /s /s "su -c's cd ends with its shell"
+# A shell's script is the one word after its -c; the words after it are the script's arguments.
+yes "bash -c 'git commit' a0"                         commit "a commit that ends a script with an argument after it"
+yes "su -c 'git commit' root"                         commit "a commit that ends su -c's command"
+yes 'sh -c "cd /x && git commit" a0 a1'               commit "a double-quoted script with arguments after it"
+cwd "bash -c 'cd /x && git commit -m y' a0"           commit /s /x "a cd in a script with an argument after it"
+no  "bash -c 'echo hi' git commit"                    commit "a script's arguments are not its commands"
+yes $'bash -c \'echo hi\ngit commit -m x'             commit "a script whose quote never closes is read to its end"
 
 # A command ssh, docker exec, kubectl exec or nsenter runs is read, but it runs elsewhere, so its repo is not here.
 there 'kubectl exec pod -- git commit -m x'           commit "a commit kubectl exec runs"

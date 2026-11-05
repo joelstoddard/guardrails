@@ -624,7 +624,15 @@ _guardrails_shell_payload() {
       for ((k = i + 1; k < ${#toks[@]}; k++)); do
         case "${toks[$k]}" in
           --*) ;;
-          -*c*) inner="${toks[*]:$((k + 1))}"; break ;;
+          # The script is the one shell word after -c, and the words after it its arguments; where its quote never
+          # closes in the segment, the rest.
+          -*c*)
+            i=$((k + 2)); inner="${toks[$((k + 1))]:-}"
+            case "$inner" in
+              *[\"\'\\]*) [[ $inner =~ $_GUARDRAILS_OPEN_REST ]] &&
+                { _guardrails_skip_quoted "${BASH_REMATCH[3]}"; [ "$i" -gt "$((k + 2))" ] || i="${#toks[@]}"; } ;;
+            esac
+            inner="${toks[*]:$((k + 1)):$((i - k - 1))}"; break ;;
         esac
       done
       # Words and a regex, as searching with ${seg#*<<<} is quadratic on a long segment.

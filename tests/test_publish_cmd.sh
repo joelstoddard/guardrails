@@ -684,7 +684,7 @@ seen   'cat x | su root script.sh'                          "su runs a script fi
 seen   'cat x | su --help'                                  "su's help reads no stdin"
 seen   'cat x | nsenter -t 1 -n tee f'                      "nsenter running a command"
 seen   'cat x | script -q /dev/null tee f'                  "script running a command"
-payload "su -c 'cd /srv && make' root"   "cd /srv && make' root"   "su -c's payload, as sh -c's, runs to the end of its words"
+payload "su -c 'cd /srv && make' root"   "cd /srv && make"   "su -c's payload, as sh -c's, is the one word after -c"
 too_much "$(printf "su -c 'x'\n%.0s" {1..17})"              "seventeen su -c commands to re-read"
 too_much "$(printf "script -c 'x'\n%.0s" {1..17})"          "seventeen script -c commands to re-read"
 in_time "$(printf 'echo a su script\n%.0s' {1..17})"        "su and script as words with no -c to re-read"

@@ -400,4 +400,9 @@ run_hook "$(broken_hook shell-split.sh missing)" "$(jsonat "$r2" 'git status')"
 assert_eq "$OUT" "" "the override asks nothing about a library that did not load"
 unset ALLOW_DEFAULT_COMMIT
 
+# A shell's script is the one word after -c, so a commit that ends it is read.
+rw="$(make_repo main)"
+run_hook "$S" "$(jsonat "$rw" "bash -c 'git commit' a0")"
+assert_rc 2 "a commit that ends bash -c's script, with an argument after it, blocked"
+
 finish "guard-default-branch"
