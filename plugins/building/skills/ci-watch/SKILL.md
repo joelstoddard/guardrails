@@ -35,6 +35,9 @@ After the third failed repair, stop and report. Repeated failure means the diagn
 ### Infrastructure failures are re-run, not "fixed"
 Runner timeout, network error, rate limit, cancelled job: re-run the job once with `gh run rerun <run-id> --failed`. If it fails the same way twice, report it as infrastructure and stop.
 
+### Watch the PR you were given, from its own worktree
+Current state above is computed from the session's working directory, and may describe a different PR. Trust it only when its repo and branch match the target. For a PR in another repo, pass `--repo OWNER/REPO` to every `gh` call. Before any fix, confirm `gh pr view <pr> --json headRefOid` matches `git log -1 --format=%H`: the working directory is where commits and pushes land.
+
 ### One commit per fix round
 Via the `commit` skill, so each repair is separately revertible.
 
@@ -62,7 +65,7 @@ This skill runs as a background agent — its return value is the only thing the
 | Condition | Behavior |
 |---|---|
 | No PR for the branch | Stop. Nothing to watch. |
-| Red, and the PR's head is not the current branch | Stop. Report the failure. Never fix it from another branch. |
+| PR's `headRefOid` does not match the worktree's `HEAD` | Stop. Fixes would land on the wrong branch. |
 | Checks green on entry | Report and stop. No commits. |
 | Failure not diagnosable from the log | Stop. Report the excerpt. Do not guess. |
 | Only route to green is changing a test's expectations | Stop. Report. Human decision. |
