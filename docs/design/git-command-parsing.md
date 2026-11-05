@@ -390,6 +390,15 @@ bash, python3 or `sudo -s`. A redirect's target holding a quote costs a regex: 1
 guard-publish 2.1 s, one `ssh` over 128 KiB of words 3.0 s, and `gh api` with 30,000
 redirects among its flags 3.5 s (#146). These were measured at load 13 to 17.
 
+The walk's tags, the runners and the branch a chain switches to leave the slowest input where
+it was: 25,000 options with a redirect fused to each between `git` and `commit` take
+guard-default-branch 5.9 to 6.0 s at load 3 to 5, before and after them. The slowest of their own
+paths, at that load, are 16 ssh commands that each commit on another host, over 7 KiB of words
+each, which guard-default-branch reads and asks about in 4.5 s; 16,000 `env -Cx` wrappers before
+a commit, 4.3 s; 9,000 nested `docker exec`, `kubectl exec` and `nsenter` before one, 3.0 s; and
+1,600 lines of a switch, an add and a commit in one chain, 2.4 s. guard-publish reads 4,400
+lines of prose naming `su` and `script` in 2.6 s, where it took 1.4 s.
+
 ## What was rejected
 
 - **Substring matching.** The original approach; produced the `gh pr create` false
