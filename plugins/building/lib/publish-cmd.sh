@@ -59,6 +59,25 @@ _GUARDRAILS_CURL_SHORT='^-[aqfGgI0k46jlLMnNZ#pJORSis231BvVh:]*([AbCcDdEeFHKmoPQr
 _GUARDRAILS_CURL_GET='^-[aqfgI0k46jlLMnNZ#pJORSis231BvVh:]*G'
 _GUARDRAILS_WGET_SHORT='^-[VhbdqvFcNS46xErkKmpHL]*([eoaiBtOTwQPUlARDIXn])(.*)$'
 _GUARDRAILS_HTTPIE_SHORT='^-[jfxhmbvSdcqFI46k]*([aAopPs])(.*)$'
+# The long options of curl 8.22 that take a value, from `curl --help all`, but --url, whose value is the URL, and those
+# read above.
+_GUARDRAILS_CURL_VALUED=' --abstract-unix-socket --alt-svc --aws-sigv4 --cacert --capath --cert --cert-type --ciphers
+ --connect-timeout --continue-at --cookie --create-file-mode --crlfile --curves --delegation --dns-interface
+ --dns-ipv4-addr --dns-ipv6-addr --dns-servers --doh-url --ech --egd-file --engine --etag-compare --etag-save
+ --expect100-timeout --ftp-account --ftp-alternative-to-user --ftp-method --ftp-port --ftp-ssl-ccc-mode
+ --happy-eyeballs-timeout-ms --haproxy-clientip --help --hostpubmd5 --hostpubsha256 --hsts --interface --ip-tos
+ --ipfs-gateway --keepalive-cnt --keepalive-time --key --key-type --knownhosts --krb --libcurl --limit-rate --local-port
+ --login-options --mail-auth --mail-from --max-filesize --max-redirs --max-time --netrc-file --noproxy --oauth2-bearer
+ --output-dir --parallel-max --parallel-max-host --pass --pinnedpubkey --proto --proto-default --proto-redir
+ --proxy-cacert --proxy-capath --proxy-cert --proxy-cert-type --proxy-ciphers --proxy-crlfile --proxy-header
+ --proxy-key --proxy-key-type --proxy-pass --proxy-pinnedpubkey --proxy-service-name --proxy-tls13-ciphers
+ --proxy-tlsauthtype --proxy-tlspassword --proxy-tlsuser --proxy-user --pubkey --quote --random-file --range --rate
+ --referer --request-target --retry --retry-delay --retry-max-time --sasl-authzid --service-name --sigalgs
+ --socks5-gssapi-service --speed-limit --speed-time --ssl-sessions --stderr --telnet-option --tftp-blksize --time-cond
+ --tls-max --tls13-ciphers --tlsauthtype --tlspassword --tlsuser --trace --trace-ascii --trace-config --unix-socket
+ --upload-flags --url-query --user --user-agent --variable --vlan-priority --write-out '
+_GUARDRAILS_CURL_VALUED="${_GUARDRAILS_CURL_VALUED//$'\n'/}"
+
 # An httpie or xh request item whose first separator sends data: =, :=, @, =@ or :=@, where == and : do not.
 _GUARDRAILS_HTTPIE_DATA='^[^:=@;]*(=[^=]|=$|:=|@)'
 
@@ -117,10 +136,7 @@ _guardrails_http_writes() {
           curl--output=* | curl--dump-header=* | curl--cookie-jar=* | curl--header=* | wget--output-document=* | \
             wget--header=* | http*--output=* | xh*--output=*) d=1 ;;
           # An option's value is not the URL, and httpie and xh count their arguments to tell the URL from the items.
-          curl--user | curl--user-agent | curl--cookie | curl--referer | curl--write-out | curl--max-time | \
-            curl--connect-timeout | curl--retry | curl--oauth2-bearer | curl--cert | curl--key | curl--cacert | \
-            curl--variable | curl--proxy-user | curl--range | wget--user | wget--password | wget--user-agent | \
-            wget--referer | wget--timeout | wget--tries | \
+          wget--user | wget--password | wget--user-agent | wget--referer | wget--timeout | wget--tries | \
             http*--auth | http*--auth-type | http*--session | http*--session-read-only | http*--proxy | \
             http*--print | http*--history-print | http*--style | http*--pretty | http*--timeout | http*--verify | \
             http*--cert | http*--cert-key | http*--ssl | http*--default-scheme | xh*--auth | xh*--auth-type | \
@@ -128,6 +144,7 @@ _guardrails_http_writes() {
             xh*--style | xh*--pretty | xh*--timeout | xh*--verify | xh*--cert | xh*--cert-key | xh*--ssl | \
             xh*--default-scheme | xh*--bearer | xh*--resolve)
             _guardrails_http_value ;;
+          curl--*) case "$_GUARDRAILS_CURL_VALUED" in *" $w "*) _guardrails_http_value ;; esac ;;
         esac ;;
       1-?*)
         case "$base$w" in curl-*G*) [[ $w =~ $_GUARDRAILS_CURL_GET ]] && get=1 ;; esac

