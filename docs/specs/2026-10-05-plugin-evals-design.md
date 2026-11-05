@@ -213,3 +213,16 @@ draft-pr. draft-pr's later 3-run result is under its case.
 
 Still open: whether to run in CI, on a schedule or on PRs, once scores are stable enough to
 gate on.
+
+## User-invoked skills (#157)
+
+A skill with `disable-model-invocation: true`, such as `learning-style`, loads only from its
+slash command, and `claude plugin eval` does not expand a slash command in `prompt.md`: a case
+whose prompt began `/building:learning-style visual` never saw the skill's body. Claude Code
+2.1.318 has no option that preloads a skill either (`claude plugin eval --help`).
+
+The route that remains is `context.history_file` in `case.yaml`. Record a real session in which
+the slash command ran, save its transcript as a `.jsonl` beside the case, and the case's prompt
+becomes the next turn, with the skill's body already in the conversation. Such a case runs one
+arm by default when the target is a path, so pass `--ablation with-without` for a baseline. No
+case uses it yet, because the transcript has to come from a session run by hand.
