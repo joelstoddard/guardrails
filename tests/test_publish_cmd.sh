@@ -1052,4 +1052,7 @@ allows 'curl -d x --retry-delay "$D" --limit-rate $R http://localhost/' "two val
 asks   'curl -d x --url "$U"'                                     "--url's value is the URL"
 asks   'curl -d x --compressed "$U"'                              "an option that takes no value leaves the URL"
 
+# A wrapper's quoted value with a blank is one word.
+blocks 'sudo -p "Password please:" gh pr comment 1 -b x'   "a publish behind a quoted prompt"
+
 finish "publish-cmd"

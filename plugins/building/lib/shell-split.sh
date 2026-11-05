@@ -471,6 +471,14 @@ _guardrails_whole_word() {
   case "$w" in *[\"\']* | *\\) [[ $w =~ $_GUARDRAILS_WHOLE_WORD ]] ;; esac
 }
 
+# _guardrails_word_end → moves the caller's i, on a word of its toks, to the last word of the split that the shell word
+# starting there spans, joined by a quote it leaves open or an escaped blank. Where the quote never closes, i stays.
+_guardrails_word_end() {
+  local k="$i"
+  [[ ${toks[$i]} =~ $_GUARDRAILS_OPEN_REST ]] || return 0
+  i=$((k + 1)); _guardrails_skip_quoted "${BASH_REMATCH[3]}"; i=$((i - 1))
+}
+
 # _guardrails_chdir <index> [prefix] → adds the directory a wrapper's option names, the shell word at <index> less its
 # prefix, to _GUARDRAILS_CMD_DIRS, with the caller's i on that word's last word of the split (#112). Reads the caller's toks.
 _guardrails_chdir() {
@@ -577,7 +585,7 @@ _guardrails_command_skip() {
               --chdir) [ -z "$cdo" ] || { _guardrails_chdir "$((i + 1))"; continue; } ;;
               --chdir=*) [ -z "$cdo" ] || { _guardrails_chdir "$i" --chdir=; continue; } ;;
             esac
-            case " $longs " in *" $o "*) i=$((i + 1)) ;; esac
+            case " $longs " in *" $o "*) i=$((i + 1)); case "${toks[$i]:-}" in *[\"\'\\]*) _guardrails_word_end ;; esac ;; esac
             case "$o" in --shell | --login) [ -z "$so" ] || ws="$b" ;; esac ;;
           -?*)
             # command -v and -V name a command without running it, and script -c runs a command line.
@@ -591,12 +599,15 @@ _guardrails_command_skip() {
               if [ "${#o}" -gt "${#BASH_REMATCH[0]}" ]; then _guardrails_chdir "$i" "${BASH_REMATCH[0]}"; else _guardrails_chdir "$((i + 1))"; fi
               continue
             fi
-            [[ -n $vals && -z ${o#-*[$vals]} ]] && i=$((i + 1)) ;;
+            # A value attached to an option, as in -p"a b", is one shell word with it.
+            case "$o" in *[\"\'\\]*) _guardrails_word_end ;; esac
+            [[ -n $vals && -z ${o#-*[$vals]} ]] && { i=$((i + 1)); case "${toks[$i]:-}" in *[\"\'\\]*) _guardrails_word_end ;; esac; } ;;
           *) break ;;
         esac
       done
       [ "$ops" -gt 0 ] || break
       # kubectl and ssh take options after their pod or host as well.
+      case "${toks[$i]:-}" in *[\"\'\\]*) _guardrails_word_end ;; esac
       ops=0; i=$((i + 1)); case "$b" in kubectl | ssh) ;; script) [ "${toks[$i]:-}" != -- ] || i=$((i + 1)); break ;; *) break ;; esac
     done
     ((start != remote)) || ra="$i"

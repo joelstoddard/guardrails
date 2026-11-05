@@ -96,7 +96,8 @@ the git guards and the shell readers, finds the command word through one lookup,
   of `timeout` and the root of `chroot`. In a cluster such as `-Eu`, the first option
   that takes a value takes the rest of the word, or the next word if none is left, as
   getopt does. A long option that takes a value, such as `sudo --user`, takes the next
-  word unless written with `=` (#116).
+  word unless written with `=` (#116). A value or operand is one shell word, joined across
+  the words of the split its quotes span, so `sudo -p "Password please:" git commit` commits.
 
 The shell drops a command word's quotes and backslashes, so the lookup does too before it
 matches a word: `"bash"`, `'gh'`, `ba\sh` and `$'bash'` are read as `bash`, `gh` and `bash`

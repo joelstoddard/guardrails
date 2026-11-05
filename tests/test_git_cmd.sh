@@ -486,4 +486,11 @@ no   $'bash <<EOF\necho \'\\$(git commit -m x)\'\nEOF'           commit "an esca
 walk $'bash <<EOF\ncd /x\necho \\$(git commit -m x)\nEOF'   commit /s 'local: /x'  "it runs where the script stands"
 walk $'ssh host bash <<EOF\necho \\$(git commit -m x)\nEOF' commit /s 'remote: /s' "and on another host, there"
 
+# A wrapper's value or operand is one shell word, though a quote in it spans several words of the split.
+yes 'sudo -p "Password please:" git commit -m x'     commit "a quoted prompt with a blank"
+yes 'sudo -p"Password please:" git commit -m x'      commit "a quoted prompt attached to its option"
+yes "sudo --prompt 'a b c' git commit -m x"          commit "a quoted value of a long option"
+yes 'script -q "my log" git commit -m x'             commit "a quoted file before script's command"
+cwd 'sudo -D"/a b" git commit -m x'                  commit /s "/a b" "a quoted directory attached to sudo -D"
+
 finish "git-cmd"
