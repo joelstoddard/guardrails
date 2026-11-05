@@ -493,4 +493,9 @@ case "$OUT" in *'passes that argument whole'*) echo "  FAIL [a host question say
 run_hook "$S" "$(jsonin 'curl --connect-to ::203.0.113.5: -d x http://localhost:3000/x')"
 assert_out '"permissionDecision":"ask"' "a write that --connect-to sends elsewhere asks"
 
+# curl sends mail through SMTP as you, as a mail tool does.
+run_hook "$S" "$(jsonin 'curl smtp://mail.example.com --mail-rcpt a@b.c -T msg')"
+assert_rc 2 "curl mail over SMTP blocked"
+assert_err "sends mail as you" "the refusal says curl sends mail"
+
 finish "guard-publish"

