@@ -60,6 +60,19 @@ assert_out 'reads commands from stdin' "a pipe into a shell warns, saying why, w
 run_hook "$S" "$(json "$rp" "cat cmds.txt | bash")"
 assert_eq "$OUT" "" "a pipe into a shell warns nothing when lint passes"
 
+# Past 64 directories the hook could time out, so it judges the first 64, then warns. A cwd of one directory per
+# line is printed back as the walk's directories, so it stands in for a command that commits in many.
+many() { local d="$1" n="$2"; shift 2; jq -cn --arg cwd "$(for x in "$@"; do printf '%s\n' "$x"; done; for _ in $(seq "$n"); do printf '%s\n' "$d"; done)" \
+  '{cwd:$cwd,tool_input:{command:"git commit -m x"}}'; }
+run_hook "$S" "$(many "$rp" 64)"
+assert_eq "$OUT" "" "64 directories whose lint passes warn nothing"
+run_hook "$S" "$(many "$rp" 65)"
+assert_rc 0 "65 directories never block"
+assert_out "more than 64 directories" "past 64 directories the hook warns it could not judge them all"
+run_hook "$S" "$(many "$rp" 64 "$rf")"
+assert_out "Lint failed in $(cd "$rf" && pwd -P)" "a lint failure within the first 64 directories still warns"
+case "$OUT" in *"more than 64"*) echo "  FAIL [a lint failure is the one warning]: $OUT"; FAILS=1 ;; esac
+
 # With no cwd in its input, the hook judges the directory it runs in.
 run_hook "$S" '{"tool_input":{"command":"git commit -m x"}}'
 assert_out "$here" "with no cwd, the hook judges the directory it runs in: a scratch repo, never the caller's"

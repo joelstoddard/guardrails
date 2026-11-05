@@ -88,6 +88,19 @@ assert_out 'reads commands from stdin' "the question says why"
 run_hook "$S" "$(json "$r" "cat cmds.txt | bash")"
 assert_eq "$OUT" "" "a pipe into a shell asks nothing when the tests pass"
 
+# Past 64 directories the gate could time out, so it judges the first 64, then asks. A cwd of one directory per
+# line is printed back as the walk's directories, so it stands in for a command that pushes from many.
+many() { local d="$1" n="$2"; shift 2; jq -cn --arg cwd "$(for x in "$@"; do printf '%s\n' "$x"; done; for _ in $(seq "$n"); do printf '%s\n' "$d"; done)" \
+  '{cwd:$cwd,tool_input:{command:"git push origin HEAD"}}'; }
+run_hook "$S" "$(many "$r" 64)"
+assert_eq "$RC:$OUT" "0:" "64 directories whose tests pass push"
+run_hook "$S" "$(many "$r" 65)"
+assert_rc 0 "65 directories are not refused outright"
+assert_out '"permissionDecision":"ask"' "past 64 directories the gate asks"
+assert_out 'more than 64 directories' "the question says why"
+run_hook "$S" "$(many "$r" 64 "$rf")"
+assert_rc 2 "a failure within the first 64 directories still blocks"
+
 # Hooks run outside Claude Code's sandbox, so a command from an agent doc edited since the last commit does not run (#83).
 rd="$(make_repo main)"; ran="$(scratch_dir)/ran"
 printf '## Commands\n- **Test:** `true`\n' > "$rd/AGENTS.md"; commit_doc "$rd"

@@ -26,6 +26,8 @@ else
 fi
 [ "${SKIP_TEST_GATE:-}" = "1" ] && exit 0
 
+# Each directory costs a git call and may cost a run, so past 64 the hook could time out: it judges 64, then says so.
+over="$(printf '%s\n' "$dirs" | awk 'NR > 64 { print 1; exit }')"
 while IFS= read -r repo; do
   testcmd="$(repo_cmd "$repo" test)" || {
     echo "⚠️  test-gate: no test command in the committed AGENTS.md or CLAUDE.md of $repo — skipping (CI is the backstop). Document it to enable the local gate." >&2
@@ -39,6 +41,10 @@ while IFS= read -r repo; do
   fi
   echo "Tests failed in $repo: \`$testcmd\` (from its agent doc). Fix them before pushing, or set SKIP_TEST_GATE=1 to override." >&2
   exit 2
-done < <(printf '%s\n' "$dirs" |
+done < <(printf '%s\n' "$dirs" | awk 'NR <= 64' |
   while IFS= read -r dir; do git -C "$dir" rev-parse --show-toplevel 2>/dev/null; done | awk '!seen[$0]++')
+if [ -n "$over" ]; then
+  jq -cn --arg r "${unsure:+$unsure. }Could not check the tests of every repo this pushes from: it pushes from more than 64 directories, more than the gate can check in time. It checked the first 64." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+fi
 exit 0

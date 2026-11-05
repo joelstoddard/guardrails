@@ -24,12 +24,18 @@ else
   dirs="$(_guardrails_git_effective_cwd "$cmd" commit "${cwd:-.}")"
 fi
 
+# Each directory costs a git call and may cost a run, so past 64 the hook could time out: it judges 64, then says so.
+over="$(printf '%s\n' "$dirs" | awk 'NR > 64 { print 1; exit }')"
 while IFS= read -r repo; do
   lintcmd="$(repo_cmd "$repo" lint)" || continue
   ( cd "$repo" && eval "$lintcmd" ) </dev/null >/dev/null 2>&1 && continue
   jq -n --arg c "⚠️ ${unsure}Lint failed in $repo (\`$lintcmd\` from its agent doc). Committing anyway — fix before pushing." \
     '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}'
   exit 0
-done < <(printf '%s\n' "$dirs" |
+done < <(printf '%s\n' "$dirs" | awk 'NR <= 64' |
   while IFS= read -r dir; do git -C "$dir" rev-parse --show-toplevel 2>/dev/null; done | awk '!seen[$0]++')
+if [ -n "$over" ]; then
+  jq -n --arg c "⚠️ ${unsure}Could not check lint in every repo this commits in: it commits in more than 64 directories, more than the hook can check in time. It checked the first 64." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}'
+fi
 exit 0

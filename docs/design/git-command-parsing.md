@@ -182,6 +182,11 @@ The publish guard checks `curl`, `wget`, `http` and `gh api` lines without start
 scan now costs a regex per URL. So past 32 URLs in one segment a write is read as remote,
 which bounds a segment, while the length cap bounds the URLs in a command.
 
+`test-gate` and `lint-warn` make a git call for each directory the walk prints, and run a test
+or lint command for each repo those directories are in. So past 64 directories, the cap
+`guard-default-branch` uses, they judge the first 64 and say so: `test-gate` asks and
+`lint-warn` warns.
+
 Within the caps, the slowest inputs measured took 4.1 s of the 10 s budget on macOS, on an
 M4 Max at load 3 to 6, when re-measured for #131: 32,000 `env` wrappers before a `git commit`,
 read by guard-default-branch, and one `eval` re-reading 480 `curl -d` lines of 32 local hosts
