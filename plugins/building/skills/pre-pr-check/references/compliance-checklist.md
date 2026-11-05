@@ -355,8 +355,12 @@ carefully:
 
 - Real data returned — grade the required checks and review count. Zero
   required reviews is normal for a solo repo.
-- **A 404 from this endpoint specifically means no protection rule exists.**
-  That is a confirmed Missing, not unknown.
+- A 404 does not by itself mean no rule exists: GitHub also returns 404 to a
+  token without admin on the repo. Read `.protected` from
+  `gh api repos/OWNER/REPO/branches/BRANCH` and `.permissions.admin` from
+  `gh api repos/OWNER/REPO`. `.protected: true` confirms a rule exists, for
+  any token. A 404 is a confirmed Missing only when the token has admin AND
+  `.protected` is `false`. Any other 404 is unknown.
 - Any other failure, almost always insufficient token scope, is **unknown**.
   Never conflate the two.
 
