@@ -228,7 +228,7 @@ call: this skill does not create issues.
 | Lint or Test undocumented | NOT DOCUMENTED is a finding. Do not silently skip it. |
 | Base cannot be resolved | Stop. Every diff-scoped check depends on it. |
 | A tool the checklist names is absent | unknown for that category, naming the tool. Never Missing. |
-| `gh` call refused for token scope | unknown. The one exception is a 404 from the branch-protection endpoint, which confirms no rule exists. |
+| `gh` call refused for token scope | unknown. The one exception is a 404 from the branch-protection endpoint, which checklist §18 grades. |
 | Secret found in already-pushed history | Report it and say plainly that a new commit will not remove it. |
 | Conditional category does not apply | One N/A line. No sub-items. |
 
