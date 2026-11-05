@@ -140,7 +140,9 @@ were. What the new reading costs is in the timing section of
 
 - **Skipping the value of every option.** It would need each client's full table of
   options that take a value, over 150 for curl, and a value the table misses would
-  hide a host. The user chose to skip only the values that never name one.
+  hide a host. The user chose to skip only the values that never name one. curl's
+  full table is now kept, but only to tell a value from the URL: each value is still
+  read for a host.
 - **Any URL with an `@` is remote.** It is simpler, but it refuses
   `http://admin:pass@127.0.0.1:5984/db`, a usual local form for CouchDB and
   Elasticsearch.
@@ -171,6 +173,14 @@ were. What the new reading costs is in the timing section of
 - **A pipe into httpie or xh** sends what it reads as the body, as a redirect of stdin
   does, but the guard reads each command of a pipeline alone, so `echo hi | http
   example.com` is not read as a write.
+
+- **A curl config file's own options,** as a `--data` or a URL in the file `-K` reads,
+  are not seen: a write on the command line with `-K` asks, but `curl -K cfg` alone,
+  whose file may hold the write, is read as a read. The same holds for wget's `--config`
+  and its `-e` commands that name no body or method.
+- **curl's `--dns-servers` and `--doh-url`** resolve the URL's name elsewhere, so a
+  `.local` name may reach another host; they are read as any option's value, not as
+  `--resolve` is.
 
 ## Failure mode if you change this
 

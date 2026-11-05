@@ -462,6 +462,18 @@ per-line split cuts every quoted line into pieces, so a piece read there asks no
 before. Git's skip leaves a piece as written, as before, so `git "commit -m x"` is not a
 commit.
 
+Known limits the user chose to write up rather than fix:
+
+- **`git checkout <name> && git commit`** without `-b` is judged at HEAD, not on `<name>`,
+  as `<name>` may be a file that checkout restores, which leaves HEAD where it was. So a
+  commit after a checkout of a default branch is judged on the branch the repo is on.
+- **A heredoc fed to `script`** is read as data, as `script` is not among the names that
+  make a heredoc a script (`script` with no command starts a shell that reads it). Adding
+  it would make every heredoc on a line that names `script`, as in `npm run script`, a
+  script, and a pipe into `script` already asks.
+- **A brace group's `cd`** lasts past the group in the shell, but the walk follows it
+  inside the group only, so `{ cd /x; }; git commit` is judged where the shell sits.
+
 ## Commits elsewhere
 
 A git command that ssh, `docker exec`, `kubectl exec` or `nsenter` runs is read like a local
