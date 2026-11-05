@@ -418,4 +418,8 @@ assert_out '"permissionDecision":"ask"' "an escaped substitution in ssh's comman
 run_hook "$S" "$(jsonat "$rw" $'bash <<EOF\necho \\$(git commit -m x)\nEOF')"
 assert_rc 2 "an escaped substitution in a shell's unquoted heredoc blocked"
 
+# A wrapper's quoted value with a blank is one word, so the commit behind it is seen.
+run_hook "$S" "$(jsonat "$rw" 'sudo -p "Password please:" git commit -m x')"
+assert_rc 2 "a commit behind a quoted prompt blocked"
+
 finish "guard-default-branch"
