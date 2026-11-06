@@ -26,7 +26,7 @@ if dir="$(_guardrails_pending_dir "$(field .session_id)")" && [ -d "$dir" ]; the
   done
   pending="$(cat "$dir"/* 2>/dev/null | awk '!seen[$0]++')"
 fi
-# ponytail: pending findings wait for a findings list; a session that never writes one never shows them.
+# Pending findings wait for a findings list; findings-reminder.sh names their count at each prompt.
 [ -n "$pending" ] && ! _guardrails_listing "$msg" && exit 0
 
 if [ "$active" = "true" ]; then

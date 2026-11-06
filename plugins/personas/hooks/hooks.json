@@ -18,7 +18,7 @@
           {
             "type": "command",
             "timeout": 10,
-            "command": "jq -Rs --arg root \"${CLAUDE_PLUGIN_ROOT}\" 'gsub(\"\\\\$\\\\{CLAUDE_PLUGIN_ROOT\\\\}\"; $root) | {hookSpecificOutput:{hookEventName:\"SessionStart\",additionalContext:.}}' \"${CLAUDE_PLUGIN_ROOT}/rules/delegation.md\""
+            "command": "jq -Rs --arg root \"${CLAUDE_PLUGIN_ROOT}\" --arg config \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\" 'gsub(\"\\\\$\\\\{CLAUDE_PLUGIN_ROOT\\\\}\"; $root) | gsub(\"\\\\$\\\\{CLAUDE_CONFIG_DIR\\\\}\"; $config) | {hookSpecificOutput:{hookEventName:\"SessionStart\",additionalContext:.}}' \"${CLAUDE_PLUGIN_ROOT}/rules/delegation.md\""
           }
         ]
       }
@@ -29,7 +29,7 @@
           {
             "type": "command",
             "timeout": 10,
-            "command": "jq -Rs --arg root \"${CLAUDE_PLUGIN_ROOT}\" 'gsub(\"\\\\$\\\\{CLAUDE_PLUGIN_ROOT\\\\}\"; $root) | {hookSpecificOutput:{hookEventName:\"SubagentStart\",additionalContext:.}}' \"${CLAUDE_PLUGIN_ROOT}/rules/persona-protocol.md\""
+            "command": "jq -Rs --arg root \"${CLAUDE_PLUGIN_ROOT}\" --arg config \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\" 'gsub(\"\\\\$\\\\{CLAUDE_PLUGIN_ROOT\\\\}\"; $root) | gsub(\"\\\\$\\\\{CLAUDE_CONFIG_DIR\\\\}\"; $config) | {hookSpecificOutput:{hookEventName:\"SubagentStart\",additionalContext:.}}' \"${CLAUDE_PLUGIN_ROOT}/rules/persona-protocol.md\""
           }
         ]
       }

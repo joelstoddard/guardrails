@@ -5,7 +5,6 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 ## Design & Architecture
 *Tier: CHANGE*
 
-* You SHOULD NOT add complexity. You MUST follow KISS (keep it stupid simple).
 * You MUST NOT design systems that are difficult or impossible to revert.
 * You MUST NOT design systems for problems that don't exist. You MUST validate that issues actually exist, reproducibly, before designing solutions.
 * You MUST NOT consolidate concerns.
@@ -33,7 +32,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 * You MUST reach potential errors as fast as possible (fail fast).
 * You MUST NOT swallow errors. You MUST handle an error, propagate it, OR fail loudly.
     * Where possible, surface meaningful logs and errors to end users.
-* You MUST name things for what they ARE or DO. You MUST NOT use names that need a comment to explain them.
+* You MUST name things for what they are or do. You MUST NOT use names that need a comment to explain them.
 * You SHOULD prefer pure functions and immutability. You MUST keep side effects (clock, randomness, network, filesystem, environment) at the edges. Inject them ONLY WHEN a test must control them.
 * You MUST NOT commit commented-out code, dead code, OR unreferenced TODOs.
 * You MUST NOT leave placeholder, stubbed, OR "not implemented" code behind a claim of completion.
@@ -44,7 +43,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 ## Simplicity
 *Tier: EDIT*
 
-* You SHOULD make the smallest change that solves the problem. IF code your change adds OR touches can go without changing behaviour a user depends on, remove it.
+* You SHOULD make the smallest change that solves the problem (KISS: keep it stupid simple). IF code your change adds OR touches can go without changing behaviour a user depends on, remove it.
 * BEFORE you write new code, you MUST look for what already does the job: the standard library, a dependency the project already has, OR code already in the repo. Use it.
 * You MUST NOT add a wrapper OR layer of indirection that has one caller AND no logic of its own. Inline it.
 * You MUST NOT reimplement what the runtime, framework, OR infrastructure already provides (logging, metrics, retries, timeouts, config). Security controls are exempt; see Security & Data.
@@ -62,14 +61,14 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 * You MUST NOT submit a change that lowers confidence in the system.
 * You MUST test behaviour; you MUST NOT test implementation details.
 * You MUST NOT weaken, skip, delete, OR loosen a test, threshold, OR gate to make a change pass. Fix the code.
-* You MUST NOT disable a failing check. IF a check is genuinely wrong, STOP AND ask the user, with evidence.
+* You MUST NOT disable a failing check. IF a check is genuinely wrong, stop AND ask the user, with evidence.
 * You MUST add a new constraint when a defect escapes. The escape MUST become impossible to repeat.
-* IF a constraint you need does not exist (no tests, no linter, no gate), you MUST leave the ONE smallest check that fails if your logic breaks, AND propose the larger gate as a finding. You MUST NOT build test infrastructure unasked.
+* IF a constraint you need does not exist (no tests, no linter, no gate), you MUST leave the one smallest check that fails if your logic breaks, AND propose the larger gate as a finding. You MUST NOT build test infrastructure unasked.
 
 ### Quality gates & metrics
 *Tier: CHANGE*
 
-* You MUST satisfy EVERY gate the project HAS configured (build, types, lint, format, tests, coverage floor, mutation score floor, complexity limits, security scans, performance budgets). You MUST NOT skip one. IF one you would expect is missing, say so as a finding.
+* You MUST satisfy EVERY gate the project has configured (build, types, lint, format, tests, coverage floor, mutation score floor, complexity limits, security scans, performance budgets). You MUST NOT skip one. IF one you would expect is missing, say so as a finding.
 * You MUST NOT lower a threshold. Thresholds are ratchets: they MAY rise AND MUST NOT fall.
 * You MUST keep cyclomatic complexity, cognitive complexity, duplication, coupling, AND file/function size from regressing.
     * WHERE the project measures cyclomatic complexity OR CRAP, you MUST measure each function you touch, before AND after, with the project's own tooling. Its complexity may rise ONLY by the branches the task requires, AND its coverage MUST NOT fall. Report each touched function's complexity AND coverage, before AND after.
@@ -81,7 +80,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 *Tier: EDIT*
 
 * You MUST write a failing test BEFORE writing non-trivial logic (a branch, a loop, a parser, a money OR security path) (red, green, refactor). Trivial one-liners need no test.
-* You MUST run the test AND watch it fail for the RIGHT reason before making it pass.
+* You MUST run the test AND watch it fail for the right reason before making it pass.
 * You MUST write the minimum code to pass the test. You MUST NOT add behaviour no test demands.
 * You MUST refactor ONLY when tests are green.
 
@@ -92,7 +91,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 * You MUST run linters with warnings treated as errors WHERE the project configures them.
 * You MUST run formatters automatically WHERE the project configures them. You MUST NOT introduce style changes by hand.
 * You MUST run static analysis for bugs, code smells, dead code, AND unsafe patterns on EVERY change, WHERE the project configures it.
-* You MUST NOT suppress a finding to get past a gate. A suppression is permitted ONLY for a proven false positive, scoped to the single finding, with a comment explaining WHY.
+* You MUST NOT suppress a finding to get past a gate. A suppression is permitted ONLY for a proven false positive, scoped to the single finding, with a comment explaining why.
 * You MUST NOT use type escape hatches (`any`, `ignore`, casts) to silence an error. Fix the type.
 
 ### Shift left
@@ -106,7 +105,7 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 ## Version Control Discipline
 *Tier: CHANGE*
 
-* You MUST write commit messages that explain WHY, NOT just what.
+* You MUST write commit messages that explain why, NOT just what.
 * You MUST NOT commit secrets, generated artefacts, OR large binaries.
 * The `building:commit` skill, the permission deny list, AND the default-branch guard enforce the rest.
 
@@ -115,12 +114,12 @@ Loaded in every session by the building plugin, with the conduct rules, which de
 ## Collaboration & Process
 *Tier: CHANGE*
 
-* You MUST leave code better than you found it, WITHIN the scope of the task. Surface everything else as a finding.
+* You MUST leave code better than you found it, within the scope of the task. Surface everything else as a finding.
 * You MUST keep changes small enough to be reviewed properly.
-* You MUST draft the WHY in pull request descriptions. PRs open as drafts through `building:draft-pr`; promoting one to ready is the user's call.
+* You MUST draft the why in pull request descriptions. PRs open as drafts through `building:draft-pr`; promoting one to ready is the user's call.
 * You MUST review the change, NOT the author.
 * You MUST track technical debt explicitly, as an issue in the session's tracker, with an owner AND a cost of delay. You MUST NOT hide it. IF the owner is unknown, ask; you MUST NOT invent one.
 * You MUST deprecate a published interface (an API, CLI flag, config key, OR file format that others depend on) with a timeline, a migration path, AND a removal date. You MUST NOT remove one without notice. Code your own change made unused is NOT a published interface; remove it.
-* You MUST pay down the debt you touch, WITHIN the scope of the task.
+* You MUST pay down the debt you touch, within the scope of the task.
 * You MUST respond to review feedback by fixing the cause, NOT by arguing the check away.
 * You MUST define ownership. EVERY service, API, AND alert MUST have a named owning team. IF it is unknown, ask; you MUST NOT invent one.

@@ -31,8 +31,25 @@ _guardrails_unfence() {
     }'
 }
 
+# _guardrails_pipe_rows → stdin with a leading pipe added to each row of a GFM table written without
+# one, so the parser reads both forms alike. A table starts at a pipe-bearing line above a delimiter
+# row (--- | ---) and runs while its lines hold a pipe.
+_guardrails_pipe_rows() {
+  awk '
+    function delim(s) { return s ~ /[|]/ && s ~ /-/ && s ~ /^[-:|[:space:]]+$/ }
+    { line[NR] = $0 }
+    END {
+      for (i = 1; i <= NR; i++) {
+        if (!t && i < NR && line[i] ~ /[|]/ && delim(line[i + 1])) t = 1
+        if (line[i] !~ /[|]/) t = 0
+        if (t && line[i] !~ /^[[:space:]]*[|]/) { match(line[i], /^[[:space:]]*/); line[i] = substr(line[i], 1, RLENGTH) "| " substr(line[i], RLENGTH + 1) }
+        print line[i]
+      }
+    }'
+}
+
 _guardrails_findings() {
-  _guardrails_unfence "$1" | H="$_GUARDRAILS_HEADING_RE" awk '
+  _guardrails_unfence "$1" | _guardrails_pipe_rows | H="$_GUARDRAILS_HEADING_RE" awk '
     function flush() { if (item != "") print item; item = "" }
     # Emphasis, parentheses and a dashed reason do not make an empty list a finding.
     function empty(s) {
@@ -40,25 +57,33 @@ _guardrails_findings() {
       return s ~ /^((none|nothing)( found| to report)?|no findings( outside scope)?|n\/a)[.!]?$/ ||
         s ~ /^(none|nothing|n\/a)[[:space:]]+(-|–|—)[[:space:]]/
     }
-    { after_blank = blank; blank = ($0 ~ /^[[:space:]]*$/) }
+    { after_blank = blank; blank = ($0 ~ /^[[:space:]]*$/); after_row = row; row = ($0 ~ /^[[:space:]]*\|/) }
+    # Inside the section a bold-only line (**Also:**) labels the items below it, so it starts a new
+    # list rather than ending the section.
     $0 ~ ENVIRON["H"] {
-      flush(); insec = (tolower($0) ~ /findings outside scope/); base = -1; next
+      flush(); base = -1
+      if (!insec || $0 ~ /^[[:space:]]*#/) insec = (tolower($0) ~ /findings outside scope/)
+      next
     }
     !insec { next }
     # The first item sets the top level; a deeper bullet continues the item above it.
-    /^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+/ {
+    # A table row (one with a leading pipe) is an item too, its cells joined; the row above a
+    # delimiter row is the header.
+    /^[[:space:]]*(([-*+]|[0-9]+[.)])[[:space:]]+|\|)/ {
       match($0, /^[[:space:]]*/)
       if (base < 0) base = RLENGTH
       if (RLENGTH <= base) {
-        flush(); line = $0; sub(/^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+/, "", line)
+        if ($0 ~ /^[[:space:]]*\|[-:| ]*-[-:| ]*$/) { if (after_row) item = ""; next }
+        flush(); line = $0
+        if (!sub(/^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+/, "", line)) { gsub(/[[:space:]]*\|[[:space:]]*/, " ", line); gsub(/^ +| +$/, "", line) }
         if (!empty(line)) item = line
         next
       }
     }
     /^[[:space:]]+[^[:space:]]/ { if (item != "") { l = $0; sub(/^[[:space:]]+/, "", l); item = item " " l }; next }
     blank { next }
-    # An unclosed fence, a quote, a table, a comment OR a rule stays in the section, so it cannot hide what follows.
-    /^[[:space:]]*(```|~~~|>|\||<!--|---)/ { flush(); next }
+    # An unclosed fence, a quote, a comment OR a rule stays in the section, so it cannot hide what follows.
+    /^[[:space:]]*(```|~~~|>|<!--|---)/ { flush(); next }
     # A plain line straight after an item continues it. After a blank line it ends the section,
     # so a later list (Next steps) is not read as findings.
     !after_blank && item != "" { item = item " " $0; next }

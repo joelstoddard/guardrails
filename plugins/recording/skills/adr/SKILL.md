@@ -9,7 +9,7 @@ In a personal project an ADR is a design doc: `docs/design/<concept>.md`, named 
 
 ## Protocol
 
-1. **Check the context.** IF the session context names another ADR skill, STOP AND use that one.
+1. **Check the context.** IF the session context names another ADR skill, stop AND use that one.
 2. **Look for an existing doc** on the concept in `docs/design/`. IF one exists, update it in place.
 3. **Write it** with these sections. Drop a section ONLY WHEN it would be empty:
 
@@ -28,4 +28,4 @@ In a personal project an ADR is a design doc: `docs/design/<concept>.md`, named 
 ## Rules
 
 * You MUST update a design doc in place WHEN its decision changes. You MUST NOT leave a stale version alongside it, AND you MUST NOT archive one. Git history keeps the old reasoning.
-* You MUST state the alternatives rejected AND WHY.
+* You MUST state the alternatives rejected AND why.

@@ -35,6 +35,7 @@ show whether a skill body or only the rules did the work.
 | --- | --- | --- |
 | `migration-routes-to-data-engineer` | Substantial domain work reaches the matching persona | The trace dispatches `"subagent_type":"personas:data-engineer"` |
 | `small-edit-stays-local` | A small edit stays with the main session | No dispatch of any `personas:` agent |
+| `review-not-forked` | A review of the main session's change goes to a fresh agent, not one that shares its context | An agent is dispatched; none with `"subagent_type":"fork"`; the main session runs no code-review skill itself |
 
 - **Routing is graded on the dispatch's `subagent_type`, not on a tool name.** Traces name
   the dispatch tool `Task`, while the docs call it `Agent`.
@@ -67,6 +68,16 @@ One `--runs 1` pass per suite on Haiku 4.5, 2026-10-06, with no run errors:
 
 The personas rows are from the run through the no-dependencies copy. The first personas
 run, before that, loaded no personas at all.
+
+`track-findings-footer` on Haiku 4.5 and Claude Code 2.1.310, 2026-10-24 (#97):
+
+- **Before:** with 0.50, without 0.50, Δ 0.00 (6 runs). The skill fired in all three
+  with-runs, but `gh repo view` cannot reach GitHub from the sandbox, and the model asked
+  which repo to use without drafting the issue.
+- **After an unreadable repo became shared:** with 0.75, without 0.50, Δ +0.25 (4 runs).
+  The run that loaded the skill showed the draft with its footer. The other never loaded
+  it and ran `gh issue create` bare, as did the first before loading it.
+- **The description that leads with its triggers** has had no run yet.
 
 ## Verification
 

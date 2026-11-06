@@ -59,7 +59,7 @@ kept throughout.
   skills/rfc/           personal RFC → docs/specs/YYYY-MM-DD-<topic>-design.md
   skills/adr/           personal ADR → docs/design/<concept>.md
   skills/track-findings/ file each finding in the session's tracker
-  hooks/scripts/{persona-report,findings-capture,findings-gate,suppression-warn}.sh
+  hooks/scripts/{persona-report,findings-capture,findings-gate,findings-reminder,suppression-warn}.sh
   lib/findings.sh
 ```
 
@@ -208,6 +208,7 @@ reference.
 | `persona-report.sh`   | `SubagentStop`, `architect\|data-engineer\|qa-engineer\|release-engineer\|sre\|security-engineer\|technical-writer` | Blocks a final message lacking `## Result: DONE\|PARTIAL\|BLOCKED` or any of the six `###` headings; the reason carries the format                           | Allows when `stop_hook_active`. Fail-open without `jq`                                   |
 | `findings-capture.sh` | `SubagentStop`, all agents                                                                                          | Appends the report's findings to a per-session pending file that `findings-gate` surfaces at the next `Stop`                                                 | A background subagent's report never reaches a main-session hook (live check 5). Unsafe session ids are ignored |
 | `findings-gate.sh`    | `Stop`                                                                                                              | Blocks once if any item in a findings section of the final message does not end with an issue URL, `#N`, `owner/repo#N`, `(asked)` or `(declined)`, AND lists pending subagent findings, consuming them | Allows when `stop_hook_active`. `ponytail:` ceiling: findings under another heading pass |
+| `findings-reminder.sh` | `UserPromptSubmit`                                                                                                  | Names how many pending subagent findings wait for a findings list, which `findings-gate` holds until one comes                                               | Never blocks. Unsafe session ids are ignored                                             |
 | `suppression-warn.sh` | `PostToolUse`, `Edit\|Write\|MultiEdit`                                                                             | Warns, never blocks, on added `it\|test\|describe\|context\|suite.skip(`, `xit(`, `@pytest.mark.skip`, `t.Skip(`, `# noqa`, `eslint-disable`, `@ts-ignore`, `type: ignore`, `as any`, `nolint` | Same shape as `comment-warn.sh`; markdown ignored                                        |
 
 The findings scripts share `lib/findings.sh`, which extracts the items of a findings
@@ -255,13 +256,14 @@ command:
     subagent's findings per session, and the gate surfaces them once and consumes them.
     An unsafe session id is ignored.
   - `test_suppression_warn.sh`: each pattern warns, markdown is ignored, nothing blocks.
-- **Consistency.** `tests/test_agents.py`, ported from the dotfiles' `test/unit/test_personas.py` (Python `unittest`, like its neighbours):
-  - every `guardrails:` skill named in an agent or rule exists;
-  - the `SubagentStop` matcher and the agent files list the same personas;
-  - every agent has `name`, `description` and `tools`;
-  - every rule's frontmatter parses.
-
-  This is the check that would have caught the draft's dangling references.
+- **Consistency.** Each check lives in the file named:
+  - `tests/test_references.sh`: every `building:`, `recording:` or `personas:` skill or
+    agent named under `plugins/` exists, and no stale `guardrails:` name or old rule path
+    remains. This is the check that would have caught the draft's dangling references.
+  - `tests/test_agents.py`: the `SubagentStop` matcher and the agent files list the same
+    personas, and every agent has `name`, `description` and `tools`.
+  - The dotfiles' `test/unit/test_rules.py`: every path-scoped rule's frontmatter parses.
+    The plugins' own rules have no frontmatter, since hooks load them.
 
 - **Work plugin.** Its own `tests/test_work_context.sh`: context under `~/work`, silent
   elsewhere.

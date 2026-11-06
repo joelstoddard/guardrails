@@ -44,7 +44,74 @@ OUT="$(_guardrails_findings '### Findings outside scope
 ---
 2. Retries are unbounded')"
 assert_eq "Cache never expires
+a table
 Retries are unbounded" "$OUT" "quotes, tables, comments and rules between items keep the section open"
+
+# #154: a findings table is read row by row, and the row above the delimiter row is its header.
+OUT="$(_guardrails_findings '### Findings outside scope
+| Finding | Issue |
+|---|:---:|
+| Cache never expires | #12 |
+| Retries are unbounded | |
+| | |
+| None | |
+
+Next: run these.
+1. `make clean`')"
+assert_eq "Cache never expires #12
+Retries are unbounded" "$OUT" "a findings table: each body row is a finding, and a paragraph break still ends it"
+OUT="$(_guardrails_untracked '**Findings outside scope:**
+| Finding | Issue |
+| --- | --- |
+| Cache never expires | https://github.com/o/r/issues/12 |
+| Retries are unbounded | |')"
+assert_eq "Retries are unbounded" "$OUT" "a row tracks by the reference in its last cell"
+
+# A GFM table may drop its leading pipes: a pipe-bearing row above a delimiter row starts one.
+OUT="$(_guardrails_findings '### Findings outside scope
+- Listed first #11
+Finding | Issue
+--- | :---:
+Cache never expires | #12
+Retries are unbounded |
+
+Next: run these.
+1. `make clean`')"
+assert_eq "Listed first #11
+Cache never expires #12
+Retries are unbounded" "$OUT" "a table without leading pipes: each body row is a finding, and a paragraph break still ends it"
+OUT="$(_guardrails_untracked '### Findings outside scope
+
+  Finding | Issue
+  ---|---
+  Cache never expires | https://github.com/o/r/issues/12
+  Retries are unbounded |')"
+assert_eq "Retries are unbounded" "$OUT" "a pipeless row tracks by the reference in its last cell, even indented"
+OUT="$(_guardrails_findings '### Findings outside scope
+- Cache never expires
+Pipes | in prose
+---
+- Retries are unbounded')"
+assert_eq "Cache never expires Pipes | in prose
+Retries are unbounded" "$OUT" "a rule with no pipe under a prose line is not a delimiter row"
+
+# #154: a bold-only line inside the section labels the items below it; it does not end the section.
+OUT="$(_guardrails_findings '### Findings outside scope
+- Cache never expires #12
+
+**Also:**
+- Retries are unbounded')"
+assert_eq "Cache never expires #12
+Retries are unbounded" "$OUT" "a bold sub-label keeps the section open"
+OUT="$(_guardrails_findings '### Findings outside scope
+- Cache never expires #12
+**Found late:**
+These came up while testing:
+  - Retries are unbounded
+### Questions for the user
+- none yet')"
+assert_eq "Cache never expires #12
+Retries are unbounded" "$OUT" "a sub-label starts its own list: an intro line and a new indent, then a heading ends it"
 
 OUT="$(_guardrails_findings '### Findings outside scope
 None.')"
@@ -149,5 +216,8 @@ Strings use UTF-8
 Ends with #1 priority bug
 Fixed already in PR #85
 Fixed already in PR o/r#86." "$OUT" "only an end-of-line issue reference or marker tracks: not mid-line #N, not a PR, any case"
+
+OUT="$(_guardrails_handback "$(scratch_dir)/missing")" && r=0 || r=$?
+assert_eq "0:" "$r:$OUT" "a missing transcript is no handback, and not an error"
 
 finish "findings"

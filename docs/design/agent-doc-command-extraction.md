@@ -40,6 +40,30 @@ command, and is skipped.
 Matching is case-insensitive, the first match wins, and the pattern stays within
 BSD grep so it works on macOS without GNU coreutils.
 
+## Which version of the doc
+
+test-gate and lint-warn `eval` the command, and Claude Code runs hooks outside its
+sandbox. So in a sandboxed session, an agent that edited the doc could have its next
+commit or push run any command unsandboxed (#83). The command is therefore read from
+the doc as committed at `HEAD`, through `git cat-file`, never from the working tree. An
+edit takes effect once committed, and a doc never committed names no command, so the
+gate is skipped as for a repo without one. Every `AGENTS.md` and `CLAUDE.md` in the
+author's checkouts was committed when this was written.
+
+This closes the one-step route only. It is not a boundary, because a sandboxed agent can
+still:
+
+- commit the doc, as the sandbox protects only `hooks` and `config` inside `.git`;
+- point `git -C` at a repo it made itself, which the hooks judge since #75;
+- edit what the command runs, such as a `Makefile` or the test suite.
+
+Closing those needs a signal that the session is sandboxed, which Claude Code does not
+document, or running the command inside a sandbox.
+
+Rejected: checking `git diff --quiet HEAD -- AGENTS.md CLAUDE.md` and then reading the
+working tree. It skips the gate whenever the doc has uncommitted changes, runs an
+untracked doc whatever it says, and the file can change between the check and the read.
+
 ## If you change this
 
 Loosening the rule to "take the first code span" reintroduces the blocked-push
