@@ -47,6 +47,13 @@ jobs:
           git fetch --depth=1 origin "$GITHUB_BASE_REF"
           git show FETCH_HEAD:tests/coverage-floor.tsv > "$RUNNER_TEMP/base-floor.tsv"
           bash tests/coverage.sh --base FETCH_HEAD --ratchet "$RUNNER_TEMP/base-floor.tsv"
+      # The same ratchet for the mutation floors: a floor may rise but not fall, and a base without the file fails.
+      - name: Check mutation floors only rise
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "$GITHUB_BASE_REF"
+          git show FETCH_HEAD:tests/mutation-floor.tsv > "$RUNNER_TEMP/base-mutation-floor.tsv"
+          bash tests/coverage.sh --base FETCH_HEAD --ratchet "$RUNNER_TEMP/base-mutation-floor.tsv" tests/mutation-floor.tsv
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: '3.12'
