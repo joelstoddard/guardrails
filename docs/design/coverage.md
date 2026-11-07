@@ -438,11 +438,15 @@ the row may have.
   malformed floor.
 - `bash tests/coverage.sh --ratchet BASE tests/mutation-floor.tsv` makes "floors only
   rise" a machine check here too, with the rules in
-  [Floors and the ratchet](#floors-and-the-ratchet).
+  [Floors and the ratchet](#floors-and-the-ratchet). CI runs it on every PR, with `--base`, beside the coverage
+  ratchet. It came in the PR after the one that added the floor file, for the reason
+  given there.
 
-The floors started at the scores measured on the code of `main` at b0d58e5, not at
-100: the tests leave many mutants alive, and the floors record that rather than hide
-it, 499 of 637 mutants killed (78.3%). Only mutants that cannot change behaviour are in
+The floors started at the scores of the code that #160 merged, not at 100: the tests
+leave many mutants alive, and the floors record that rather than hide it. Each is the
+lower of a macOS and a Linux run, because a few kills differ by platform (`git-cmd.sh`,
+`shell-split.sh`, `findings.sh`), and CI is the gate: 83.8% in total. They were first
+measured on `main` at b0d58e5 (78.3%), but the new guard code added survivors. Only mutants that cannot change behaviour are in
 `tests/mutants-ignore.tsv`. Every other survivor is a test to write, and the weekly run
 lists them. Three full runs differed in four mutants, each killed in one run only, so
 the floors take the counts with those mutants alive. `publish-cmd.sh:102` and
