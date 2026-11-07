@@ -3,6 +3,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/helper.sh"
 GATE="$DIR/../plugins/recording/hooks/scripts/findings-gate.sh"
 CAPTURE="$DIR/../plugins/recording/hooks/scripts/findings-capture.sh"
+REMIND="$DIR/../plugins/recording/hooks/scripts/findings-reminder.sh"
 XDG_STATE_HOME="$(scratch_dir)" || exit 1
 export XDG_STATE_HOME
 PENDING="$XDG_STATE_HOME/claude-guardrails/pending/s1"
@@ -27,6 +28,23 @@ run_hook "$GATE" "$(stop '### Findings outside scope
 - The cache never expires https://github.com/o/r/issues/3
 - Shared repo lint gap (asked)')"
 assert_eq "" "$OUT" "tracked and asked findings pass"
+
+run_hook "$GATE" "$(stop '### Findings outside scope
+| Finding | Issue |
+|---|---|
+| The cache never expires | |')"
+assert_out "The cache never expires" "an untracked finding in a table blocks (#154)"
+run_hook "$GATE" "$(stop '### Findings outside scope
+Finding | Issue
+--- | ---
+The cache never expires |')"
+assert_out "The cache never expires" "an untracked finding in a table without leading pipes blocks"
+run_hook "$GATE" "$(stop '### Findings outside scope
+- Tracked one #3
+
+**Also:**
+- Retries are unbounded')"
+assert_out "Retries are unbounded" "an untracked finding after a bold sub-label blocks (#154)"
 
 run_hook "$CAPTURE" "$(sub "$(report 'Retries are unbounded' 'TTL unset')")"
 assert_rc 0 "capture never blocks"
@@ -110,5 +128,20 @@ jq -nc --arg m "$(report 'Handed-back finding')" \
   '{type:"assistant", message:{content:[{type:"tool_use", name:"SubagentHandback", input:{message:$m}}]}}' > "$t"
 run_hook "$CAPTURE" "$(jq -n --arg t "$t" '{session_id:"s1", agent_id:"a9", agent_type:"sre", last_assistant_message:"", agent_transcript_path:$t}')"
 assert_eq "[sre] Handed-back finding" "$(cat "$PENDING/a9" 2>/dev/null)" "a report handed back through the tool is captured"
+
+# The gate holds pending findings until a findings list, so each prompt names how many wait (#141).
+prompt() { jq -n --arg s "$1" '{session_id:$s, prompt:"next"}'; }
+run_hook "$REMIND" "$(prompt s3)"
+assert_rc 0 "the reminder exits 0 with nothing pending"
+assert_eq "" "$OUT" "no pending findings, no reminder"
+run_hook "$CAPTURE" "$(sub "$(report 'Port clash' 'Log noise')" s3 c1)"
+run_hook "$CAPTURE" "$(sub "$(report 'Port clash')" s3 c2)"
+run_hook "$REMIND" "$(prompt s3)"
+assert_rc 0 "the reminder never blocks"
+assert_out "2 subagent finding(s) are pending" "the reminder counts each pending finding once"
+assert_out "Findings outside scope" "the reminder names the heading that shows them"
+assert_eq "0" "$(printf '%s' "$OUT" | grep -c 'decision')" "the reminder is a note, not a decision"
+run_hook "$REMIND" "$(prompt '../escape')"
+assert_eq "" "$OUT" "an unsafe session id gets no reminder"
 
 finish "findings-hooks"

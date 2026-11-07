@@ -44,6 +44,11 @@ _report_one() {
   [ -n "$path" ] && [ -n "$branch" ] || return 0
   case "$path" in "$main_wt"/.claude/worktrees/*) ;; *) return 0 ;; esac
   [ "$path" != "$self_wt" ] || return 0
+  # A locked worktree is held by a running session, and `git worktree remove` refuses it.
+  [ -z "$locked" ] || return 0
+  # A tip equal to the base is most likely a new branch with nothing merged yet; a
+  # fast-forward merge looks the same, and is reported once the base moves on.
+  [ "$(git -C "$main_wt" rev-parse "refs/heads/$branch" 2>/dev/null)" != "$(git -C "$main_wt" rev-parse "$base" 2>/dev/null)" ] || return 0
   git -C "$main_wt" merge-base --is-ancestor "refs/heads/$branch" "$base" 2>/dev/null || return 0
   # --ignored as well as --porcelain: plans, notes and build output are ignored,
   # not untracked, and `git worktree remove` deletes them without complaint.
@@ -56,12 +61,13 @@ _report_one() {
   fi
 }
 
-path=""; branch=""
+path=""; branch=""; locked=""
 while IFS= read -r line; do
   case "$line" in
     "worktree "*) path="${line#worktree }" ;;
     "branch "*)   branch="${line#branch refs/heads/}" ;;
-    "")           _report_one; path=""; branch="" ;;
+    locked*)      locked=1 ;;
+    "")           _report_one; path=""; branch=""; locked="" ;;
   esac
 done <<EOF
 $(git -C "$main_wt" worktree list --porcelain 2>/dev/null)

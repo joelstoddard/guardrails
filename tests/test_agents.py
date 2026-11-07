@@ -1,6 +1,8 @@
 """Consistency checks between the persona agents and the hook that holds their reports to format."""
 
 import json
+import os
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -18,6 +20,15 @@ def frontmatter(path):
 
 def agents():
     return sorted((PERSONAS / "agents").glob("*.md"))
+
+
+def hook_context(event, **env):
+    """Run the personas rules hook for <event> as Claude Code would, and return the context it adds."""
+    hooks = json.loads((PERSONAS / "hooks" / "hooks.json").read_text())["hooks"]
+    [command] = [h["command"] for entry in hooks[event] for h in entry["hooks"] if "/rules/" in h["command"]]
+    env = {"PATH": os.environ["PATH"], "CLAUDE_PLUGIN_ROOT": str(PERSONAS), **env}
+    out = subprocess.run(["bash", "-c", command], env=env, capture_output=True, text=True, check=True).stdout
+    return json.loads(out)["hookSpecificOutput"]["additionalContext"]
 
 
 class Agents(unittest.TestCase):
@@ -59,6 +70,27 @@ class Agents(unittest.TestCase):
             for tool in {t.strip() for t in names} - shared:
                 with self.subTest(agent=path.stem, tool=tool):
                     self.assertTrue(any(tool in line and path.stem in line for line in lines))
+
+
+class ConfigDir(unittest.TestCase):
+    """Claude Code reads user files from CLAUDE_CONFIG_DIR when it is set, so no persona path assumes ~/.claude (#120)."""
+
+    def test_agents_name_no_home_config_path(self):
+        for path in agents():
+            with self.subTest(agent=path.name):
+                self.assertNotIn("~/.claude", path.read_text())
+
+    def test_rules_hooks_name_the_config_dir(self):
+        for event in ("SessionStart", "SubagentStart"):
+            with self.subTest(event=event):
+                context = hook_context(event, HOME="/home/u", CLAUDE_CONFIG_DIR="/etc/claude")
+                self.assertIn("`/etc/claude`", context)
+                self.assertNotIn("${CLAUDE_", context)
+
+    def test_config_dir_defaults_to_home(self):
+        for event in ("SessionStart", "SubagentStart"):
+            with self.subTest(event=event):
+                self.assertIn("`/home/u/.claude`", hook_context(event, HOME="/home/u"))
 
 
 if __name__ == "__main__":

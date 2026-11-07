@@ -37,8 +37,8 @@ for f in "$ROOT"/plugins/*/rules/*.md; do
     [ "$count" = "$want" ] || { echo "  FAIL [$plugin/$name]: $count $e entries, want $want"; FAILS=1; continue; }
     [ "$want" = 1 ] || continue
     CLAUDE_PLUGIN_ROOT="$SPACED/$plugin" bash -c "$cmds" \
-      | jq -e --arg e "$e" --arg r "$SPACED/$plugin" --rawfile f "$f" \
-        '.hookSpecificOutput.hookEventName == $e and .hookSpecificOutput.additionalContext == ($f | gsub("\\$\\{CLAUDE_PLUGIN_ROOT\\}"; $r))' \
+      | jq -e --arg e "$e" --arg r "$SPACED/$plugin" --arg c "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" --rawfile f "$f" \
+        '.hookSpecificOutput.hookEventName == $e and .hookSpecificOutput.additionalContext == ($f | gsub("\\$\\{CLAUDE_PLUGIN_ROOT\\}"; $r) | gsub("\\$\\{CLAUDE_CONFIG_DIR\\}"; $c))' \
         >/dev/null || { echo "  FAIL [$plugin/$name]: $e output does not match the file"; FAILS=1; }
   done
 done

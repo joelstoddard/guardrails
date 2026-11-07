@@ -109,12 +109,13 @@ two-arm run, so a reader can see why a run passed.
 - **Scored:** the reply contains `gh pr create … --draft`, and a body with `## What`,
   `## Why` and `## How` in that order.
 - **Indicator:** `Skill` invoked `draft-pr`.
-- **What the runs showed:** neither Haiku nor Sonnet opens the skill on this request. With
-  the old description Haiku omitted `--draft`. Since the description names handing back the
-  `gh pr create --draft` command (#95), Haiku follows it from the skill listing alone. When
-  the skill does open without a gh login, it now hands the command back instead of refusing
-  (#82). Keep the `skill-fired` indicator: it shows whether the skill body or only its
-  description did the work.
+- **What the runs showed:** in a 3-run pass on Haiku 4.5 on 2026-10-07, the skill opened in
+  2 of the 3 with-arm runs, and the case passed in exactly those 2: with 0.67, without 0.00,
+  `Δ` +0.67 (#125). The run that did not open the skill scored 0.00. Before the description
+  named handing back the `gh pr create --draft` command (#95), neither Haiku nor Sonnet
+  opened the skill on this request. Without a gh login, the skill hands the command back
+  instead of refusing (#82). Keep the `skill-fired` indicator: it shows whether the skill
+  body or only its description did the work.
 
 ### `no-complexity-tool-unasked`: the complexity rules in `engineering.md` (#106)
 
@@ -189,16 +190,39 @@ stream-json-shaped trace lines, using the pattern YAML parses from the grader fi
 checks each scaffold builds the state its case needs, and that the runner hands the run a
 PATH that starts with a real git.
 
-## Follow-ups, not in this change
+## Outcome (#34)
 
-- A 3-run confirmation of draft-pr after #95. The 3-run pass on 2026-10-06 gave mean `Δ`
-  +0.58 on Haiku 4.5: +1.00 for the commit guard and the publish refusal, +0.33 for the
-  commit skill (fired in 2 of 3 runs), and 0.00 for draft-pr. After #95's description
-  change, one run of draft-pr gave +1.00.
-- Suites for `recording` and `personas`. A run loads only the target plugin, and the docs
-  do not say whether it honours `dependencies`. A personas case's `plugins:` list may load
-  `building` and `recording` alongside it; confirm with a run.
-- After that, whether to run in CI, on a schedule or on PRs.
-- Guard defects the cases touch stay separate issues: #3 and #78 (guard-publish false
-  positives) and #81 (guard-default-branch refuses branch-then-commit in one command, which
-  `commit-blocked-on-main`'s with-arm may hit).
+`claude plugin eval` can test what the plugins are for:
+
+- **A skill fires when it should:** a `tool_used: Skill` indicator, which the tool keeps
+  out of the score.
+- **It follows its rules:** a scored grader on the outcome, such as `--draft` in the PR
+  command or a conventional commit subject with no push.
+- **A hook stops what it guards against:** `commit-blocked-on-main` and `publish-refused`.
+- **All three plugins:** `recording` and `personas` have suites too, in
+  `docs/specs/2026-10-06-recording-personas-evals-design.md`, and the personas suite checks
+  that work reaches the right persona. personas runs from a copy without `dependencies`,
+  since eval never loads them.
+
+The issue's open questions are the decisions above: runs stay local and by hand, the
+threshold is 1.0 with nothing gating on it, and evals replace no structural test.
+
+The 3-run pass on 2026-10-06 gave mean `Δ` +0.58 on Haiku 4.5: +1.00 for the commit guard
+and the publish refusal, +0.33 for the commit skill (fired in 2 of 3 runs), and 0.00 for
+draft-pr. draft-pr's later 3-run result is under its case.
+
+Still open: whether to run in CI, on a schedule or on PRs, once scores are stable enough to
+gate on.
+
+## User-invoked skills (#157)
+
+A skill with `disable-model-invocation: true`, such as `learning-style`, loads only from its
+slash command, and `claude plugin eval` does not expand a slash command in `prompt.md`: a case
+whose prompt began `/building:learning-style visual` never saw the skill's body. Claude Code
+2.1.318 has no option that preloads a skill either (`claude plugin eval --help`).
+
+The route that remains is `context.history_file` in `case.yaml`. Record a real session in which
+the slash command ran, save its transcript as a `.jsonl` beside the case, and the case's prompt
+becomes the next turn, with the skill's body already in the conversation. Such a case runs one
+arm by default when the target is a path, so pass `--ablation with-without` for a baseline. No
+case uses it yet, because the transcript has to come from a session run by hand.

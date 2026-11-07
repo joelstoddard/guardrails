@@ -2,10 +2,19 @@
 # Block `git commit` while HEAD is the repo's default branch. Fail-open.
 command -v jq >/dev/null 2>&1 || exit 0
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SELF_DIR/../../lib/git-cmd.sh"
 input="$(cat)"
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
 cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
+
+# Fail closed: a library that does not load, or loads in part, checks nothing, so the command gets a question.
+if ! . "$SELF_DIR/../../lib/git-cmd.sh" ||
+  ! declare -F _guardrails_unreadable _guardrails_invokes_git _guardrails_unseen_shell_stdin _guardrails_git_targets \
+    >/dev/null; then
+  [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
+  jq -cn --arg r "Could not load the default-branch guard's library, so it cannot check this command does not commit on a default branch." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+fi
 
 # Fail closed: a command the guard cannot read in full might cd anywhere and commit, so ask.
 if why="$(_guardrails_unreadable "$cmd")"; then
@@ -15,18 +24,50 @@ if why="$(_guardrails_unreadable "$cmd")"; then
   exit 0
 fi
 
-# A shell reading commands from a pipe might commit where no guard can read it, so it asks (#63).
+# A shell reading commands from a pipe might commit where no guard can read it, so it asks (#63). So does a commit on
+# another host or in a container, whose branch the guard cannot see.
 unseen=""
-_guardrails_invokes_git "$cmd" commit || unseen="$(_guardrails_unseen_shell_stdin "$cmd")" || exit 0
+_guardrails_invokes_git "$cmd" commit; found=$?
+[ "$found" = 0 ] || unseen="$(_guardrails_unseen_shell_stdin "$cmd")" || [ "$found" = 2 ] || exit 0
 [ "${ALLOW_DEFAULT_COMMIT:-}" = "1" ] && exit 0
 
 # Judge the repo git will actually act on, not the one the shell happens to sit in —
 # under worktree-per-ticket they differ, and resolving from .cwd refuses commits that
-# were never going to land there; where the two splits disagree on it, judge both.
+# were never going to land there; judge every directory a commit runs in, by either split.
 # See docs/design/git-command-parsing.md.
+# nearest_dir → moves dir to its nearest existing ancestor, where git finds the repo of a directory that does not exist
+# yet, as one the command makes, rather than skip it. A prefix exists if a longer one does,
+# so it halves the components, as climbing one at a time is quadratic in a deep path.
+nearest_dir() {
+  local IFS=/ lo=0 hi mid p root=.
+  local -a parts
+  [ "${dir:0:1}" != / ] || root=/
+  read -r -a parts <<<"$dir"
+  hi="${#parts[@]}"
+  while ((hi - lo > 1)); do
+    mid=$(((lo + hi) / 2)); p="${parts[*]:0:mid}"
+    if [ -d "${p:-$root}" ]; then lo="$mid"; else hi="$mid"; fi
+  done
+  dir="${parts[*]:0:lo}"; dir="${dir:-$root}"
+}
+
+n=0; away=""; named=""
 while IFS= read -r dir; do
+  case "$dir" in remote:*) away=1; continue ;; esac
+  # A switch in the commit's && chain names the branch it lands on (#81).
+  branch="${dir%% *}"; branch="${branch#local:}"; dir="${dir#* }"
+  # A variable or substitution names a directory no one knows until the command runs, so it asks.
+  case "$dir" in *[\$\`]*) named=1; continue ;; esac
+  # Each directory costs some 33 ms of git calls, so past 64 the guard could time out, which lets the command through.
+  n=$((n + 1))
+  if [ "$n" -gt 64 ]; then
+    jq -cn --arg r "Could not check this does not commit on a default branch: it commits in more than 64 directories, more than the guard can check in time." \
+      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+    exit 0
+  fi
+  [ -d "${dir:-.}" ] || nearest_dir
   repo="$(git -C "${dir:-.}" rev-parse --show-toplevel 2>/dev/null)" || continue
-  cur="$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null)" || continue
+  cur="$branch"; [ -n "$cur" ] || cur="$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null)" || continue
 
   # Resolve default branch: prefer origin/HEAD, else first of main/master/develop that exists.
   def="$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')"
@@ -42,8 +83,17 @@ while IFS= read -r dir; do
         '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
       exit 0
     fi
-    echo "Refusing to commit on the default branch '$def'. Start a ticket branch (see the start-ticket skill), or set ALLOW_DEFAULT_COMMIT=1 to override." >&2
+    echo "Refusing to commit on the default branch '$def'. Create a branch first, or set ALLOW_DEFAULT_COMMIT=1 to override." >&2
     exit 2
   fi
-done < <(_guardrails_git_effective_cwd "$cmd" commit "${cwd:-.}")
+done < <(_guardrails_git_targets "$cmd" commit "${cwd:-.}")
+if [ -n "$named" ]; then
+  jq -cn --arg r "Could not check this does not commit on a default branch: it commits in a directory a variable or substitution names, which the guard cannot know before the command runs." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+  exit 0
+fi
+if [ -n "$away" ]; then
+  jq -cn --arg r "Could not check this does not commit on a default branch: it commits on another host or in a container, through ssh, docker exec, kubectl exec or nsenter, where the guard cannot see the branch." \
+    '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+fi
 exit 0

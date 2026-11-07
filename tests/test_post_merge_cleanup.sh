@@ -35,9 +35,11 @@ mkwt() {
   git -C "$wt" add "$name"
   if [ "$ignored" = yes ]; then echo 'scratch/' > "$wt/.gitignore"; git -C "$wt" add .gitignore; fi
   git -C "$wt" commit --quiet -m "$name"
+  # A merge commit, as a PR merge makes: the branch tip then sits behind main,
+  # not on it, which is how the hook tells a merged branch from a new one.
   if [ "$merged" = yes ]; then
-    git -C "$root/repo" push --quiet origin "$name:main"
-    git -C "$root/repo" fetch --quiet origin
+    git -C "$root/repo" merge --quiet --no-ff -m "merge $name" "$name"
+    git -C "$root/repo" push --quiet origin main
   fi
   # Written after the commit so the tree is clean under plain --porcelain and
   # only --ignored sees it: exactly the state the old hook silently deleted.
@@ -87,10 +89,28 @@ refute_out "self-wt" "self worktree"
 setup
 git -C "$root/repo" worktree add --quiet -b outside "$root/outside" >/dev/null 2>&1 \
   || { echo "  FAIL [fixture]: worktree add failed for outside"; FAILS=1; }
-git -C "$root/repo" push --quiet origin outside:main; git -C "$root/repo" fetch --quiet origin
+git -C "$root/outside" commit --quiet --allow-empty -m outside
+git -C "$root/repo" merge --quiet --no-ff -m "merge outside" outside
+git -C "$root/repo" push --quiet origin main
 run "$root/repo"
 assert_dir "$root/outside" "outside the convention"
 refute_out "outside" "outside the convention"
+
+# --- a new branch with no commits is not reported: its tip is the base, so it
+# has nothing merged, and a session is likely about to commit on it
+setup
+git -C "$root/repo" worktree add --quiet -b fresh "$root/repo/.claude/worktrees/fresh" >/dev/null 2>&1 \
+  || { echo "  FAIL [fixture]: worktree add failed for fresh"; FAILS=1; }
+run "$root/repo"
+refute_out "fresh" "commit-less branch"
+
+# --- a locked worktree is not reported: a running session holds it, and
+# `git worktree remove` refuses it anyway
+setup; mkwt locked-wt yes no no
+git -C "$root/repo" worktree lock --reason "claude session locked-wt (pid 1)" "$root/repo/.claude/worktrees/locked-wt"
+run "$root/repo"
+assert_dir "$root/repo/.claude/worktrees/locked-wt" "locked worktree"
+refute_out "locked-wt" "locked worktree"
 
 # --- a diverged default branch is not rewritten
 setup
